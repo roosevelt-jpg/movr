@@ -89,6 +89,92 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Phase 0A / 0C routers (payment providers + integrations hub)
+const {
+  paymentWebhooksRouter,
+  adminPaymentProvidersRouter,
+  paymentsRouter,
+} = require('./routes/payment.routes');
+const { adminIntegrationsRouter } = require('./routes/admin-integrations.routes');
+const { walletRouter } = require('./routes/wallet.routes');
+
+app.use('/webhooks', paymentWebhooksRouter);
+app.use('/api/v1/payments', paymentsRouter);
+app.use('/api/v1/admin/payment-providers', adminPaymentProvidersRouter);
+app.use('/api/v1/admin/integrations', adminIntegrationsRouter);
+app.use('/api/v1/wallet', walletRouter);
+
+const { storesRouter, cartRouter, ordersRouter } = require('./routes/stores.routes');
+const { merchantRouter } = require('./routes/merchant.routes');
+app.use('/api/v1/stores', storesRouter);
+app.use('/api/v1/cart', cartRouter);
+app.use('/api/v1/orders', ordersRouter);
+app.use('/api/v1/merchant', merchantRouter);
+
+const { kycRouter } = require('./routes/kyc.routes');
+const { pointsRouter } = require('./routes/points.routes');
+const { referralsRouter } = require('./routes/referrals.routes');
+const { deliveriesRouter } = require('./routes/deliveries.routes');
+const {
+  rideExperienceRouter,
+  sosRouter,
+  publicTripShareRouter,
+} = require('./routes/ride-experience.routes');
+
+app.use('/api/v1/kyc', kycRouter);
+app.use('/api/v1/points', pointsRouter);
+app.use('/api/v1/referrals', referralsRouter);
+app.use('/api/v1/deliveries', deliveriesRouter);
+app.use('/api/v1/rides', rideExperienceRouter);
+app.use('/api/v1/sos', sosRouter);
+app.use('/api/v1/public/trip', publicTripShareRouter);
+
+const {
+  driverRouter,
+  subscriptionsRouter,
+  rentalsRouter,
+  adminOpsRouter,
+  adminFinanceRouter,
+  adminRewardsRouter,
+  inboxRouter,
+} = require('./routes/platform.routes');
+
+app.use('/api/v1/driver', driverRouter);
+app.use('/api/v1/subscriptions', subscriptionsRouter);
+app.use('/api/v1/rentals', rentalsRouter);
+app.use('/api/v1/admin', adminOpsRouter);
+app.use('/api/v1/admin/finance', adminFinanceRouter);
+app.use('/api/v1/admin/rewards-rules', adminRewardsRouter);
+app.use('/api/v1/inbox', inboxRouter);
+
+const {
+  rideBookingRouter,
+  voiceRouter,
+  channelWebhooksRouter,
+  adminVehicleRouter,
+  adminChannelsRouter,
+} = require('./routes/channels.routes');
+
+app.use('/api/v1/rides', rideBookingRouter);
+app.use('/api/v1/voice', voiceRouter);
+app.use('/webhooks', channelWebhooksRouter);
+app.use('/api/v1/admin', adminVehicleRouter);
+app.use('/api/v1/admin/channels', adminChannelsRouter);
+
+const {
+  adminPricingRouter,
+  identityLinkRouter,
+  walletTransferRouter,
+  tripRecordingRouter,
+} = require('./routes/phases-25-28.routes');
+app.use('/api/v1/admin/pricing', adminPricingRouter);
+app.use('/api/v1/identity', identityLinkRouter);
+app.use('/api/v1/wallet', walletTransferRouter);
+app.use('/api/v1', tripRecordingRouter);
+
+const { startPlatformJobs } = require('./jobs/platform-jobs');
+startPlatformJobs();
+
 // ============================================
 // AUTH MIDDLEWARE
 // ============================================
@@ -438,6 +524,28 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+app.get('/health/db', async (_req: Request, res: Response) => {
+  try {
+    const { DatabaseService } = require('./services/database.service');
+    const db = new DatabaseService();
+    await db.query('SELECT 1');
+    res.json({ status: 'healthy', service: 'db' });
+  } catch (error: any) {
+    res.status(503).json({ status: 'unhealthy', service: 'db', error: error.message });
+  }
+});
+
+app.get('/health/redis', async (_req: Request, res: Response) => {
+  try {
+    const { RedisService } = require('./services/redis.service');
+    const redis = new RedisService();
+    await redis.connect();
+    res.json({ status: 'healthy', service: 'redis' });
+  } catch (error: any) {
+    res.status(503).json({ status: 'unhealthy', service: 'redis', error: error.message });
+  }
+});
+
 app.get('/', (req: Request, res: Response) => {
   res.status(200).json({
     name: 'MOVR Platform API',
@@ -483,6 +591,31 @@ io.on('connection', (socket) => {
 
   socket.on('ride:status', (data) => {
     io.emit('ride:status-changed', { ...data, timestamp: Date.now() });
+  });
+
+  socket.on('ride-chat:join', (rideId: string) => {
+    if (rideId) socket.join(`ride-chat:${rideId}`);
+  });
+  socket.on('ride-chat:message', (data: any) => {
+    if (data?.rideId) {
+      io.to(`ride-chat:${data.rideId}`).emit('ride-chat:message', {
+        ...data,
+        timestamp: Date.now(),
+      });
+    }
+  });
+
+  // Phase 4 — marketplace delivery tracking
+  socket.on('delivery:join', (orderId: string) => {
+    if (orderId) socket.join(`delivery:${orderId}`);
+  });
+  socket.on('delivery:location', (data: any) => {
+    if (data?.orderId) {
+      io.to(`delivery:${data.orderId}`).emit('delivery:location', {
+        ...data,
+        timestamp: Date.now(),
+      });
+    }
   });
 
   socket.on('disconnect', () => {

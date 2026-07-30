@@ -194,6 +194,46 @@ CREATE INDEX idx_disputes_status ON disputes(status);
 -- Enable PostGIS extension for location-based queries
 CREATE EXTENSION IF NOT EXISTS postgis;
 
--- Grant permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO movr_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO movr_app;
+-- Phase 28 additions: local-record + async-upload model with consent + retention
+DO $$ BEGIN
+  CREATE TYPE trip_recording_status AS ENUM (
+    'recording', 'uploading', 'uploaded', 'failed', 'deleted'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS trip_recordings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL,
+  status trip_recording_status DEFAULT 'recording',
+  local_duration_seconds INTEGER,
+  cloud_storage_key TEXT,
+  uploaded_at TIMESTAMPTZ,
+  retention_expires_at TIMESTAMPTZ,
+  flagged_for_dispute BOOLEAN DEFAULT FALSE,
+  flagged_at TIMESTAMPTZ,
+  flagged_by_admin_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (ride_id)
+);
+
+CREATE TABLE IF NOT EXISTS recording_consent_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE UNIQUE,
+  rider_notified_at TIMESTAMPTZ,
+  driver_consented_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trip_recordings_status ON trip_recordings(status);
+CREATE INDEX IF NOT EXISTS idx_trip_recordings_retention ON trip_recordings(retention_expires_at)
+  WHERE status = 'uploaded' AND flagged_for_dispute = FALSE;
+
+-- Grant permissions when role exists (docker init may use different app user)
+DO $$ BEGIN
+  GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO movr_app;
+  GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO movr_app;
+EXCEPTION WHEN undefined_object THEN
+  NULL;
+END $$;

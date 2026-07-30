@@ -21,14 +21,17 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.setIcon(DefaultIcon);
 
+const MODULES = ['Ride', 'Shop', 'Parcel', 'Rental'] as const;
+const SHORTCUTS = ['Home', 'Work', 'Recent', 'Favorites'] as const;
+
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
+  const [activeModule, setActiveModule] = useState<(typeof MODULES)[number]>('Ride');
   const [pickupLocation, setPickupLocation] = useState<any>(null);
   const [dropoffLocation, setDropoffLocation] = useState<any>(null);
   const [rideType, setRideType] = useState<'standard' | 'express' | 'premium'>('standard');
-  const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
 
   // Fetch wallet balance
@@ -82,22 +85,55 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6">
-        <h1 className="text-3xl font-bold">Welcome, {user?.firstName}! 👋</h1>
-        <p className="text-purple-100 mt-2">Where are you going?</p>
+    <div className="min-h-screen bg-jet-black text-pure-white">
+      <div className="p-6 border-b border-border">
+        <h1 className="text-2xl font-display font-semibold">Hi, {user?.firstName}</h1>
+        <p className="text-text-secondary mt-1">Where to?</p>
+      </div>
+
+      <div className="px-4 pt-4 flex gap-2 overflow-x-auto">
+        {SHORTCUTS.map((s) => (
+          <button
+            key={s}
+            className="shrink-0 rounded-pill bg-surface-elevated px-4 py-2 text-sm text-text-primary border border-border"
+            type="button"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4 pt-4 flex gap-6 border-b border-border">
+        {MODULES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => {
+              setActiveModule(m);
+              if (m === 'Shop') navigate('/marketplace');
+              if (m === 'Parcel' || m === 'Rental') toast('Coming soon');
+            }}
+            className={`pb-3 text-sm font-semibold ${
+              activeModule === m ? 'text-pure-white' : 'text-text-secondary'
+            }`}
+          >
+            {m}
+            {activeModule === m ? (
+              <span className="mt-2 block h-0.5 rounded-full bg-movr-gradient" />
+            ) : null}
+          </button>
+        ))}
       </div>
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Ride Request Section */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Request a Ride</h2>
+            <div className="bg-surface rounded-lg border border-border p-6 mb-6">
+              <h2 className="text-xl font-semibold mb-4">{activeModule}</h2>
 
               {/* Map */}
-              <div className="mb-6 h-64 rounded-lg overflow-hidden border border-gray-200">
+              <div className="mb-6 h-64 rounded-lg overflow-hidden border border-border bg-surface-elevated">
                 {pickupLocation && (
                   <MapContainer
                     center={[pickupLocation.latitude, pickupLocation.longitude]}
@@ -118,13 +154,13 @@ const DashboardPage: React.FC = () => {
               {/* Input Fields */}
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Pickup Location
                   </label>
                   <input
                     type="text"
                     placeholder="Enter pickup location"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-surface-elevated border border-border rounded-md text-pure-white placeholder:text-text-secondary focus:ring-2 focus:ring-electric-violet focus:border-transparent"
                     onChange={(e) => {
                       // In real app, use geocoding
                       setPickupLocation({
@@ -137,13 +173,13 @@ const DashboardPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Dropoff Location
                   </label>
                   <input
                     type="text"
                     placeholder="Enter dropoff location"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-surface-elevated border border-border rounded-md text-pure-white placeholder:text-text-secondary focus:ring-2 focus:ring-electric-violet focus:border-transparent"
                     onChange={(e) => {
                       setDropoffLocation({
                         latitude: 5.6096,
@@ -156,7 +192,7 @@ const DashboardPage: React.FC = () => {
 
                 {/* Ride Type Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Ride Type
                   </label>
                   <div className="grid grid-cols-3 gap-3">
@@ -164,20 +200,16 @@ const DashboardPage: React.FC = () => {
                       <button
                         key={type}
                         onClick={() => setRideType(type)}
-                        className={`p-3 rounded-lg border-2 transition ${
+                        className={`p-3 rounded-md border transition ${
                           rideType === type
-                            ? 'border-purple-600 bg-purple-50'
-                            : 'border-gray-200 hover:border-gray-300'
+                            ? 'border-electric-violet bg-surface-elevated'
+                            : 'border-border hover:border-text-secondary'
                         }`}
                       >
-                        <div className="capitalize font-semibold text-gray-800">
-                          {type === 'standard' && '🚗'}
-                          {type === 'express' && '🚙'}
-                          {type === 'premium' && '🚘'}
-                          {' '}
+                        <div className="capitalize font-semibold text-pure-white">
                           {type}
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="text-sm text-text-secondary mt-1">
                           {type === 'standard' && 'GHS 5.00'}
                           {type === 'express' && 'GHS 7.50'}
                           {type === 'premium' && 'GHS 10.00'}
@@ -192,7 +224,7 @@ const DashboardPage: React.FC = () => {
               <button
                 onClick={handleRequestRide}
                 disabled={isRequesting}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
+                className="w-full bg-movr-gradient text-pure-white py-3 rounded-pill font-bold hover:opacity-90 transition disabled:opacity-50"
               >
                 {isRequesting ? 'Requesting...' : 'Request Ride'}
               </button>

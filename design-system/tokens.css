@@ -1,0 +1,16 @@
+:root {
+  --jet-black: #000000;
+  --pure-white: #FFFFFF;
+  --electric-violet: #6A00FF;
+  --motion-blue: #0055FF;
+  --movr-green: #3F7048;
+  --surface: #0A0A0A;
+  --surface-elevated: #1A1A1A;
+  --success: #00D97A;
+  --error: #FF3B5C;
+  --warning: #FFB800;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --border: #2A2A2A;
+  --movr-gradient: linear-gradient(135deg, #3F7048 0%, #6A00FF 50%, #0055FF 100%);
+}

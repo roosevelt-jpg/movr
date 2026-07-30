@@ -313,6 +313,66 @@ class IdentityVerificationService {
   }
 
   /**
+   * Lightweight merchant document attestation (Phase 3) — reuses driver upload pipeline.
+   * Full registry checks still go through verifyMerchantBusiness when available.
+   */
+  async verifyMerchantDocument(input: {
+    merchantId: string;
+    documentType: string;
+    documentNumber?: string;
+    fileUrl: string;
+  }): Promise<VerificationResult> {
+    const documentId = uuidv4();
+    try {
+      if (!input.fileUrl) {
+        return {
+          documentId,
+          verified: false,
+          verificationMethod: 'manual',
+          confidence: 0,
+          details: { reason: 'missing_file' },
+          timestamp: new Date(),
+        };
+      }
+
+      // Attempt image text signal when AWS is configured; otherwise queue for manual review.
+      let confidence = 40;
+      try {
+        const licenseImage = await axios.get(input.fileUrl, { responseType: 'arraybuffer' });
+        const textResult = await this.rekognition
+          .detectText({ Image: { Bytes: licenseImage.data } })
+          .promise();
+        const detections = textResult.TextDetections?.length || 0;
+        confidence = Math.min(95, 40 + detections * 5);
+      } catch {
+        confidence = 35;
+      }
+
+      return {
+        documentId,
+        verified: confidence >= 70,
+        verificationMethod: confidence >= 70 ? 'api' : 'manual',
+        confidence,
+        details: {
+          merchantId: input.merchantId,
+          documentType: input.documentType,
+          documentNumber: input.documentNumber,
+        },
+        timestamp: new Date(),
+      };
+    } catch (error: any) {
+      return {
+        documentId,
+        verified: false,
+        verificationMethod: 'manual',
+        confidence: 0,
+        details: { error: error.message },
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
    * Verify business and merchant credentials
    */
   async verifyMerchantBusiness(
@@ -424,6 +484,161 @@ class IdentityVerificationService {
       console.error('❌ Error getting verification status:', error);
       throw error;
     }
+  }
+
+  /**
+   * Phase 26 — cross-check national ID, license, vehicle, phone into an identity graph.
+   */
+  async linkIdentityDocuments(userId: string) {
+    const { DatabaseService } = require('./database.service');
+    const database = typeof db !== 'undefined' ? db : new DatabaseService();
+    const { NationalIdVerificationService } = require('./ghana-card-verification.service');
+    const { DrivingLicenseVerificationService } = require('./driving-license-verification.service');
+    const national = new NationalIdVerificationService(database);
+    const dvla = new DrivingLicenseVerificationService(database);
+
+    const user = (await database.query(`SELECT * FROM users WHERE id = $1`, [userId])).rows[0];
+    if (!user) throw new Error('User not found');
+
+    const driver = (
+      await database.query(`SELECT * FROM drivers WHERE user_id = $1 LIMIT 1`, [userId])
+    ).rows[0];
+    const driverId = driver?.id;
+
+    const docs = driverId
+      ? (
+          await database.query(
+            `SELECT * FROM identity_verifications WHERE driver_id = $1 ORDER BY created_at DESC`,
+            [driverId]
+          )
+        ).rows
+      : [];
+
+    const nationalDoc =
+      docs.find((d: any) => d.document_type === 'national_id' || d.national_id_number) || docs[0];
+    const licenseDoc = docs.find((d: any) => d.document_type === 'driving_license');
+    const country = nationalDoc?.national_id_country || user.country || 'GH';
+    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+
+    const idNumber = nationalDoc?.national_id_number || nationalDoc?.document_number;
+    const licenseNumber =
+      nationalDoc?.driving_license_number || licenseDoc?.document_number;
+    const vehicleReg = nationalDoc?.vehicle_registration_number;
+    const phone = nationalDoc?.linked_phone_number || user.phone;
+
+    const checks: any[] = [];
+
+    let licenseStatus: 'match' | 'mismatch' | 'unverifiable' = 'unverifiable';
+    if (idNumber && licenseNumber) {
+      const nia = await national.verifyNationalId(country, idNumber, fullName);
+      const lic = await dvla.verifyLicense(licenseNumber, fullName);
+      if (nia.pendingManualReview || lic.pendingManualReview) {
+        licenseStatus = 'unverifiable';
+      } else if (nia.matched && lic.matched) {
+        licenseStatus = 'match';
+      } else {
+        licenseStatus = 'mismatch';
+      }
+    }
+    checks.push(
+      (
+        await database.query(
+          `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
+           VALUES ($1,'id_to_license',$2,$3::jsonb) RETURNING *`,
+          [userId, licenseStatus, JSON.stringify({ idNumber, licenseNumber })]
+        )
+      ).rows[0]
+    );
+
+    let vehicleStatus: 'match' | 'mismatch' | 'unverifiable' = 'unverifiable';
+    if (vehicleReg && idNumber) {
+      const veh = await dvla.verifyVehicleRegistration(vehicleReg, fullName);
+      if (veh.pendingManualReview) vehicleStatus = 'unverifiable';
+      else vehicleStatus = veh.matched ? 'match' : 'mismatch';
+    }
+    checks.push(
+      (
+        await database.query(
+          `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
+           VALUES ($1,'id_to_vehicle',$2,$3::jsonb) RETURNING *`,
+          [
+            userId,
+            vehicleStatus,
+            JSON.stringify({
+              vehicleReg,
+              note:
+                vehicleStatus === 'mismatch'
+                  ? 'Fleet/authorized-operator may need authorization letter override'
+                  : undefined,
+            }),
+          ]
+        )
+      ).rows[0]
+    );
+
+    checks.push(
+      (
+        await database.query(
+          `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
+           VALUES ($1,'id_to_phone',$2,$3::jsonb) RETURNING *`,
+          [
+            userId,
+            'unverifiable',
+            JSON.stringify({
+              phone,
+              message: 'Telco SIM-registration API not available; skipped without scraping',
+            }),
+          ]
+        )
+      ).rows[0]
+    );
+
+    const allPass =
+      checks.some((c) => c.check_type === 'id_to_license' && c.status === 'match') &&
+      checks.every(
+        (c) =>
+          c.check_type === 'id_to_phone' ||
+          c.status === 'match' ||
+          c.status === 'unverifiable'
+      );
+
+    if (driverId && allPass) {
+      await database.query(
+        `UPDATE identity_verifications
+         SET identity_linked = TRUE, link_verified = TRUE, link_verified_at = NOW()
+         WHERE driver_id = $1`,
+        [driverId]
+      );
+    }
+
+    return {
+      identityLinked: allPass,
+      checks,
+      countryOfId: country,
+      fieldPattern: national.idFieldPattern(country),
+    };
+  }
+
+  async manualOverrideLink(
+    userId: string,
+    adminId: string,
+    reason: string,
+    checkType: string,
+    status: 'match' | 'mismatch' | 'unverifiable'
+  ) {
+    const { DatabaseService } = require('./database.service');
+    const database = typeof db !== 'undefined' ? db : new DatabaseService();
+    const row = await database.query(
+      `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
+       VALUES ($1,$2,$3,$4::jsonb) RETURNING *`,
+      [userId, checkType, status, JSON.stringify({ manualOverride: true, adminId, reason })]
+    );
+    await database.query(
+      `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, metadata)
+       VALUES ($1,'identity_link_override','user',$2,$3,$4::jsonb)`,
+      [adminId, userId, reason, JSON.stringify({ checkType, status })]
+    );
+    return row.rows[0];
   }
 }
 

@@ -12,6 +12,7 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     userType: string;
+    roles?: string[];
   };
 }
 
@@ -105,3 +106,26 @@ export const requireAdmin = (
   }
   next();
 };
+
+/**
+ * Require one of the given roles (userType or roles[] claim).
+ */
+export const requireRole = (...roles: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    const claimed = [
+      req.user?.userType,
+      ...(req.user?.roles || []),
+    ].filter(Boolean) as string[];
+
+    const ok = roles.some((r) => claimed.includes(r));
+    if (!req.user || !ok) {
+      return res.status(403).json({
+        status: 'error',
+        message: `Requires role: ${roles.join(' | ')}`,
+      });
+    }
+    next();
+  };
+};
+
+export const requireMerchant = requireRole('merchant');

@@ -32,6 +32,15 @@ import SettingsPage from './pages/app/SettingsPage';
 import LandingPage from './pages/public/LandingPage';
 import NotFoundPage from './pages/public/NotFoundPage';
 
+// Merchant portal
+import MerchantLoginPage from './pages/merchant/MerchantLoginPage';
+import MerchantOnboardingPage from './pages/merchant/MerchantOnboardingPage';
+import MerchantDashboardPage from './pages/merchant/MerchantDashboardPage';
+import MerchantStoreEditorPage from './pages/merchant/MerchantStoreEditorPage';
+import MerchantProductsPage from './pages/merchant/MerchantProductsPage';
+import MerchantAnalyticsPage from './pages/merchant/MerchantAnalyticsPage';
+import MerchantPayoutsPage from './pages/merchant/MerchantPayoutsPage';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -94,6 +103,15 @@ const App: React.FC = () => {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
+
+          {/* Merchant portal */}
+          <Route path="/merchant/login" element={<MerchantLoginPage />} />
+          <Route path="/merchant/onboarding" element={<MerchantOnboardingPage />} />
+          <Route path="/merchant/dashboard" element={<MerchantDashboardPage />} />
+          <Route path="/merchant/store" element={<MerchantStoreEditorPage />} />
+          <Route path="/merchant/products" element={<MerchantProductsPage />} />
+          <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
+          <Route path="/merchant/payouts" element={<MerchantPayoutsPage />} />
 
           {/* 404 */}
           <Route path="*" element={<NotFoundPage />} />

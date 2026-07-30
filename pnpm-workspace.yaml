@@ -2,3 +2,6 @@ packages:
   - 'backend'
   - 'frontend/web'
   - 'frontend/admin'
+  - 'design-system'
+  - 'mobile/customer'
+  - 'mobile/driver'

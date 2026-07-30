@@ -267,28 +267,45 @@ export class MatchingEngineService {
     customerRating: number = 5.0
   ): Promise<any[]> {
     try {
-      // Query drivers with good ratings and online status
-      const query = `
-        SELECT 
-          u.id, u.first_name, u.phone,
-          dp.avg_rating, dp.acceptance_rate, dp.tier,
-          ST_Distance(ST_MakePoint(u.longitude, u.latitude), ST_MakePoint($1, $2)) as distance_m
-        FROM users u
-        JOIN driver_performance dp ON u.id = dp.driver_id
-        WHERE u.user_type = 'driver'
-          AND u.is_active = true
-          AND dp.avg_rating >= 4.5
-          AND dp.acceptance_rate >= 70
-          AND ST_DWithin(ST_MakePoint(u.longitude, u.latitude), ST_MakePoint($1, $2), 5000)
-        ORDER BY 
-          dp.avg_rating DESC,
-          dp.acceptance_rate DESC,
-          distance_m ASC
-        LIMIT 20
-      `;
+      // Prefer PostGIS + driver_performance when available; fall back to simple online drivers.
+      try {
+        const query = `
+          SELECT 
+            u.id, u.first_name, u.phone,
+            dp.avg_rating, dp.acceptance_rate, dp.tier,
+            ST_Distance(
+              ST_MakePoint(u.longitude, u.latitude)::geography,
+              ST_MakePoint($1, $2)::geography
+            ) as distance_m
+          FROM users u
+          JOIN driver_performance dp ON u.id = dp.driver_id
+          WHERE u.user_type = 'driver'
+            AND u.is_active = true
+            AND dp.avg_rating >= 4.5
+            AND dp.acceptance_rate >= 70
+            AND ST_DWithin(
+              ST_MakePoint(u.longitude, u.latitude)::geography,
+              ST_MakePoint($1, $2)::geography,
+              5000
+            )
+          ORDER BY dp.avg_rating DESC, distance_m ASC
+          LIMIT 20
+        `;
+        const result = await this.db.query(query, [pickupLng, pickupLat]);
+        if (result.rows.length) return result.rows;
+      } catch {
+        // driver_performance or user lat/lng may not exist yet
+      }
 
-      const result = await this.db.query(query, [pickupLng, pickupLat]);
-      return result.rows;
+      const fallback = await this.db.query(
+        `SELECT u.id, u.first_name, u.phone
+         FROM users u
+         LEFT JOIN drivers d ON d.user_id = u.id
+         WHERE u.user_type = 'driver' AND u.is_active = true
+         ORDER BY COALESCE(d.rating, 5) DESC
+         LIMIT 10`
+      );
+      return fallback.rows;
     } catch (error) {
       this.logger.error('Error finding best drivers:', error);
       return [];
@@ -296,58 +313,163 @@ export class MatchingEngineService {
   }
 
   /**
-   * Calculate estimated fare for a ride
+   * Generic nearest-driver assignment for rides or marketplace deliveries (Phase 4).
    */
-  async calculateFare(
-    distanceKm: number,
-    durationMinutes: number,
-    rideType: string = 'standard'
-  ): Promise<number> {
-    // Base fare structure
-    const baseFare: Record<string, number> = {
-      standard: 2.5,
-      express: 3.5,
-      premium: 5.0
-    };
+  async assignNearestDriver(
+    taskType: 'ride' | 'delivery',
+    taskId: string,
+    pickupLat: number,
+    pickupLng: number
+  ): Promise<{ driverId: string | null; driversConsidered: number }> {
+    const drivers = await this.findBestDrivers(pickupLat, pickupLng);
+    const driverId = drivers[0]?.id || null;
 
-    const perKmRate: Record<string, number> = {
-      standard: 1.5,
-      express: 2.0,
-      premium: 3.0
-    };
+    if (driverId && taskType === 'delivery') {
+      await this.db.query(
+        `UPDATE marketplace_orders
+         SET courier_id = $1,
+             delivery_mode = 'movr_courier',
+             courier_assigned_at = NOW(),
+             status = 'out_for_delivery',
+             updated_at = NOW()
+         WHERE id = $2`,
+        [driverId, taskId]
+      );
+      this.realtime.broadcastToDrivers?.('delivery:assigned', {
+        orderId: taskId,
+        driverId,
+        pickupLat,
+        pickupLng,
+      });
+    }
 
-    const perMinuteRate: Record<string, number> = {
-      standard: 0.25,
-      express: 0.35,
-      premium: 0.50
-    };
+    if (driverId && taskType === 'ride') {
+      await this.db.query(
+        `UPDATE rides SET driver_id = $1, status = 'accepted', updated_at = NOW() WHERE id = $2`,
+        [driverId, taskId]
+      );
+    }
 
-    const base = baseFare[rideType] || baseFare.standard;
-    const distanceFare = distanceKm * (perKmRate[rideType] || perKmRate.standard);
-    const timeFare = durationMinutes * (perMinuteRate[rideType] || perMinuteRate.standard);
+    this.logger.info('assignNearestDriver', {
+      taskType,
+      taskId,
+      driverId,
+      considered: drivers.length,
+    });
 
-    const totalFare = base + distanceFare + timeFare;
-
-    // Apply surge pricing if needed
-    const surgeMultiplier = await this.getSurgeMultiplier();
-    return totalFare * surgeMultiplier;
+    return { driverId, driversConsidered: drivers.length };
   }
 
   /**
-   * Get surge pricing multiplier based on demand
+   * Calculate estimated fare — DB-driven vehicle_type_pricing (Phase 24) with city fallback (Phase 20).
+   * Phase 25 applies contextual pricing via PricingEngineService.
    */
-  private async getSurgeMultiplier(): Promise<number> {
-    // Check active rides vs available drivers
-    const activeRides = await this.redis.getCounter('active:rides');
-    const availableDrivers = await this.redis.getCounter('available:drivers');
+  async calculateFareWithBreakdown(
+    distanceKm: number,
+    durationMinutes: number,
+    rideType: string = 'standard',
+    countryCode: string = 'GH',
+    pickupLat?: number,
+    pickupLng?: number,
+    precomputedBreakdown?: any
+  ) {
+    const cacheKey = `fare:${countryCode}:${rideType}`;
+    let pricing: any = null;
 
-    if (availableDrivers === 0) return 2.0; // High surge
+    try {
+      const cached = this.redis?.get ? await this.redis.get(cacheKey) : null;
+      if (cached) pricing = cached;
+    } catch {
+      // redis optional
+    }
 
-    const ratio = activeRides / availableDrivers;
-    if (ratio > 2) return 2.0;
-    if (ratio > 1.5) return 1.5;
-    if (ratio > 1) return 1.25;
-    return 1.0;
+    if (!pricing) {
+      try {
+        const row = await this.db.query(
+          `SELECT p.*
+           FROM vehicle_type_pricing p
+           JOIN vehicle_types vt ON vt.id = p.vehicle_type_id
+           WHERE vt.code = $1 AND vt.is_active = TRUE
+             AND (p.country_code = $2 OR p.country_code IS NULL)
+             AND p.effective_from <= NOW()
+           ORDER BY p.country_code NULLS LAST, p.effective_from DESC
+           LIMIT 1`,
+          [rideType, countryCode]
+        );
+        pricing = row.rows[0];
+        if (pricing && this.redis?.set) {
+          await this.redis.set(cacheKey, pricing, 300).catch?.(() => undefined);
+        }
+      } catch {
+        pricing = null;
+      }
+    }
+
+    if (!pricing) {
+      try {
+        const city = await this.db.query(
+          `SELECT * FROM city_pricing WHERE country_code = $1 ORDER BY city LIMIT 1`,
+          [countryCode]
+        );
+        if (city.rows[0]) {
+          pricing = {
+            base_fare: city.rows[0].base_fare,
+            per_km_rate: city.rows[0].per_km_rate,
+            per_minute_rate: city.rows[0].per_min_rate,
+            minimum_fare: city.rows[0].base_fare,
+          };
+        }
+      } catch {
+        // fall through to hardcoded legacy
+      }
+    }
+
+    if (!pricing) {
+      const baseFare: Record<string, number> = { standard: 2.5, express: 3.5, premium: 5.0 };
+      const perKmRate: Record<string, number> = { standard: 1.5, express: 2.0, premium: 3.0 };
+      const perMinuteRate: Record<string, number> = { standard: 0.25, express: 0.35, premium: 0.5 };
+      pricing = {
+        base_fare: baseFare[rideType] || 2.5,
+        per_km_rate: perKmRate[rideType] || 1.5,
+        per_minute_rate: perMinuteRate[rideType] || 0.25,
+        minimum_fare: 5,
+      };
+    }
+
+    const total =
+      Number(pricing.base_fare) +
+      distanceKm * Number(pricing.per_km_rate) +
+      durationMinutes * Number(pricing.per_minute_rate);
+    const floored = Math.max(total, Number(pricing.minimum_fare || 0));
+    let breakdown = precomputedBreakdown;
+    if (!breakdown) {
+      const { PricingEngineService } = require('./pricing-engine.service');
+      const pricingEngine = new PricingEngineService(this.db, this.redis);
+      const lat = pickupLat ?? 5.6037;
+      const lng = pickupLng ?? -0.187;
+      breakdown = await pricingEngine.calculateMultiplier({ lat, lng });
+    }
+    const fare = Math.round(floored * breakdown.finalMultiplier * 100) / 100;
+    return { fare, breakdown, baseBeforeSurge: floored };
+  }
+
+  async calculateFare(
+    distanceKm: number,
+    durationMinutes: number,
+    rideType: string = 'standard',
+    countryCode: string = 'GH',
+    pickupLat?: number,
+    pickupLng?: number
+  ): Promise<number> {
+    const result = await this.calculateFareWithBreakdown(
+      distanceKm,
+      durationMinutes,
+      rideType,
+      countryCode,
+      pickupLat,
+      pickupLng
+    );
+    return result.fare;
   }
 
   /**

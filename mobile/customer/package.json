@@ -1,0 +1,9 @@
+{
+  "name": "@movr/customer",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@movr/design-system": "workspace:*"
+  }
+}

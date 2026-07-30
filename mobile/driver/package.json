@@ -1,0 +1,9 @@
+{
+  "name": "@movr/driver",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@movr/design-system": "workspace:*"
+  }
+}

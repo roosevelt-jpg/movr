@@ -69,14 +69,24 @@ export const paymentsApi = {
 // ============================================
 
 export const marketplaceApi = {
-  getStores: (filters?: any) => api.get('/marketplace/stores', { params: filters }),
-  getStoreDetails: (storeId: string) => api.get(`/marketplace/stores/${storeId}`),
+  getStores: (filters?: any) => api.get('/stores', { params: filters }),
+  getStoreDetails: (storeId: string) => api.get(`/stores/${storeId}`),
   getStoreProducts: (storeId: string) =>
-    api.get(`/marketplace/stores/${storeId}/products`),
-  createOrder: (data: any) => api.post('/marketplace/orders', data),
-  getOrder: (orderId: string) => api.get(`/marketplace/orders/${orderId}`),
-  getOrders: () => api.get('/marketplace/orders'),
-  cancelOrder: (orderId: string) => api.put(`/marketplace/orders/${orderId}/cancel`),
+    api.get(`/stores/${storeId}/products`),
+  createOrder: (data: any) => api.post('/cart/checkout', data),
+  getOrder: (orderId: string) => api.get(`/orders/${orderId}`),
+  getOrders: () => api.get('/orders'),
+  cancelOrder: (orderId: string) => api.patch(`/orders/${orderId}/status`, { status: 'cancelled' }),
+};
+
+export const cartApi = {
+  get: (storeId?: string) => api.get('/cart', { params: { storeId } }),
+  create: (storeId: string) => api.post('/cart', { storeId }),
+  addItem: (data: any) => api.post('/cart/items', data),
+  updateItem: (id: string, quantity: number) =>
+    api.patch(`/cart/items/${id}`, { quantity }),
+  removeItem: (id: string) => api.delete(`/cart/items/${id}`),
+  checkout: (data: any) => api.post('/cart/checkout', data),
 };
 
 // ============================================
@@ -84,11 +94,19 @@ export const marketplaceApi = {
 // ============================================
 
 export const walletApi = {
-  getBalance: () => api.get('/wallet/balance'),
+  get: () => api.get('/wallet'),
+  getBalance: () => api.get('/wallet'),
   getTransactions: (limit = 10) =>
-    api.get('/wallet/transactions', { params: { limit } }),
+    api.get('/wallet', { params: { limit } }),
+  getAddresses: () => api.get('/wallet/addresses'),
+  saveAddress: (data: { label: string; address: string; lat: number; lng: number }) =>
+    api.post('/wallet/addresses', data),
   addFunds: (amount: number, method: string) =>
-    api.post('/wallet/add-funds', { amount, method }),
+    api.post('/payments/initialize', {
+      amount,
+      paymentType: 'wallet',
+      method,
+    }),
   requestWithdrawal: (amount: number, accountDetails: any) =>
     api.post('/wallet/withdrawal', { amount, accountDetails }),
 };

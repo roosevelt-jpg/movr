@@ -1,0 +1,13 @@
+{
+  "name": "@movr/design-system",
+  "version": "1.0.0",
+  "private": true,
+  "main": "theme.ts",
+  "types": "theme.ts",
+  "exports": {
+    ".": "./theme.ts",
+    "./theme": "./theme.ts",
+    "./tokens.json": "./tokens.json",
+    "./components/*": "./components/*"
+  }
+}
