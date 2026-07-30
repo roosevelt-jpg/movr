@@ -1,0 +1,66 @@
+{
+  "name": "@movr/web",
+  "version": "1.0.0",
+  "description": "MOVR Customer Web App - React + TypeScript",
+  "private": true,
+  "homepage": "https://movr.io",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.15.0",
+    "axios": "^1.5.0",
+    "zustand": "^4.4.0",
+    "react-query": "^3.39.0",
+    "socket.io-client": "^4.7.0",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1",
+    "@react-google-maps/api": "^2.18.0",
+    "react-hook-form": "^7.47.0",
+    "zod": "^3.22.0",
+    "@hookform/resolvers": "^3.3.0",
+    "react-hot-toast": "^2.4.1",
+    "date-fns": "^2.30.0",
+    "stripe": "^13.0.0",
+    "web3": "^1.10.0",
+    "ethers": "^6.7.0",
+    "swiper": "^10.0.0",
+    "framer-motion": "^10.16.0",
+    "clsx": "^2.0.0",
+    "tailwindcss": "^3.3.0",
+    "postcss": "^8.4.31",
+    "autoprefixer": "^10.4.16"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^4.5.0",
+    "@vitejs/plugin-react": "^4.1.0",
+    "eslint": "^8.49.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "prettier": "^3.0.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write src",
+    "type-check": "tsc --noEmit"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

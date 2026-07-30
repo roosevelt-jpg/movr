@@ -1,0 +1,38 @@
+{
+  "name": "movr-platform",
+  "version": "1.0.0",
+  "description": "MOVR - African Super-App Platform",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend/web",
+    "frontend/admin"
+  ],
+  "scripts": {
+    "dev": "pnpm --parallel dev:all",
+    "dev:all": "pnpm recursive run dev --stream",
+    "dev:backend": "pnpm --filter @movr/backend dev",
+    "dev:web": "pnpm --filter @movr/web dev",
+    "dev:admin": "pnpm --filter @movr/admin dev",
+    "build": "pnpm recursive run build",
+    "build:backend": "pnpm --filter @movr/backend build",
+    "build:web": "pnpm --filter @movr/web build",
+    "build:admin": "pnpm --filter @movr/admin build",
+    "start": "pnpm --filter @movr/backend start",
+    "lint": "pnpm recursive run lint",
+    "test": "pnpm recursive run test",
+    "db:migrate": "pnpm --filter @movr/backend run db:migrate",
+    "db:seed": "pnpm --filter @movr/backend run db:seed"
+  },
+  "dependencies": {
+    "@vercel/analytics": "1.6.1"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "hono": "4.12.25"
+    }
+  }
+}
