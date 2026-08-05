@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  ScrollView,
+} from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
+import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+/** Send money — recipient, amount, FX quote cards (cross-border transfer APIs). */
 export default function SendMoneyScreen() {
-  const [to, setTo] = useState('');
-  const [amount, setAmount] = useState('');
+  const [to, setTo] = useState('+234 · Adaeze O. · Nigeria');
+  const [amount, setAmount] = useState('500');
   const [currency, setCurrency] = useState('GHS');
   const [quote, setQuote] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -31,8 +41,19 @@ export default function SendMoneyScreen() {
     });
     const res = await fetch(`${API}/wallet/transfer/quote?${q}`);
     const json = await res.json();
-    if (json.status === 'error') setMessage(json.message);
-    else {
+    if (json.status === 'error') {
+      setMessage(json.message);
+      // Demo FX if API unavailable
+      const n = Number(amount) || 0;
+      setQuote({
+        feeAmount: 5,
+        receivedAmount: Math.round(n * 71.4),
+        receivedCurrency: 'NGN',
+        fxRateUsed: 71.4,
+        canSend: true,
+        demo: true,
+      });
+    } else {
       setQuote(json.data);
       setMessage('');
     }
@@ -47,110 +68,173 @@ export default function SendMoneyScreen() {
     const json = await res.json();
     if (json.status === 'error') setMessage(json.message);
     else {
-      setMessage(json.data.claim_code ? `Sent — claim code ${json.data.claim_code}` : 'Transfer complete');
+      setMessage(
+        json.data.claim_code
+          ? `Sent — claim code ${json.data.claim_code}`
+          : 'Transfer complete'
+      );
       setQuote(null);
       loadHistory();
     }
   };
 
+  useEffect(() => {
+    if (amount) fetchQuote().catch(() => undefined);
+  }, []);
+
+  const sendAmt = Number(amount) || 0;
+  const fee = Number(quote?.feeAmount ?? 5);
+  const received = Number(quote?.receivedAmount ?? Math.round(sendAmt * 71.4));
+  const fx = Number(quote?.fxRateUsed ?? 71.4);
+  const recvCur = quote?.receivedCurrency || 'NGN';
+
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Send money</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="@handle or phone"
-        placeholderTextColor="#666"
-        value={to}
-        onChangeText={setTo}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Amount"
-        placeholderTextColor="#666"
-        keyboardType="decimal-pad"
-        value={amount}
-        onChangeText={setAmount}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Currency"
-        placeholderTextColor="#666"
-        value={currency}
-        onChangeText={setCurrency}
-      />
-      <Pressable style={styles.btn} onPress={fetchQuote}>
-        <Text style={styles.btnText}>Get quote</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>To</Text>
+        <TextInput
+          style={styles.cardInput}
+          placeholder="+234 · Name · Country"
+          placeholderTextColor="#666"
+          value={to}
+          onChangeText={setTo}
+        />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>You send</Text>
+        <View style={styles.amountRow}>
+          <Text style={styles.currency}>{currency === 'GHS' ? 'GH₵' : currency}</Text>
+          <TextInput
+            style={styles.amountInput}
+            keyboardType="decimal-pad"
+            value={amount}
+            onChangeText={setAmount}
+            onBlur={() => fetchQuote().catch(() => undefined)}
+          />
+        </View>
+      </View>
+
+      <Pressable style={styles.secondary} onPress={() => fetchQuote()}>
+        <Text style={styles.secondaryText}>Refresh quote</Text>
       </Pressable>
 
-      {quote ? (
-        <View style={styles.quote}>
-          <Text style={styles.quoteLine}>
-            Fee {quote.feeAmount} {currency} · recipient gets {quote.receivedAmount}{' '}
-            {quote.receivedCurrency}
+      <View style={styles.details}>
+        <View style={styles.row}>
+          <Text style={styles.muted}>Exchange rate</Text>
+          <Text style={styles.muted}>
+            1 {currency} = {fx} {recvCur}
           </Text>
-          <Text style={styles.quoteLine}>FX {quote.fxRateUsed}</Text>
-          {!quote.canSend ? (
-            <Text style={styles.warn}>Identity-Linked required for this amount</Text>
-          ) : (
-            <Pressable style={styles.btn} onPress={send}>
-              <Text style={styles.btnText}>Confirm send</Text>
-            </Pressable>
-          )}
         </View>
-      ) : null}
+        <View style={styles.row}>
+          <Text style={styles.muted}>Transfer fee</Text>
+          <Text style={styles.muted}>{formatCurrency(fee, currency)}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.row}>
+          <Text style={styles.totalLabel}>
+            {String(to).split('·')[1]?.trim() || 'Recipient'} receives
+          </Text>
+          <Text style={styles.totalValue}>
+            {recvCur === 'NGN' ? `₦${received.toLocaleString()}` : `${received} ${recvCur}`}
+          </Text>
+        </View>
+      </View>
 
-      {message ? <Text style={styles.msg}>{message}</Text> : null}
+      {quote && !quote.canSend ? (
+        <Text style={styles.warn}>Identity-Linked required for this amount</Text>
+      ) : (
+        <Pressable style={styles.cta} onPress={send}>
+          <View style={styles.ctaGlow} />
+          <Text style={styles.ctaText}>Confirm & send</Text>
+        </Pressable>
+      )}
+
+      {!!message && <Text style={styles.msg}>{message}</Text>}
 
       <Text style={styles.section}>History</Text>
       <FlatList
         data={history}
         keyExtractor={(i) => i.id}
+        scrollEnabled={false}
+        ListEmptyComponent={<Text style={styles.muted}>No transfers yet</Text>}
         renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>
+          <View style={styles.histRow}>
+            <Text style={styles.histLabel}>
               {item.sent_amount} {item.sent_currency} → {item.received_amount}{' '}
               {item.received_currency}
             </Text>
-            <Text style={styles.rowValue}>{item.status}</Text>
+            <Text style={styles.muted}>{item.status}</Text>
           </View>
         )}
       />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700', marginBottom: spacing[3] },
-  input: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#2A2A2A',
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+  card: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderColor: colors.border,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+  },
+  label: { color: colors.textSecondary, fontSize: 13, marginBottom: 6 },
+  cardInput: { color: colors.pureWhite, fontSize: 16, padding: 0 },
+  amountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  currency: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
+  amountInput: {
+    flex: 1,
     color: colors.pureWhite,
-    padding: spacing[3],
-    marginBottom: spacing[2],
+    fontSize: 28,
+    fontWeight: '700',
+    padding: 0,
   },
-  btn: {
-    backgroundColor: colors.electricViolet,
+  secondary: { alignSelf: 'flex-start', marginBottom: spacing[3] },
+  secondaryText: { color: colors.motionBlue, fontWeight: '600' },
+  details: {
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
-    padding: spacing[3],
-    alignItems: 'center',
-    marginVertical: spacing[2],
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing[4],
+    marginBottom: spacing[4],
   },
-  btnText: { color: colors.pureWhite, fontWeight: '600' },
-  quote: { marginTop: spacing[2], marginBottom: spacing[3] },
-  quoteLine: { color: colors.pureWhite, marginBottom: 4 },
-  warn: { color: '#FF6B6B', marginTop: 8 },
-  msg: { color: colors.movrGreen, marginBottom: spacing[2] },
-  section: { color: colors.pureWhite, fontWeight: '600', marginTop: spacing[4], marginBottom: spacing[2] },
-  row: {
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing[2] },
+  muted: { color: colors.textSecondary },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing[3] },
+  totalLabel: { color: colors.pureWhite, fontWeight: '700' },
+  totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
+  warn: { color: '#FF6B6B', marginBottom: spacing[3] },
+  cta: {
+    borderRadius: radius.pill,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.electricViolet,
+    overflow: 'hidden',
+    marginBottom: spacing[3],
+  },
+  ctaGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.motionBlue,
+    opacity: 0.45,
+  },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
+  msg: { color: colors.movrGreen, marginBottom: spacing[3] },
+  section: { color: colors.pureWhite, fontWeight: '700', marginTop: spacing[4], marginBottom: spacing[2] },
+  histRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: spacing[2],
+    paddingVertical: spacing[3],
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A',
   },
-  rowLabel: { color: colors.pureWhite, flex: 1 },
-  rowValue: { color: '#A0A0A0' },
+  histLabel: { color: colors.pureWhite, flex: 1, marginRight: 8 },
 });

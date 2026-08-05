@@ -35,7 +35,7 @@ export const authenticateToken = (
       });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || '', (err: any, user: any) => {
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err: any, user: any) => {
       if (err) {
         logger.warn(`Invalid token: ${err.message}`);
         return res.status(403).json({

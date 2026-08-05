@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:amoy": "hardhat run scripts/deploy-kyc-registry.ts --network amoy"
+    "deploy:amoy": "hardhat run scripts/deploy-kyc-registry.ts --network amoy",
+    "deploy:token:amoy": "hardhat run scripts/deploy-drive-token.ts --network amoy",
+    "deploy:merkle:amoy": "hardhat run scripts/deploy-merkle-distributor.ts --network amoy"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

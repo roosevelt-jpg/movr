@@ -37,4 +37,30 @@ pointsRouter.get('/estimated-dvt', async (req: AuthRequest, res: Response) => {
   }
 });
 
+pointsRouter.get('/redeem-catalog', async (_req: AuthRequest, res: Response) => {
+  res.json({
+    status: 'success',
+    data: [
+      { id: 'ride_5', label: 'GH₵5 off your next ride', points: 500 },
+      { id: 'order_10', label: 'GH₵10 off your next order', points: 900 },
+      { id: 'delivery_free', label: 'Free delivery voucher', points: 300 },
+    ],
+  });
+});
+
+pointsRouter.post('/redeem', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rewardId, points: cost, label } = req.body;
+    const result = await points.redeem(
+      req.user!.id,
+      Number(cost),
+      String(rewardId || 'reward'),
+      label
+    );
+    res.json({ status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 export { points };

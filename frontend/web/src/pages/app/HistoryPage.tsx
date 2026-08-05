@@ -1,84 +1,84 @@
-import React, { useState } from 'react';
-import { Calendar, MapPin, DollarSign, Star } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ridesApi } from '../../services/api';
+import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 
+type Item = {
+  id: string;
+  title: string;
+  when: string;
+  amount: number;
+  kind: 'ride' | 'order';
+};
+
+/** Trip history — empty state + rides list. */
 const HistoryPage: React.FC = () => {
-  const [filterType, setFilterType] = useState('all');
+  const navigate = useNavigate();
+  const { formatMoney } = useLocalCurrency();
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const items = [
-    { id: 1, type: 'ride', title: 'Ride to Airport', from: 'Lekki', to: 'Murtala Airport', amount: -2500, date: '2024-01-15', rating: 5 },
-    { id: 2, type: 'purchase', title: 'Foodco Supermarket', items: 'Groceries (5)', amount: -3200, date: '2024-01-15' },
-    { id: 3, type: 'ride', title: 'Ride from Work', from: 'VI', to: 'Lekki', amount: -1800, date: '2024-01-14', rating: 5 },
-    { id: 4, type: 'reward', title: 'Referral Bonus', description: 'Friend signed up', amount: 500, date: '2024-01-14' },
-  ];
-
-  const filtered = filterType === 'all' ? items : items.filter(i => i.type === filterType);
+  useEffect(() => {
+    ridesApi
+      .getRideHistory(20, 0)
+      .then((rides) => {
+        const rows = rides?.data?.data?.rides || [];
+        setItems(
+          rows.map((r: any) => ({
+            id: r.id,
+            title: `${r.pickupAddress || 'Pickup'} → ${r.dropoffAddress || 'Dropoff'}`,
+            when: r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Recently',
+            amount: Number(r.actualFare || r.estimatedFare || 0),
+            kind: 'ride' as const,
+          }))
+        );
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl p-8 text-white">
-        <h1 className="text-4xl font-bold mb-2">History</h1>
-        <p className="text-purple-100">Your rides, purchases, and transactions</p>
-      </div>
+    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8">
+      <h1 className="text-3xl font-bold mb-6">Trip history</h1>
 
-      {/* Filters */}
-      <div className="card p-6">
-        <div className="flex flex-wrap gap-3">
-          {['all', 'ride', 'purchase', 'reward'].map((type) => (
+      {!loading && items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
+          <div className="w-18 h-18 w-20 h-20 rounded-full bg-[#1C1C1E] flex items-center justify-center text-3xl mb-5">
+            🚐
+          </div>
+          <h2 className="text-xl font-bold">No trips yet</h2>
+          <p className="text-[#8E8E93] mt-3 mb-8 leading-relaxed">
+            Your ride and order history will show up here once you take your first trip.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="rounded-full px-8 py-3.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          >
+            Book a ride
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 max-w-2xl">
+          {items.map((item) => (
             <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-4 py-2 rounded-full capitalize transition-all ${
-                filterType === type
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-              }`}
+              key={item.id}
+              type="button"
+              onClick={() => navigate(`/ride/${item.id}`)}
+              className="w-full flex items-center gap-3 rounded-2xl bg-[#1C1C1E] p-4 text-left"
             >
-              {type === 'all' && 'All'}
-              {type === 'ride' && '🚗 Rides'}
-              {type === 'purchase' && '🛒 Purchases'}
-              {type === 'reward' && '🎁 Rewards'}
+              <span className="w-10 h-10 rounded-xl bg-[#111] flex items-center justify-center text-lg">
+                {item.kind === 'order' ? '📦' : '🚗'}
+              </span>
+              <span className="flex-1">
+                <span className="block font-semibold">{item.title}</span>
+                <span className="block text-sm text-[#888] mt-1">{item.when}</span>
+              </span>
+              <span className="font-semibold">{formatMoney(Number(item.amount))}</span>
             </button>
           ))}
         </div>
-      </div>
-
-      {/* History List */}
-      <div className="space-y-3">
-        {filtered.map((item) => (
-          <div key={item.id} className="card p-4 hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900">{item.title}</h3>
-                {'from' in item && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                    <MapPin size={16} />
-                    <span>{item.from} → {item.to}</span>
-                  </div>
-                )}
-                {'items' in item && (
-                  <p className="text-sm text-gray-600 mt-1">{item.items}</p>
-                )}
-                {'description' in item && (
-                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-2">{item.date}</p>
-              </div>
-              <div className="text-right">
-                <p className={`font-bold text-lg ${item.amount > 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                  {item.amount > 0 ? '+' : ''}₦{Math.abs(item.amount)}
-                </p>
-                {'rating' in item && (
-                  <div className="flex items-center gap-1 mt-2 justify-end">
-                    {[...Array(item.rating)].map((_, i) => (
-                      <Star key={i} size={16} className="text-yellow-400 fill-yellow-400" />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      )}
     </div>
   );
 };

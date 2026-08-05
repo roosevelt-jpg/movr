@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
-import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
+/** Sign in — phone/email + password (dark mockup). */
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -15,8 +16,8 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     try {
+      const email = phone.includes('@') ? phone : `${phone.replace(/\s/g, '')}@phone.movr`;
       await login(email, password);
       toast.success('Login successful!');
       navigate('/dashboard');
@@ -29,91 +30,69 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="w-full">
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-        <p className="text-gray-600">Sign in to your MOVR account</p>
+      <div className="text-center mb-10">
+        <h1 className="text-3xl font-bold">Movr</h1>
+        <p className="text-[#888] mt-2">Welcome back</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-gap-3">
-            <AlertCircle className="text-red-600 flex-shrink-0" size={20} />
-            <span className="text-red-800 text-sm">{error}</span>
-          </div>
-        )}
+        {error ? <p className="text-sm text-[#FF3B5C]">{error}</p> : null}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Email Address
-          </label>
+          <label className="block text-sm text-[#888] mb-2">Phone number</label>
           <div className="relative">
-            <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+            <Mail className="absolute left-3 top-3.5 text-[#888]" size={18} />
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="input-base pl-10"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+233 24 000 0000"
+              className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] pl-10 pr-4 py-3 text-white placeholder:text-[#666]"
               required
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Password
-          </label>
+          <label className="block text-sm text-[#888] mb-2">Password</label>
           <div className="relative">
-            <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+            <Lock className="absolute left-3 top-3.5 text-[#888]" size={18} />
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input-base pl-10 pr-10"
+              className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] pl-10 pr-10 py-3 text-white"
               required
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-3.5 text-[#888]"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="w-4 h-4 border border-gray-300 rounded" />
-            <span className="text-sm text-gray-700">Remember me</span>
-          </label>
-          <Link to="/forgot-password" className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-            Forgot password?
-          </Link>
+          <div className="text-right mt-2">
+            <Link to="/forgot-password" className="text-sm text-[#4A72FF]">
+              Forgot password?
+            </Link>
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="btn-primary w-full py-3 text-lg font-semibold"
+          className="w-full rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
         >
-          {isLoading ? 'Signing in...' : 'Sign In'}
+          {isLoading ? 'Signing in...' : 'Sign in'}
         </button>
 
-        <div className="text-center text-gray-600">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-orange-600 hover:text-orange-700 font-semibold">
-            Create one
+        <p className="text-center text-[#888] text-sm">
+          New to Movr?{' '}
+          <Link to="/register" className="text-[#4A72FF] font-semibold">
+            Create an account
           </Link>
-        </div>
-
-        {/* Demo credentials */}
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-          <p className="font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-          <p className="text-blue-800">Email: demo@movr.io</p>
-          <p className="text-blue-800">Password: Demo@1234</p>
-        </div>
+        </p>
       </form>
     </div>
   );

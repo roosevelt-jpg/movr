@@ -74,4 +74,28 @@ export class PointsService {
       estimatedDvt: balance * conversionRate,
     };
   }
+
+  /** Redeem points for a catalog reward (negative ledger entry). */
+  async redeem(userId: string, pointsCost: number, rewardId: string, label?: string) {
+    const balance = await this.getBalance(userId);
+    if (pointsCost <= 0) throw new Error('Invalid points cost');
+    if (balance < pointsCost) throw new Error('Insufficient points');
+
+    const row = await this.db.query(
+      `INSERT INTO points_ledger (user_id, activity_type, points_earned, description)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [userId, `redeem:${rewardId}`, -pointsCost, label || `Redeemed ${rewardId}`]
+    );
+
+    await this.db.query(
+      `UPDATE wallets SET
+         balance_points = GREATEST(0, COALESCE(balance_points, 0) - $2),
+         points_balance = GREATEST(0, COALESCE(points_balance, 0) - $2),
+         last_updated = NOW()
+       WHERE user_id = $1`,
+      [userId, pointsCost]
+    );
+
+    return { ledger: row.rows[0], balance: balance - pointsCost, rewardId };
+  }
 }

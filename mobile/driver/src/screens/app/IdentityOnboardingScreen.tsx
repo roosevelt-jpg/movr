@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  ScrollView,
+} from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -11,8 +18,11 @@ const COUNTRIES = [
   { code: 'SN', label: 'Senegal (CNI)' },
 ];
 
+type DocStatus = 'uploaded' | 'required' | 'pending';
+
 /**
- * Phase 26 — country-of-ID first, then document fields for that market.
+ * Driver identity onboarding — country of ID + document checklist + upload.
+ * Keeps verify-national-id API; adds mockup document upload UX.
  */
 export default function IdentityOnboardingScreen() {
   const [country, setCountry] = useState('GH');
@@ -20,13 +30,41 @@ export default function IdentityOnboardingScreen() {
   const [idNumber, setIdNumber] = useState('');
   const [fullName, setFullName] = useState('');
   const [result, setResult] = useState('');
+  const [docs, setDocs] = useState<{ key: string; label: string; status: DocStatus }[]>([
+    { key: 'ghana_card', label: 'Ghana Card', status: 'uploaded' },
+    { key: 'driving_license', label: 'Driving license', status: 'uploaded' },
+    { key: 'vehicle_registration', label: 'Vehicle registration', status: 'required' },
+  ]);
+  const [activeUpload, setActiveUpload] = useState('vehicle_registration');
 
   useEffect(() => {
     fetch(`${API}/identity/id-fields/${country}`)
       .then((r) => r.json())
       .then((j) => setFields(j.data))
       .catch(() => undefined);
+
+    if (country === 'GH') {
+      setDocs([
+        { key: 'ghana_card', label: 'Ghana Card', status: 'uploaded' },
+        { key: 'driving_license', label: 'Driving license', status: 'uploaded' },
+        { key: 'vehicle_registration', label: 'Vehicle registration', status: 'required' },
+      ]);
+    } else {
+      setDocs([
+        { key: 'national_id', label: fields?.label || 'National ID', status: 'required' },
+        { key: 'driving_license', label: 'Driving license', status: 'required' },
+      ]);
+      setActiveUpload('national_id');
+    }
   }, [country]);
+
+  const markUploaded = (key: string) => {
+    setDocs((prev) =>
+      prev.map((d) => (d.key === key ? { ...d, status: 'uploaded' as DocStatus } : d))
+    );
+    const nextRequired = docs.find((d) => d.key !== key && d.status === 'required');
+    if (nextRequired) setActiveUpload(nextRequired.key);
+  };
 
   const submit = async () => {
     const res = await fetch(`${API}/identity/verify-national-id`, {
@@ -37,31 +75,86 @@ export default function IdentityOnboardingScreen() {
     const json = await res.json();
     if (json.data?.pendingManualReview) {
       setResult('Submitted for OCR + manual review (gov API not configured).');
+    } else if (json.status === 'error') {
+      setResult(json.message || 'Verification failed');
     } else {
-      setResult(json.data?.matched ? 'Matched' : json.message || 'Check failed');
+      setResult(json.data?.matched ? 'Matched — submitted for verification' : 'Submitted for verification');
     }
+
+    // Also attempt document link endpoint when available
+    await fetch(`${API}/identity/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        countryCode: country,
+        documents: docs.map((d) => ({ type: d.key, status: d.status })),
+      }),
+    }).catch(() => undefined);
   };
 
+  const activeDoc = docs.find((d) => d.key === activeUpload) || docs.find((d) => d.status === 'required');
+
   return (
-    <View style={styles.root}>
-      <Text style={styles.title}>Country of ID</Text>
-      <Text style={styles.sub}>Choose where your national ID was issued.</Text>
-      {COUNTRIES.map((c) => (
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
+      <Text style={styles.title}>Verify your identity</Text>
+      <Text style={styles.sub}>
+        Country of ID: {COUNTRIES.find((c) => c.code === country)?.label || country}
+      </Text>
+
+      <View style={styles.countryRow}>
+        {COUNTRIES.map((c) => (
+          <Pressable
+            key={c.code}
+            style={[styles.countryChip, country === c.code && styles.countryOn]}
+            onPress={() => setCountry(c.code)}
+          >
+            <Text style={styles.countryText}>{c.code}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {docs.map((d) => {
+        const uploaded = d.status === 'uploaded';
+        return (
+          <Pressable
+            key={d.key}
+            style={styles.docRow}
+            onPress={() => setActiveUpload(d.key)}
+          >
+            <Text style={{ marginRight: 10 }}>{uploaded ? '📄✓' : '📄'}</Text>
+            <Text style={styles.docLabel}>{d.label}</Text>
+            <View
+              style={[
+                styles.badge,
+                uploaded ? styles.badgeOk : styles.badgeReq,
+              ]}
+            >
+              <Text style={[styles.badgeText, uploaded ? styles.badgeOkText : styles.badgeReqText]}>
+                {uploaded ? 'Uploaded' : 'Required'}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+
+      {activeDoc && activeDoc.status !== 'uploaded' ? (
         <Pressable
-          key={c.code}
-          style={[styles.chip, country === c.code && styles.chipOn]}
-          onPress={() => setCountry(c.code)}
+          style={styles.upload}
+          onPress={() => markUploaded(activeDoc.key)}
         >
-          <Text style={styles.chipText}>{c.label}</Text>
+          <Text style={styles.uploadIcon}>⬆</Text>
+          <Text style={styles.uploadTitle}>Upload {activeDoc.label.toLowerCase()}</Text>
+          <Text style={styles.uploadMeta}>JPG, PNG or PDF · max 10 MB</Text>
         </Pressable>
-      ))}
+      ) : null}
+
       <Text style={styles.label}>{fields?.label || 'ID number'}</Text>
       <TextInput
         style={styles.input}
         value={idNumber}
         onChangeText={setIdNumber}
         placeholderTextColor="#666"
-        placeholder={fields?.regex || ''}
+        placeholder={fields?.regex || 'Enter ID number'}
       />
       <TextInput
         style={styles.input}
@@ -70,28 +163,61 @@ export default function IdentityOnboardingScreen() {
         placeholder="Full name as on ID"
         placeholderTextColor="#666"
       />
-      <Pressable style={styles.btn} onPress={submit}>
-        <Text style={styles.btnText}>Continue</Text>
+
+      <Pressable style={styles.cta} onPress={submit}>
+        <View style={styles.ctaGlow} />
+        <Text style={styles.ctaText}>Submit for verification</Text>
       </Pressable>
-      {result ? <Text style={styles.result}>{result}</Text> : null}
-    </View>
+      {!!result && <Text style={styles.result}>{result}</Text>}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
-  sub: { color: '#A0A0A0', marginBottom: spacing[3] },
-  chip: {
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
+  sub: { color: colors.textSecondary, marginTop: 6, marginBottom: spacing[4] },
+  countryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginBottom: spacing[4] },
+  countryChip: {
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  countryOn: { borderColor: colors.electricViolet, backgroundColor: '#120024' },
+  countryText: { color: colors.pureWhite, fontWeight: '600' },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
-    padding: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing[4],
     marginBottom: spacing[2],
   },
-  chipOn: { borderColor: colors.electricViolet, backgroundColor: '#120024' },
-  chipText: { color: colors.pureWhite },
-  label: { color: colors.pureWhite, marginTop: spacing[3], marginBottom: spacing[1] },
+  docLabel: { color: colors.pureWhite, fontWeight: '600', flex: 1 },
+  badge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeOk: { backgroundColor: 'rgba(63,112,72,0.35)' },
+  badgeReq: { backgroundColor: 'rgba(255,184,0,0.2)' },
+  badgeText: { fontSize: 12, fontWeight: '700' },
+  badgeOkText: { color: '#9BE0A8' },
+  badgeReqText: { color: '#FFB800' },
+  upload: {
+    marginTop: spacing[3],
+    marginBottom: spacing[4],
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#555',
+    borderRadius: radius.md,
+    paddingVertical: spacing[6],
+    alignItems: 'center',
+  },
+  uploadIcon: { color: colors.pureWhite, fontSize: 22, marginBottom: spacing[2] },
+  uploadTitle: { color: colors.pureWhite, fontWeight: '700' },
+  uploadMeta: { color: colors.textSecondary, marginTop: 6, fontSize: 12 },
+  label: { color: colors.pureWhite, marginBottom: spacing[1] },
   input: {
     backgroundColor: '#0A0A0A',
     borderColor: '#2A2A2A',
@@ -101,13 +227,20 @@ const styles = StyleSheet.create({
     padding: spacing[3],
     marginBottom: spacing[2],
   },
-  btn: {
-    backgroundColor: colors.electricViolet,
-    borderRadius: radius.md,
-    padding: spacing[3],
+  cta: {
+    marginTop: spacing[4],
+    borderRadius: radius.pill,
+    minHeight: 52,
     alignItems: 'center',
-    marginTop: spacing[2],
+    justifyContent: 'center',
+    backgroundColor: colors.electricViolet,
+    overflow: 'hidden',
   },
-  btnText: { color: colors.pureWhite, fontWeight: '600' },
+  ctaGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.motionBlue,
+    opacity: 0.45,
+  },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
   result: { color: colors.movrGreen, marginTop: spacing[3] },
 });

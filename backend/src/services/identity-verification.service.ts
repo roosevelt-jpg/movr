@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
+import { DatabaseService } from './database.service';
 
 interface IdentityDocument {
   type: 'national_id' | 'passport' | 'driving_license';
@@ -24,8 +25,10 @@ interface VerificationResult {
 class IdentityVerificationService {
   private s3: AWS.S3;
   private rekognition: AWS.Rekognition;
+  private db: DatabaseService;
 
   constructor() {
+    this.db = new DatabaseService();
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -117,7 +120,7 @@ class IdentityVerificationService {
       const documentId = uuidv4();
 
       // Store verification result
-      await db.query(
+      await this.db.query(
         `INSERT INTO identity_verifications (id, driver_id, document_type, verified, confidence, details, result_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -162,7 +165,7 @@ class IdentityVerificationService {
   private async verifyFaceMatch(driverId: string, documentImageUrl: string): Promise<any> {
     try {
       // Get driver's selfie from database
-      const driverResult = await db.query(
+      const driverResult = await this.db.query(
         'SELECT profile_photo_url FROM drivers WHERE id = $1',
         [driverId]
       );
@@ -184,13 +187,15 @@ class IdentityVerificationService {
 
       const comparisonResult = await this.rekognition.compareFaces(params).promise();
 
-      const match = comparisonResult.FaceMatches && comparisonResult.FaceMatches.length > 0;
-      const confidence = match ? Math.round(comparisonResult.FaceMatches[0].Similarity || 0) : 0;
+      const match = !!(comparisonResult.FaceMatches && comparisonResult.FaceMatches.length > 0);
+      const confidence = match
+        ? Math.round(comparisonResult.FaceMatches![0].Similarity || 0)
+        : 0;
 
       return {
         match,
         confidence,
-        similarity: match ? comparisonResult.FaceMatches[0].Similarity : 0,
+        similarity: match ? comparisonResult.FaceMatches![0].Similarity : 0,
       };
     } catch (error) {
       console.error('❌ Face verification failed:', error);
@@ -204,7 +209,7 @@ class IdentityVerificationService {
   private async checkFraudSignals(verificationData: any): Promise<any> {
     try {
       // Check for common fraud patterns
-      const fraudRisks = [];
+      const fraudRisks: string[] = [];
       let fraudDetected = false;
 
       // Check if document is expired
@@ -420,7 +425,7 @@ class IdentityVerificationService {
       const verificationId = uuidv4();
 
       // Store merchant verification
-      await db.query(
+      await this.db.query(
         `INSERT INTO merchant_verifications (id, merchant_id, business_name, verified, confidence, details, verified_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -463,7 +468,7 @@ class IdentityVerificationService {
    */
   async getVerificationStatus(userId: string, userType: 'driver' | 'merchant') {
     try {
-      const verifications = await db.query(
+      const verifications = await this.db.query(
         `SELECT * FROM ${userType === 'driver' ? 'identity_verifications' : 'merchant_verifications'}
          WHERE ${userType === 'driver' ? 'driver_id' : 'merchant_id'} = $1
          ORDER BY result_date DESC`,
@@ -490,8 +495,7 @@ class IdentityVerificationService {
    * Phase 26 — cross-check national ID, license, vehicle, phone into an identity graph.
    */
   async linkIdentityDocuments(userId: string) {
-    const { DatabaseService } = require('./database.service');
-    const database = typeof db !== 'undefined' ? db : new DatabaseService();
+    const database = this.db;
     const { NationalIdVerificationService } = require('./ghana-card-verification.service');
     const { DrivingLicenseVerificationService } = require('./driving-license-verification.service');
     const national = new NationalIdVerificationService(database);
@@ -626,8 +630,7 @@ class IdentityVerificationService {
     checkType: string,
     status: 'match' | 'mismatch' | 'unverifiable'
   ) {
-    const { DatabaseService } = require('./database.service');
-    const database = typeof db !== 'undefined' ? db : new DatabaseService();
+    const database = this.db;
     const row = await database.query(
       `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
        VALUES ($1,$2,$3,$4::jsonb) RETURNING *`,

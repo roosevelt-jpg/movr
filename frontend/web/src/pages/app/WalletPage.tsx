@@ -1,101 +1,138 @@
-import React, { useState } from 'react';
-import { CreditCard, TrendingUp, Send, Download, Plus } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Send, Plus } from 'lucide-react';
+import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import { formatCurrency } from '../../lib/currency';
 
+const API =
+  (import.meta as any).env?.VITE_API_URL ||
+  process.env.REACT_APP_API_URL ||
+  'http://localhost:3000/api/v1';
+
+function authHeaders() {
+  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Wallet — local currency + points/DVT. */
 const WalletPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('balance');
+  const { currency } = useLocalCurrency();
+  const [balance, setBalance] = useState(0);
+  const [walletCurrency, setWalletCurrency] = useState<string | null>(null);
+  const [points, setPoints] = useState(0);
+  const [estimatedDvt, setEstimatedDvt] = useState(0);
+  const [activity, setActivity] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/wallet`, { headers: authHeaders() }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/points/estimated-dvt`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`${API}/wallet/transactions`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
+    ]).then(([w, p, t]) => {
+      if (w?.data?.balance_fiat != null || w?.data?.balance != null) {
+        setBalance(Number(w.data.balance_fiat ?? w.data.balance));
+      }
+      if (w?.data?.currency) setWalletCurrency(String(w.data.currency));
+      if (w?.data?.points_balance != null) setPoints(Number(w.data.points_balance));
+      if (p?.data?.estimatedDvt != null) setEstimatedDvt(Number(p.data.estimatedDvt));
+      if (p?.data?.points != null) setPoints(Number(p.data.points));
+      if (Array.isArray(t?.data)) {
+        setActivity(
+          t.data.slice(0, 10).map((row: any) => ({
+            id: row.id,
+            title: row.type || row.reference || 'Transaction',
+            when: row.created_at ? new Date(row.created_at).toLocaleString() : '',
+            amount: Number(row.amount),
+            kind: 'fiat',
+            status: 'Completed',
+          }))
+        );
+      }
+    });
+  }, []);
+
+  const fmt = (n: number) => formatCurrency(Math.abs(n), walletCurrency || currency);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-8 text-white">
-        <h1 className="text-4xl font-bold mb-2">Wallet</h1>
-        <p className="text-blue-100">Manage your funds and payment methods</p>
-      </div>
+    <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 space-y-6">
+      <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
 
-      {/* Balance Card */}
-      <div className="card p-8 bg-gradient-to-br from-blue-600 to-blue-500 text-white">
-        <p className="text-blue-100 mb-2">Wallet Balance</p>
-        <p className="text-5xl font-bold mb-8">₦12,450.50</p>
-        <div className="flex gap-4">
-          <button className="flex items-center gap-2 bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
-            <Plus size={20} /> Add Funds
-          </button>
-          <button className="flex items-center gap-2 border border-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-400 transition-colors">
-            <Send size={20} /> Send
-          </button>
+      <div className="rounded-2xl p-6 bg-gradient-to-br from-[#1a1040] via-[#6A00FF]/70 to-[#0055FF]">
+        <p className="text-white/70 text-sm">Available balance</p>
+        <p className="text-4xl md:text-5xl font-bold mt-1">{fmt(balance)}</p>
+        <div className="h-px bg-white/20 my-5" />
+        <div className="flex justify-between items-end gap-4">
+          <div>
+            <p className="text-white/70 text-sm">Movr points</p>
+            <p className="text-2xl font-bold">{points.toLocaleString()} pts</p>
+          </div>
+          <p className="text-white/80 text-sm">≈ {estimatedDvt.toLocaleString()} DVT at TGE</p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="card">
-        <div className="flex border-b border-gray-200">
-          {['balance', 'transactions', 'methods'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 px-4 py-4 font-semibold border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab === 'balance' && 'Account'}
-              {tab === 'transactions' && 'Transactions'}
-              {tab === 'methods' && 'Payment Methods'}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-3">
+        <Link
+          to="/token"
+          className="flex-1 flex items-center justify-center gap-2 rounded-full py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+        >
+          <Send size={18} /> Send money
+        </Link>
+        <Link
+          to="/wallet/topup"
+          className="flex-1 rounded-full py-3 font-semibold bg-[#1A1A1A] border border-[#2A2A2A]"
+        >
+          <span className="inline-flex items-center gap-2 justify-center w-full">
+            <Plus size={18} /> Top up
+          </span>
+        </Link>
+      </div>
 
-        <div className="p-6">
-          {activeTab === 'balance' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                <div><p className="font-semibold">Loyalty Points</p><p className="text-sm text-gray-600">3,450 points</p></div>
-                <button className="text-blue-600 hover:text-blue-700 font-semibold">Redeem</button>
-              </div>
-              <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                <div><p className="font-semibold">Referral Bonus</p><p className="text-sm text-gray-600">₦2,500 available</p></div>
-                <button className="text-blue-600 hover:text-blue-700 font-semibold">Withdraw</button>
-              </div>
-            </div>
-          )}
+      <Link
+        to="/wallet/redeem"
+        className="block text-center text-sm text-[#8FB3FF] hover:underline"
+      >
+        Redeem points →
+      </Link>
 
-          {activeTab === 'transactions' && (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Download className="text-blue-600" size={20} />
-                    </div>
-                    <div>
-                      <p className="font-semibold">Ride Payment</p>
-                      <p className="text-sm text-gray-600">Today at 2:30 PM</p>
-                    </div>
-                  </div>
-                  <p className="font-bold text-red-600">-₦2,500</p>
+      <div>
+        <p className="text-sm text-[#A0A0A0] mb-3">Recent activity</p>
+        {activity.length === 0 ? (
+          <p className="text-[#A0A0A0] text-sm">No transactions yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {activity.map((row) => (
+              <li
+                key={row.id}
+                className="flex justify-between gap-4 rounded-xl border border-[#2A2A2A] bg-[#1A1A1A] p-4"
+              >
+                <div>
+                  <p className="font-semibold">{row.title}</p>
+                  <p className="text-sm text-[#A0A0A0] mt-1">{row.when}</p>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'methods' && (
-            <div className="space-y-4">
-              <div className="p-4 border border-gray-200 rounded-lg flex items-between justify-between">
-                <div className="flex items-center gap-3">
-                  <CreditCard className="text-gray-600" size={28} />
-                  <div>
-                    <p className="font-semibold">•••• •••• •••• 4242</p>
-                    <p className="text-sm text-gray-600">Expires 12/26</p>
-                  </div>
+                <div className="text-right">
+                  <p className={`font-bold ${row.kind === 'pts' ? 'text-[#0055FF]' : ''}`}>
+                    {row.kind === 'pts'
+                      ? `+${row.amount} pts`
+                      : `${row.amount < 0 ? '-' : '+'}${fmt(row.amount)}`}
+                  </p>
+                  <span
+                    className={`inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      row.status === 'Reward'
+                        ? 'bg-[#6A00FF]/40'
+                        : 'bg-[#3F7048]/40'
+                    }`}
+                  >
+                    {row.status}
+                  </span>
                 </div>
-                <button className="text-red-600 hover:text-red-700 font-semibold">Remove</button>
-              </div>
-              <button className="w-full border-2 border-dashed border-gray-300 py-4 rounded-lg text-gray-700 hover:border-gray-400 transition-colors font-semibold">
-                + Add Payment Method
-              </button>
-            </div>
-          )}
-        </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

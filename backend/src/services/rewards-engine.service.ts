@@ -1,6 +1,7 @@
 import { DatabaseService } from './database.service';
 import { PointsService } from './points.service';
 import { InboxService } from './inbox.service';
+import { TokenService } from './token.service';
 
 /**
  * Central rewards trigger engine (Phase 16).
@@ -9,10 +10,12 @@ import { InboxService } from './inbox.service';
 export class RewardsEngineService {
   private points: PointsService;
   private inbox: InboxService;
+  private tokens: TokenService;
 
   constructor(private db: DatabaseService) {
     this.points = new PointsService(db);
     this.inbox = new InboxService(db);
+    this.tokens = new TokenService(db);
   }
 
   async emitActivityEvent(
@@ -36,9 +39,13 @@ export class RewardsEngineService {
       Number(rule.points_amount)
     );
 
-    // DVT distribution deferred while Phase 5B is on hold
     if (Number(rule.dvt_amount) > 0) {
-      // TODO: token.service.distributeReward when Phase 5B is off hold
+      await this.tokens.distributeReward(
+        userId,
+        Number(rule.dvt_amount),
+        eventType,
+        String(metadata.ref || pointsRow?.id || eventType)
+      );
     }
 
     await this.inbox.sendInboxMessage(

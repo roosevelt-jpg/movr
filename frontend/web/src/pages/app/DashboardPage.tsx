@@ -1,53 +1,48 @@
-// frontend/web/src/pages/app/DashboardPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useQuery } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
+import { Home, Briefcase, Clock, Car, Heart, Package, KeyRound } from 'lucide-react';
 import { ridesApi, marketplaceApi, walletApi } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
+import { formatCurrency } from '../../lib/currency';
 
-// Icons
-import MarkerIcon from 'leaflet/dist/images/marker-icon.png';
-import MarkerShadow from 'leaflet/dist/images/marker-shadow.png';
+const MODULES = [
+  { id: 'Ride', icon: Car },
+  { id: 'Shop', icon: Heart },
+  { id: 'Deliver', icon: Package },
+  { id: 'Rentals', icon: KeyRound },
+] as const;
 
-let DefaultIcon = L.icon({
-  iconUrl: MarkerIcon,
-  shadowUrl: MarkerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+const SHORTCUTS = [
+  { id: 'Home', icon: Home },
+  { id: 'Work', icon: Briefcase },
+  { id: 'Recent', icon: Clock },
+] as const;
 
-L.Marker.prototype.setIcon(DefaultIcon);
-
-const MODULES = ['Ride', 'Shop', 'Parcel', 'Rental'] as const;
-const SHORTCUTS = ['Home', 'Work', 'Recent', 'Favorites'] as const;
-
+/** Customer web dashboard — sidebar booking + map (mockup). */
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-
-  const [activeModule, setActiveModule] = useState<(typeof MODULES)[number]>('Ride');
-  const [pickupLocation, setPickupLocation] = useState<any>(null);
-  const [dropoffLocation, setDropoffLocation] = useState<any>(null);
+  const [activeModule, setActiveModule] = useState<(typeof MODULES)[number]['id']>('Ride');
+  const [pickupAddress, setPickupAddress] = useState('12 Oxford St');
+  const [dropoffAddress, setDropoffAddress] = useState('');
+  const [pickupLocation, setPickupLocation] = useState<{ latitude: number; longitude: number } | null>(
+    null
+  );
+  const [dropoffLocation, setDropoffLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [rideType, setRideType] = useState<'standard' | 'express' | 'premium'>('standard');
   const [isRequesting, setIsRequesting] = useState(false);
 
-  // Fetch wallet balance
   const { data: walletData } = useQuery('wallet', () => walletApi.getBalance());
-
-  // Fetch recent rides
-  const { data: ridesData } = useQuery('recent-rides', () =>
-    ridesApi.getRideHistory(5, 0)
-  );
-
-  // Fetch featured stores
+  const { data: ridesData } = useQuery('recent-rides', () => ridesApi.getRideHistory(5, 0));
   const { data: storesData } = useQuery('featured-stores', () =>
     marketplaceApi.getStores({ limit: 4 })
   );
 
-  // Get user's current location
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((position) => {
@@ -56,25 +51,27 @@ const DashboardPage: React.FC = () => {
           longitude: position.coords.longitude,
         });
       });
+    } else {
+      setPickupLocation({ latitude: 5.6037, longitude: -0.187 });
     }
   }, []);
 
   const handleRequestRide = async () => {
-    if (!pickupLocation || !dropoffLocation) {
-      toast.error('Please set pickup and dropoff locations');
+    const pickup = pickupLocation || { latitude: 5.6037, longitude: -0.187 };
+    const dropoff = dropoffLocation || { latitude: 5.605, longitude: -0.17 };
+    if (!dropoffAddress && !dropoffLocation) {
+      toast.error('Enter a destination');
       return;
     }
-
     setIsRequesting(true);
     try {
       const response = await ridesApi.requestRide({
-        pickupLat: pickupLocation.latitude,
-        pickupLng: pickupLocation.longitude,
-        dropoffLat: dropoffLocation.latitude,
-        dropoffLng: dropoffLocation.longitude,
+        pickupLat: pickup.latitude,
+        pickupLng: pickup.longitude,
+        dropoffLat: dropoff.latitude,
+        dropoffLng: dropoff.longitude,
         rideType,
       });
-
       toast.success('Ride requested! Finding a driver...');
       navigate(`/ride/active/${response.data.data.rideId}`);
     } catch (error: any) {
@@ -85,240 +82,187 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white">
-      <div className="p-6 border-b border-border">
-        <h1 className="text-2xl font-display font-semibold">Hi, {user?.firstName}</h1>
-        <p className="text-text-secondary mt-1">Where to?</p>
-      </div>
+    <div className="min-h-screen bg-[#0A0A0A] text-white font-[Poppins,Montserrat,sans-serif]">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-[#2A2A2A]">
+        <div className="text-xl font-bold">Movr</div>
+        <div className="flex gap-2">
+          {SHORTCUTS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-2 text-sm text-[#A0A0A0]"
+            >
+              <s.icon size={14} /> {s.id}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/profile')}
+          className="w-10 h-10 rounded-full bg-[#2A2A2A]"
+          title={user?.firstName || 'Profile'}
+        />
+      </header>
 
-      <div className="px-4 pt-4 flex gap-2 overflow-x-auto">
-        {SHORTCUTS.map((s) => (
-          <button
-            key={s}
-            className="shrink-0 rounded-pill bg-surface-elevated px-4 py-2 text-sm text-text-primary border border-border"
-            type="button"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-73px)]">
+        <aside className="w-full lg:w-80 shrink-0 border-r border-[#2A2A2A] p-4 space-y-4">
+          <nav className="space-y-1">
+            {MODULES.map((m) => {
+              const active = activeModule === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveModule(m.id);
+                    if (m.id === 'Shop') navigate('/marketplace');
+                  }}
+                  className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold ${
+                    active
+                      ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF] text-white'
+                      : 'text-[#A0A0A0] hover:text-white'
+                  }`}
+                >
+                  <m.icon size={18} /> {m.id}
+                </button>
+              );
+            })}
+          </nav>
 
-      <div className="px-4 pt-4 flex gap-6 border-b border-border">
-        {MODULES.map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => {
-              setActiveModule(m);
-              if (m === 'Shop') navigate('/marketplace');
-              if (m === 'Parcel' || m === 'Rental') toast('Coming soon');
-            }}
-            className={`pb-3 text-sm font-semibold ${
-              activeModule === m ? 'text-pure-white' : 'text-text-secondary'
-            }`}
-          >
-            {m}
-            {activeModule === m ? (
-              <span className="mt-2 block h-0.5 rounded-full bg-movr-gradient" />
-            ) : null}
-          </button>
-        ))}
-      </div>
-
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Ride Request Section */}
-          <div className="lg:col-span-2">
-            <div className="bg-surface rounded-lg border border-border p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">{activeModule}</h2>
-
-              {/* Map */}
-              <div className="mb-6 h-64 rounded-lg overflow-hidden border border-border bg-surface-elevated">
-                {pickupLocation && (
-                  <MapContainer
-                    center={[pickupLocation.latitude, pickupLocation.longitude]}
-                    zoom={15}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='&copy; OpenStreetMap contributors'
-                    />
-                    <Marker position={[pickupLocation.latitude, pickupLocation.longitude]}>
-                      <Popup>Your Location</Popup>
-                    </Marker>
-                  </MapContainer>
-                )}
+          {activeModule === 'Ride' || activeModule === 'Deliver' ? (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center gap-3 rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0" />
+                <input
+                  className="bg-transparent flex-1 text-sm outline-none"
+                  value={pickupAddress}
+                  onChange={(e) => {
+                    setPickupAddress(e.target.value);
+                    setPickupLocation({ latitude: 5.6037, longitude: -0.187 });
+                  }}
+                  placeholder="Pickup"
+                />
+              </div>
+              <div className="flex items-center gap-3 rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full border border-white shrink-0" />
+                <input
+                  className="bg-transparent flex-1 text-sm outline-none placeholder:text-[#666]"
+                  value={dropoffAddress}
+                  onChange={(e) => {
+                    setDropoffAddress(e.target.value);
+                    setDropoffLocation({ latitude: 5.6096, longitude: -0.1889 });
+                  }}
+                  placeholder="Enter destination"
+                />
               </div>
 
-              {/* Input Fields */}
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Pickup Location
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter pickup location"
-                    className="w-full px-4 py-3 bg-surface-elevated border border-border rounded-md text-pure-white placeholder:text-text-secondary focus:ring-2 focus:ring-electric-violet focus:border-transparent"
-                    onChange={(e) => {
-                      // In real app, use geocoding
-                      setPickupLocation({
-                        latitude: 5.6037,
-                        longitude: -0.187,
-                        address: e.target.value,
-                      });
-                    }}
-                  />
+              {activeModule === 'Ride' ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {(['standard', 'express', 'premium'] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setRideType(type)}
+                      className={`rounded-lg border p-2 text-xs capitalize ${
+                        rideType === type
+                          ? 'border-[#0055FF] bg-[#121212]'
+                          : 'border-[#2A2A2A] text-[#A0A0A0]'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
                 </div>
+              ) : null}
 
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Dropoff Location
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter dropoff location"
-                    className="w-full px-4 py-3 bg-surface-elevated border border-border rounded-md text-pure-white placeholder:text-text-secondary focus:ring-2 focus:ring-electric-violet focus:border-transparent"
-                    onChange={(e) => {
-                      setDropoffLocation({
-                        latitude: 5.6096,
-                        longitude: -0.1889,
-                        address: e.target.value,
-                      });
-                    }}
-                  />
-                </div>
-
-                {/* Ride Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Ride Type
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {(['standard', 'express', 'premium'] as const).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setRideType(type)}
-                        className={`p-3 rounded-md border transition ${
-                          rideType === type
-                            ? 'border-electric-violet bg-surface-elevated'
-                            : 'border-border hover:border-text-secondary'
-                        }`}
-                      >
-                        <div className="capitalize font-semibold text-pure-white">
-                          {type}
-                        </div>
-                        <div className="text-sm text-text-secondary mt-1">
-                          {type === 'standard' && 'GHS 5.00'}
-                          {type === 'express' && 'GHS 7.50'}
-                          {type === 'premium' && 'GHS 10.00'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Request Button */}
               <button
+                type="button"
                 onClick={handleRequestRide}
                 disabled={isRequesting}
-                className="w-full bg-movr-gradient text-pure-white py-3 rounded-pill font-bold hover:opacity-90 transition disabled:opacity-50"
+                className="w-full rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF] disabled:opacity-50"
               >
-                {isRequesting ? 'Requesting...' : 'Request Ride'}
+                {isRequesting
+                  ? 'Requesting...'
+                  : activeModule === 'Deliver'
+                    ? 'Find a courier'
+                    : 'Confirm pickup'}
               </button>
             </div>
+          ) : (
+            <p className="text-sm text-[#A0A0A0] pt-2">
+              Open {activeModule} from the menu — marketplace and rentals stay available.
+            </p>
+          )}
 
-            {/* Recent Rides */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Recent Rides</h3>
+          <div className="rounded-xl bg-[#121212] border border-[#2A2A2A] p-4 mt-4">
+            <p className="text-xs text-[#A0A0A0]">Wallet</p>
+            <p className="text-xl font-bold mt-1">
+              {formatCurrency(
+                Number(walletData?.data?.data?.balance_fiat ?? walletData?.data?.data?.balance ?? 0),
+                walletData?.data?.data?.currency
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/wallet')}
+              className="text-sm text-[#0055FF] mt-2"
+            >
+              Add funds
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 p-4 md:p-6 flex flex-col gap-4">
+          <div className="flex-1 min-h-[420px] rounded-2xl overflow-hidden border border-[#2A2A2A] bg-[#0A0A0A] relative flex items-center justify-center">
+            <div
+              className="absolute inset-0 opacity-35"
+              style={{
+                backgroundImage:
+                  'linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+            />
+            <div className="relative w-14 h-14 rounded-full bg-[#0055FF]/25 flex items-center justify-center">
+              <div className="w-4 h-4 rounded-full bg-[#0055FF]" />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="rounded-2xl bg-[#121212] border border-[#2A2A2A] p-4">
+              <h3 className="font-semibold mb-3">Recent rides</h3>
               {ridesData?.data?.data?.rides?.length ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {ridesData.data.data.rides.slice(0, 3).map((ride: any) => (
-                    <div
+                    <button
                       key={ride.id}
-                      className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      type="button"
                       onClick={() => navigate(`/ride/${ride.id}`)}
+                      className="w-full text-left text-sm border-b border-[#1A1A1A] py-2"
                     >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-semibold text-gray-800">
-                            {ride.pickupAddress}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            → {ride.dropoffAddress}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-purple-600">
-                            GHS {ride.actualFare || ride.estimatedFare}
-                          </p>
-                          <p className="text-xs text-gray-500 capitalize">
-                            {ride.status}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                      <span className="text-white">{ride.pickupAddress}</span>
+                      <span className="text-[#A0A0A0]"> → {ride.dropoffAddress}</span>
+                    </button>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 text-center py-6">No recent rides</p>
+                <p className="text-sm text-[#A0A0A0]">No recent rides</p>
               )}
             </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Wallet */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Your Wallet</h3>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-500">Balance</p>
-                  <p className="text-2xl font-bold text-purple-600">
-                    GHS {walletData?.data?.data?.balance_fiat || '0.00'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Reward Points</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {walletData?.data?.data?.balance_points || '0'}
-                  </p>
-                </div>
+            <div className="rounded-2xl bg-[#121212] border border-[#2A2A2A] p-4">
+              <h3 className="font-semibold mb-3">Popular stores</h3>
+              {storesData?.data?.data?.slice(0, 3).map((store: any) => (
                 <button
-                  onClick={() => navigate('/wallet')}
-                  className="w-full bg-purple-100 text-purple-600 py-2 rounded-lg font-semibold hover:bg-purple-200 transition"
+                  key={store.id}
+                  type="button"
+                  onClick={() => navigate(`/store/${store.id}`)}
+                  className="block w-full text-left text-sm py-2 border-b border-[#1A1A1A]"
                 >
-                  Add Funds
+                  {store.name}
                 </button>
-              </div>
-            </div>
-
-            {/* Featured Stores */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Popular Stores</h3>
-              <div className="space-y-3">
-                {storesData?.data?.data?.slice(0, 3).map((store: any) => (
-                  <button
-                    key={store.id}
-                    onClick={() => navigate(`/store/${store.id}`)}
-                    className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
-                  >
-                    <p className="font-semibold text-gray-800">{store.name}</p>
-                    <p className="text-sm text-gray-500">⭐ {store.rating}</p>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => navigate('/marketplace')}
-                className="w-full mt-4 text-purple-600 font-semibold hover:underline"
-              >
-                View All Stores →
-              </button>
+              )) || <p className="text-sm text-[#A0A0A0]">Browse marketplace</p>}
             </div>
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

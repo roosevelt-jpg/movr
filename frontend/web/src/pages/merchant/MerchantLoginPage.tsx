@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
+/** Merchant login — Movr for Merchants mockup. */
 export default function MerchantLoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -28,32 +29,45 @@ export default function MerchantLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center px-4">
-      <form onSubmit={submit} className="w-full max-w-md bg-surface border border-border rounded-lg p-8 space-y-4">
-        <h1 className="text-2xl font-semibold">Merchant login</h1>
-        <p className="text-text-secondary text-sm">Sell faster with in-app storefronts.</p>
-        <input
-          className="w-full rounded-md bg-surface-elevated border border-border px-4 py-3"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          className="w-full rounded-md bg-surface-elevated border border-border px-4 py-3"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 font-[Poppins,Montserrat,sans-serif]">
+      <form onSubmit={submit} className="w-full max-w-md space-y-5">
+        <div className="text-center mb-2">
+          <h1 className="text-3xl font-bold">Movr for Merchants</h1>
+          <p className="text-[#A0A0A0] mt-2">Sign in to manage your storefront</p>
+        </div>
+
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Email</label>
+          <input
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            placeholder="merchant@business.com"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Password</label>
+          <input
+            type="password"
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-pill bg-movr-gradient py-3 font-semibold disabled:opacity-50"
+          className="w-full rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
         >
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
-        <p className="text-sm text-text-secondary">
-          New here? <Link className="text-motion-blue" to="/merchant/onboarding">Create storefront</Link>
+
+        <p className="text-center text-sm text-[#5E9EFF]">
+          <Link to="/merchant/onboarding">New to Movr? Create a merchant account</Link>
         </p>
       </form>
     </div>

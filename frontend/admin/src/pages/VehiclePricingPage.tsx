@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import AdminShell from '../layouts/AdminShell';
+import { formatCurrency } from '../lib/currency';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
+const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
+/** Vehicle types & pricing table — multi-country, edit + add. */
 export default function VehiclePricingPage() {
-  const [types, setTypes] = useState<any[]>([]);
+  const [rows, setRows] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
-  const [pricing, setPricing] = useState<any[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({
     baseFare: '',
     perKmRate: '',
@@ -15,25 +19,65 @@ export default function VehiclePricingPage() {
     minimumFare: '',
     currencyCode: 'GHS',
     countryCode: 'GH',
+    name: '',
+    code: '',
   });
 
   const load = async () => {
     const res = await axios.get(`${API}/admin/vehicle-types`, { headers: headers() });
-    setTypes(res.data.data || []);
+    const list = res.data.data || [];
+    if (!list.length) {
+      setRows([]);
+      return;
+    }
+    const enriched = await Promise.all(
+      list.map(async (t: any) => {
+        try {
+          const p = await axios.get(`${API}/admin/vehicle-types/${t.id}/pricing`, {
+            headers: headers(),
+          });
+          const price = (p.data.data || []).find((x: any) => x.country_code === 'GH') || p.data.data?.[0];
+          return {
+            id: t.id,
+            name: t.name,
+            base_fare: Number(price?.base_fare ?? 0),
+            per_km_rate: Number(price?.per_km_rate ?? 0),
+            per_minute_rate: Number(price?.per_minute_rate ?? 0),
+            minimum_fare: Number(price?.minimum_fare ?? 0),
+          };
+        } catch {
+          return { id: t.id, name: t.name, base_fare: 0, per_km_rate: 0, per_minute_rate: 0, minimum_fare: 0 };
+        }
+      })
+    );
+    setRows(enriched);
   };
 
   useEffect(() => {
-    load().catch(() => undefined);
+    load()
+      .then(() => setError(''))
+      .catch((e) => {
+        setRows([]);
+        setError(e?.response?.data?.message || e.message || 'Failed to load vehicle types');
+      });
   }, []);
 
-  const open = async (t: any) => {
+  const openEdit = (t: any) => {
     setSelected(t);
-    const res = await axios.get(`${API}/admin/vehicle-types/${t.id}/pricing`, { headers: headers() });
-    setPricing(res.data.data || []);
+    setForm({
+      baseFare: String(t.base_fare ?? ''),
+      perKmRate: String(t.per_km_rate ?? ''),
+      perMinuteRate: String(t.per_minute_rate ?? ''),
+      minimumFare: String(t.minimum_fare ?? ''),
+      currencyCode: 'GHS',
+      countryCode: 'GH',
+      name: t.name || '',
+      code: '',
+    });
   };
 
   const save = async () => {
-    if (!selected) return;
+    if (!selected?.id) return;
     await axios.patch(
       `${API}/admin/vehicle-types/${selected.id}/pricing`,
       {
@@ -46,30 +90,100 @@ export default function VehiclePricingPage() {
       },
       { headers: headers() }
     );
-    await open(selected);
+    setSelected(null);
+    await load();
   };
 
+  const addType = async () => {
+    await axios.post(
+      `${API}/admin/vehicle-types`,
+      {
+        name: form.name || 'New type',
+        code: form.code || `type_${Date.now()}`,
+        category: 'car',
+      },
+      { headers: headers() }
+    );
+    setShowAdd(false);
+    await load();
+  };
+
+  const money = (n: number, code = form.currencyCode || 'GHS') =>
+    formatCurrency(Number(n), code);
+
   return (
-    <div style={styles.page}>
-      <h1 style={styles.h1}>Vehicle types & pricing</h1>
-      <p style={styles.sub}>Change fares without a redeploy.</p>
-      <div style={styles.grid}>
-        {types.map((t) => (
-          <button key={t.id} style={styles.card} onClick={() => open(t)}>
-            <strong>{t.name}</strong>
-            <div style={styles.meta}>{t.code} · {t.category} · {t.is_active ? 'on' : 'off'}</div>
-          </button>
-        ))}
+    <AdminShell activeLabel="Vehicle pricing">
+      <div style={styles.header}>
+        <h1 style={styles.h1}>Vehicle types & pricing · multi-country</h1>
+        <button
+          style={styles.addBtn}
+          onClick={() => {
+            setShowAdd(true);
+            setSelected(null);
+            setForm({
+              baseFare: '',
+              perKmRate: '',
+              perMinuteRate: '',
+              minimumFare: '',
+              currencyCode: 'GHS',
+              countryCode: 'GH',
+              name: '',
+              code: '',
+            });
+          }}
+        >
+          + Add vehicle type
+        </button>
       </div>
 
-      {selected ? (
-        <div style={styles.panel}>
-          <h2>{selected.name} pricing</h2>
-          {pricing.slice(0, 3).map((p) => (
-            <div key={p.id} style={styles.meta}>
-              {p.country_code} · base {p.base_fare} · /km {p.per_km_rate} · /min {p.per_minute_rate} · {p.currency_code}
+      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+
+      <div style={styles.tableWrap}>
+        <div style={styles.thead}>
+          <span>Vehicle type</span>
+          <span>Base fare</span>
+          <span>Per km</span>
+          <span>Per min</span>
+          <span>Minimum</span>
+          <span />
+        </div>
+        {rows.length === 0 ? (
+          <div style={styles.empty}>No vehicle types configured</div>
+        ) : (
+          rows.map((r) => (
+            <div key={r.id} style={styles.row}>
+              <span style={{ fontWeight: 600 }}>{r.name}</span>
+              <span>{money(r.base_fare)}</span>
+              <span>{money(r.per_km_rate)}</span>
+              <span>{money(r.per_minute_rate)}</span>
+              <span>{money(r.minimum_fare)}</span>
+              <button style={styles.edit} onClick={() => openEdit(r)}>
+                Edit
+              </button>
             </div>
-          ))}
+          ))
+        )}
+      </div>
+
+      {(selected || showAdd) && (
+        <div style={styles.panel}>
+          <h2 style={{ marginTop: 0 }}>{showAdd ? 'Add vehicle type' : `Edit ${selected?.name}`}</h2>
+          {showAdd ? (
+            <>
+              <input
+                style={styles.input}
+                placeholder="Name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+              <input
+                style={styles.input}
+                placeholder="Code"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+              />
+            </>
+          ) : null}
           <div style={styles.form}>
             {(['baseFare', 'perKmRate', 'perMinuteRate', 'minimumFare'] as const).map((k) => (
               <input
@@ -80,39 +194,110 @@ export default function VehiclePricingPage() {
                 onChange={(e) => setForm({ ...form, [k]: e.target.value })}
               />
             ))}
-            <button style={styles.btn} onClick={save}>Add pricing row</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              style={styles.addBtn}
+              onClick={() => (showAdd ? addType() : save()).catch((e) => setError(e.message))}
+            >
+              Save
+            </button>
+            <button
+              style={styles.ghost}
+              onClick={() => {
+                setSelected(null);
+                setShowAdd(false);
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
-      ) : null}
-    </div>
+      )}
+    </AdminShell>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: '#000', color: '#fff', padding: 32, fontFamily: 'Poppins, sans-serif' },
-  h1: { fontSize: 24, marginBottom: 8 },
-  sub: { color: '#A0A0A0', marginBottom: 16 },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 },
-  card: {
-    textAlign: 'left',
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    borderRadius: 12,
-    padding: 16,
-    color: '#fff',
-    cursor: 'pointer',
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 20,
+    flexWrap: 'wrap',
   },
-  meta: { color: '#A0A0A0', fontSize: 13, marginTop: 6 },
-  panel: { marginTop: 24, border: '1px solid #2A2A2A', borderRadius: 12, padding: 16 },
-  form: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 8, marginTop: 12 },
-  input: { background: '#0A0A0A', border: '1px solid #2A2A2A', color: '#fff', borderRadius: 8, padding: 10 },
-  btn: {
-    background: 'linear-gradient(135deg, #3F7048 0%, #6A00FF 50%, #0055FF 100%)',
+  h1: { fontSize: 24, margin: 0, fontWeight: 700 },
+  addBtn: {
+    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
     border: 'none',
     color: '#fff',
     borderRadius: 999,
-    padding: '10px 14px',
+    padding: '10px 16px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  tableWrap: {
+    border: '1px solid #2A2A2A',
+    borderRadius: 16,
+    overflow: 'hidden',
+    background: '#0A0A0A',
+  },
+  thead: {
+    display: 'grid',
+    gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
+    gap: 8,
+    padding: '14px 16px',
+    color: '#666',
+    fontSize: 13,
+    borderBottom: '1px solid #1A1A1A',
+  },
+  row: {
+    display: 'grid',
+    gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
+    gap: 8,
+    padding: '16px',
+    borderBottom: '1px solid #1A1A1A',
+    alignItems: 'center',
+    color: '#CFCFCF',
+  },
+  empty: { padding: 24, color: '#888' },
+  edit: {
+    background: 'transparent',
+    border: 'none',
+    color: '#4A86E8',
+    cursor: 'pointer',
     fontWeight: 600,
+    justifySelf: 'end',
+  },
+  panel: {
+    marginTop: 20,
+    border: '1px solid #2A2A2A',
+    borderRadius: 14,
+    padding: 16,
+    background: '#121212',
+  },
+  form: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))',
+    gap: 8,
+    marginTop: 12,
+  },
+  input: {
+    background: '#0A0A0A',
+    border: '1px solid #2A2A2A',
+    color: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    width: '100%',
+    marginBottom: 8,
+  },
+  ghost: {
+    background: 'transparent',
+    border: '1px solid #2A2A2A',
+    color: '#fff',
+    borderRadius: 999,
+    padding: '10px 16px',
     cursor: 'pointer',
   },
 };

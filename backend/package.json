@@ -4,14 +4,16 @@
   "description": "MOVR Super-App Backend - Node.js/TypeScript",
   "main": "dist/src/index.js",
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "ts-node --transpile-only src/index.ts",
     "build": "tsc --skipLibCheck",
     "start": "node dist/src/index.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "db:migrate": "node dist/scripts/migrate.js",
-    "db:seed": "node dist/scripts/seed.js",
+    "db:seed": "ts-node --transpile-only src/scripts/seed-ops.ts",
+    "db:seed-ops": "ts-node --transpile-only src/scripts/seed-ops.ts",
+    "db:seed-cms": "ts-node --transpile-only src/scripts/seed-cms.ts",
     "graphql:codegen": "graphql-codegen --config codegen.yml"
   },
   "dependencies": {

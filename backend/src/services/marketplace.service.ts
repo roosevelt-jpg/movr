@@ -56,7 +56,34 @@ export class MarketplaceService {
     }
 
     query += ` LIMIT 50`;
-    return this.db.query(query, values);
+    const result = await this.db.query(query, values);
+
+    // Phase 7 — boost merchant placement by active stake tier
+    try {
+      const { StakingService } = require('./staking.service');
+      const staking = new StakingService(this.db);
+      const enriched = await Promise.all(
+        result.rows.map(async (store: any) => {
+          const ownerId = store.owner_id || store.merchant_user_id || store.user_id;
+          let stakeBoost = 1;
+          let feeDiscountPct = 0;
+          if (ownerId) {
+            const tier = await staking.getTier(ownerId, 'merchant');
+            stakeBoost = tier.priorityWeight || 1;
+            feeDiscountPct = tier.feeDiscountPct || 0;
+          }
+          return { ...store, stakeBoost, feeDiscountPct };
+        })
+      );
+      enriched.sort((a, b) => {
+        const boostDiff = (b.stakeBoost || 1) - (a.stakeBoost || 1);
+        if (Math.abs(boostDiff) > 0.001) return boostDiff;
+        return Number(b.rating || 0) - Number(a.rating || 0);
+      });
+      return { ...result, rows: enriched };
+    } catch {
+      return result;
+    }
   }
 
   async getStore(storeId: string) {

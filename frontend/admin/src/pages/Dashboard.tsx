@@ -3,6 +3,7 @@ import React from 'react';
 import { useQuery } from 'react-query';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
+import { formatCurrency } from '../lib/currency';
 
 const AdminDashboard: React.FC = () => {
   // Fetch admin dashboard data
@@ -61,7 +62,7 @@ const AdminDashboard: React.FC = () => {
               <div>
                 <p className="text-gray-500 text-sm">GMV (This Month)</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
-                  GHS {dashboard?.monthlyGmv || '0'}
+                  {formatCurrency(Number(dashboard?.monthlyGmv || 0), dashboard?.currency || 'GHS')}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -169,13 +170,13 @@ const AdminDashboard: React.FC = () => {
             <div className="border-l-4 border-green-500 pl-4">
               <p className="text-gray-500 text-sm">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                GHS {dashboard?.totalRevenue || '0'}
+                {formatCurrency(Number(dashboard?.totalRevenue || 0), dashboard?.currency || 'GHS')}
               </p>
             </div>
             <div className="border-l-4 border-purple-500 pl-4">
               <p className="text-gray-500 text-sm">Driver Payouts</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                GHS {dashboard?.driverPayouts || '0'}
+                {formatCurrency(Number(dashboard?.driverPayouts || 0), dashboard?.currency || 'GHS')}
               </p>
             </div>
             <div className="border-l-4 border-blue-500 pl-4">

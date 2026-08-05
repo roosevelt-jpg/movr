@@ -23,16 +23,22 @@ export class FeatureFlagsService {
     return this.db.query(`SELECT * FROM feature_flags ORDER BY key`);
   }
 
-  async set(key: string, enabled: boolean, rolloutPct = 100) {
+  async set(
+    key: string,
+    enabled: boolean,
+    rolloutPct = 100,
+    metadata?: Record<string, unknown>
+  ) {
     return this.db.query(
-      `INSERT INTO feature_flags (key, enabled, rollout_pct, updated_at)
-       VALUES ($1,$2,$3,NOW())
+      `INSERT INTO feature_flags (key, enabled, rollout_pct, metadata, updated_at)
+       VALUES ($1,$2,$3,COALESCE($4::jsonb, '{}'::jsonb),NOW())
        ON CONFLICT (key) DO UPDATE SET
          enabled = EXCLUDED.enabled,
          rollout_pct = EXCLUDED.rollout_pct,
+         metadata = COALESCE(EXCLUDED.metadata, feature_flags.metadata),
          updated_at = NOW()
        RETURNING *`,
-      [key, enabled, rolloutPct]
+      [key, enabled, rolloutPct, metadata ? JSON.stringify(metadata) : null]
     );
   }
 }

@@ -46,7 +46,21 @@ export class RideBookingService {
 
   async createRideRequest(input: RideRequestInput) {
     const rideType = input.vehicleTypeCode || input.rideType || 'standard';
-    const countryCode = input.countryCode || 'GH';
+    let countryCode = input.countryCode;
+    if (!countryCode && input.userId) {
+      const u = await this.db.query(`SELECT country, phone FROM users WHERE id = $1`, [
+        input.userId,
+      ]);
+      countryCode =
+        u.rows[0]?.country ||
+        (
+          await this.localization.detectCountry({
+            phoneNumber: u.rows[0]?.phone || undefined,
+          })
+        )?.code ||
+        'GH';
+    }
+    countryCode = countryCode || 'GH';
 
     const distanceKm =
       Math.sqrt(

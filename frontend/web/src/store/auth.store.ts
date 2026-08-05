@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import api from '../services/api';
+import { useLocaleStore } from './locale.store';
 
 export interface User {
   id: string;
@@ -46,6 +47,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await api.post('/auth/login', { email, password });
           const { user, token } = response.data.data;
+          if (user?.country) useLocaleStore.getState().setCountry(user.country);
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
           set({
@@ -61,6 +63,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await api.post('/auth/register', data);
           const { user, token } = response.data.data;
+          if (user?.country) useLocaleStore.getState().setCountry(user.country);
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
           set({
@@ -76,6 +79,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setUser: (user: User) => {
+        if (user?.country) useLocaleStore.getState().setCountry(user.country);
         set({ user, isAuthenticated: true });
       },
 

@@ -1,15 +1,21 @@
 import { DatabaseService } from './database.service';
 import { PaymentService } from './payment.service';
 import { DriverPerformanceService } from './driver-performance.service';
+import { StakingService } from './staking.service';
+import { TokenService } from './token.service';
 
 export class SubscriptionService {
   private performance: DriverPerformanceService;
+  private staking: StakingService;
+  private tokens: TokenService;
 
   constructor(
     private db: DatabaseService,
     private payments: PaymentService
   ) {
     this.performance = new DriverPerformanceService(db);
+    this.staking = new StakingService(db);
+    this.tokens = new TokenService(db);
   }
 
   async quote(userId: string, planId: string, paymentMethod: 'fiat' | 'dvt' = 'fiat') {
@@ -20,7 +26,9 @@ export class SubscriptionService {
     const perfDiscount = await this.performance.getTierDiscountPct(userId);
 
     const cfg = await this.db.query(`SELECT * FROM subscription_discount_config WHERE id = 1`);
-    const stakingDiscount = Number(cfg.rows[0]?.staking_discount_pct || 0); // Phase 7 on hold
+    const driverTier = await this.staking.getTier(userId, 'driver');
+    const stakingDiscount =
+      driverTier.feeDiscountPct || Number(cfg.rows[0]?.staking_discount_pct || 0);
     const maxTotal = Number(cfg.rows[0]?.max_total_discount_pct || 25);
 
     const raw = perfDiscount + stakingDiscount;
@@ -39,8 +47,8 @@ export class SubscriptionService {
       discountReason: reasons.join('+') || null,
       finalPrice,
       note:
-        paymentMethod === 'dvt'
-          ? 'DVT payment queued until Phase 5B token system is off hold — use fiat for now'
+        paymentMethod === 'dvt' && !this.tokens.isEnabled()
+          ? 'Set TOKEN_SYSTEM_ENABLED=true to pay subscriptions in DVT'
           : null,
     };
   }
@@ -57,25 +65,31 @@ export class SubscriptionService {
   ) {
     const quote = await this.quote(userId, data.planId, data.paymentMethod || 'fiat');
 
+    let payment: any = null;
     if (data.paymentMethod === 'dvt') {
-      // TODO: token.service burn/transfer when Phase 5B is enabled
-      throw new Error('DVT subscription payments are on hold (Phase 5B)');
+      if (!this.tokens.isEnabled()) {
+        throw new Error('DVT payments disabled (TOKEN_SYSTEM_ENABLED)');
+      }
+      const rate = await this.tokens.getRedeemRate();
+      const dvtNeeded = quote.finalPrice * Number(rate.dvt_per_fiat_unit);
+      await this.tokens.redeem(userId, dvtNeeded);
+      payment = { method: 'dvt', dvtSpent: dvtNeeded, fiatEquivalent: quote.finalPrice };
+    } else {
+      payment = await this.payments.initializePayment({
+        userId,
+        amount: quote.finalPrice,
+        currency: quote.plan.currency || 'GHS',
+        paymentType: 'subscription',
+        email: data.email,
+        fullName: data.fullName,
+        countryCode: data.countryCode || 'GH',
+        metadata: {
+          planId: data.planId,
+          discountAppliedPct: quote.discountAppliedPct,
+          discountReason: quote.discountReason,
+        },
+      });
     }
-
-    const payment = await this.payments.initializePayment({
-      userId,
-      amount: quote.finalPrice,
-      currency: quote.plan.currency || 'GHS',
-      paymentType: 'subscription',
-      email: data.email,
-      fullName: data.fullName,
-      countryCode: data.countryCode || 'GH',
-      metadata: {
-        planId: data.planId,
-        discountAppliedPct: quote.discountAppliedPct,
-        discountReason: quote.discountReason,
-      },
-    });
 
     const nextBilling = new Date();
     nextBilling.setMonth(nextBilling.getMonth() + 1);
@@ -84,7 +98,7 @@ export class SubscriptionService {
       `INSERT INTO subscriptions (
          user_id, plan_id, status, amount, currency, next_billing_date, auto_renew,
          payment_method, discount_applied_pct, discount_reason, list_price, final_price
-       ) VALUES ($1,$2,'pending',$3,$4,$5,TRUE,'fiat',$6,$7,$8,$9)
+       ) VALUES ($1,$2,'pending',$3,$4,$5,TRUE,$10,$6,$7,$8,$9)
        ON CONFLICT (user_id) DO UPDATE SET
          plan_id = EXCLUDED.plan_id,
          amount = EXCLUDED.amount,
@@ -106,6 +120,7 @@ export class SubscriptionService {
         quote.discountReason,
         quote.listPrice,
         quote.finalPrice,
+        data.paymentMethod || 'fiat',
       ]
     );
 

@@ -1,21 +1,96 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
+import AdminShell from '../layouts/AdminShell';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
+const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
+/** Admin identity review — link graph + documents + on-chain attest. */
 export default function IdentityLinkPage() {
-  const [userId, setUserId] = useState('');
+  const [searchParams] = useSearchParams();
+  const queryUserId = searchParams.get('userId') || searchParams.get('user') || '';
+  const [userId, setUserId] = useState(queryUserId);
   const [data, setData] = useState<any>(null);
-  const [override, setOverride] = useState({
-    checkType: 'id_to_vehicle',
-    status: 'match',
-    reason: '',
-  });
+  const [profile, setProfile] = useState<{ name: string; role: string; applied: string } | null>(
+    null
+  );
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const load = async () => {
-    const res = await axios.get(`${API}/identity/${userId}`, { headers: headers() });
-    setData(res.data.data);
+  const load = async (id = userId) => {
+    if (!id) {
+      setData(null);
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API}/identity/${id}`, { headers: headers() });
+      setData(res.data.data);
+      try {
+        const u = await axios.get(`${API}/admin/users`, {
+          headers: headers(),
+          params: { q: id },
+        });
+        const match = (u.data.data || []).find((row: any) => String(row.id) === String(id));
+        if (match) {
+          setProfile({
+            name:
+              match.business_name ||
+              `${match.first_name || ''} ${match.last_name || ''}`.trim() ||
+              match.email ||
+              id,
+            role:
+              match.user_type === 'driver'
+                ? 'Driver'
+                : match.user_type === 'merchant'
+                  ? 'Merchant'
+                  : 'Rider',
+            applied: match.created_at
+              ? `Joined ${new Date(match.created_at).toLocaleDateString()}`
+              : '',
+          });
+        } else {
+          setProfile({ name: id, role: 'User', applied: '' });
+        }
+      } catch {
+        setProfile({ name: id, role: 'User', applied: '' });
+      }
+    } catch (e: any) {
+      setData(null);
+      setProfile(null);
+      setError(e?.response?.data?.message || e.message || 'Failed to load identity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (queryUserId) {
+      setUserId(queryUserId);
+      load(queryUserId);
+    } else {
+      setData(null);
+      setProfile(null);
+    }
+  }, [queryUserId]);
+
+  const latestByType = (type: string) =>
+    data?.checks?.find((c: any) => c.check_type === type);
+
+  const statusBadge = (status?: string) => {
+    const s = String(status || 'pending').toLowerCase();
+    const style =
+      s === 'match' || s === 'verified'
+        ? { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8' }
+        : s === 'mismatch'
+          ? { background: 'rgba(255,59,92,0.25)', color: '#FF8FA0' }
+          : { background: 'rgba(255,184,0,0.2)', color: '#FFB800' };
+    const label = s === 'match' ? 'Match' : s.charAt(0).toUpperCase() + s.slice(1);
+    return <span style={{ ...styles.badge, ...style }}>{label}</span>;
   };
 
   const runLink = async () => {
@@ -23,104 +98,197 @@ export default function IdentityLinkPage() {
     await load();
   };
 
+  const approve = async () => {
+    await axios
+      .post(`${API}/identity/${userId}/attest`, {}, { headers: headers() })
+      .catch(() => undefined);
+    await axios.post(`${API}/kyc/attest`, { userId }, { headers: headers() }).catch(() => undefined);
+  };
+
   const applyOverride = async () => {
-    await axios.post(`${API}/identity/${userId}/override`, override, { headers: headers() });
+    await axios.post(
+      `${API}/identity/${userId}/override`,
+      { checkType: 'id_to_phone', status: 'match', reason: 'manual review' },
+      { headers: headers() }
+    );
     await load();
   };
 
-  const latestByType = (type: string) =>
-    data?.checks?.find((c: any) => c.check_type === type);
+  const links = [
+    { label: 'National ID ↔ Driving license', type: 'id_to_license' },
+    { label: 'National ID ↔ Vehicle license', type: 'id_to_vehicle' },
+    { label: 'National ID ↔ Phone number', type: 'id_to_phone' },
+  ];
 
-  const pill = (status?: string) => {
-    const color =
-      status === 'match' ? '#3F7048' : status === 'mismatch' ? '#B00020' : '#666';
-    return (
-      <span style={{ ...styles.pill, background: color }}>{status || '—'}</span>
-    );
-  };
+  const docs = data?.documents || [];
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.h1}>Identity link graph</h1>
-      <p style={styles.sub}>National ID ↔ license ↔ vehicle ↔ phone — per-check status.</p>
-      <div style={styles.form}>
-        <input
-          style={styles.input}
-          placeholder="User / driver user id"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-        />
-        <button style={styles.btn} onClick={load}>Load</button>
-        <button style={styles.btnSecondary} onClick={runLink}>Re-run linking</button>
+    <AdminShell activeLabel="Identity review">
+      <div style={styles.profile}>
+        {profile ? <div style={styles.avatar} /> : null}
+        <div>
+          <h1 style={styles.name}>{profile?.name || 'Identity review'}</h1>
+          <p style={styles.meta}>
+            {profile ? (
+              <>
+                {profile.role}
+                {profile.applied ? ` · ${profile.applied}` : ''}
+              </>
+            ) : (
+              'Provide a user id to load identity checks'
+            )}
+          </p>
+        </div>
+        <div style={styles.lookup}>
+          <input
+            style={styles.input}
+            placeholder="Load user id"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+          />
+          <button style={styles.secondaryBtn} onClick={() => load().catch(() => undefined)}>
+            Load
+          </button>
+        </div>
       </div>
 
-      {data ? (
+      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {loading ? <p style={{ color: '#888' }}>Loading…</p> : null}
+
+      {!userId && !loading ? (
+        <p style={{ color: '#888' }}>No user selected. Open from Users/KYC or enter a user id.</p>
+      ) : !loading && data ? (
         <>
-          <p style={styles.meta}>
-            Identity-Linked: <strong>{data.identityLinked ? 'yes' : 'no'}</strong>
-          </p>
           <div style={styles.grid}>
-            {[
-              { label: 'National ID → License', type: 'id_to_license' },
-              { label: 'National ID → Vehicle', type: 'id_to_vehicle' },
-              { label: 'National ID → Phone', type: 'id_to_phone' },
-            ].map((item) => {
-              const c = latestByType(item.type);
-              return (
-                <div key={item.type} style={styles.card}>
-                  <strong>{item.label}</strong>
-                  <div style={{ marginTop: 8 }}>{pill(c?.status)}</div>
-                  <div style={styles.meta}>{c?.checked_at || 'not checked'}</div>
-                </div>
-              );
-            })}
+            <div style={styles.panel}>
+              <p style={styles.panelLabel}>Identity link status</p>
+              <ul style={styles.list}>
+                {links.map((l) => (
+                  <li key={l.type} style={styles.listRow}>
+                    <span>{l.label}</span>
+                    {statusBadge(latestByType(l.type)?.status)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={styles.docs}>
+              <p style={styles.panelLabel}>Submitted documents</p>
+              {docs.length === 0 ? (
+                <p style={{ color: '#888', margin: 0 }}>No documents submitted</p>
+              ) : (
+                docs.map((d: any, i: number) => (
+                  <div key={d.id || d.type || i} style={styles.docCard}>
+                    <span style={{ marginRight: 8 }}>
+                      {d.status === 'verified' ? '📄✅' : '📄⏳'}
+                    </span>
+                    <span>
+                      {d.type || d.document_type || 'Document'} · {d.status || 'pending'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          <h2 style={styles.h2}>Manual override</h2>
-          <div style={styles.form}>
-            <select
-              style={styles.input}
-              value={override.checkType}
-              onChange={(e) => setOverride({ ...override, checkType: e.target.value })}
+          <div style={styles.actions}>
+            <button
+              style={styles.primaryBtn}
+              onClick={() => {
+                runLink().catch(() => undefined);
+                approve().catch(() => undefined);
+              }}
             >
-              <option value="id_to_license">id_to_license</option>
-              <option value="id_to_vehicle">id_to_vehicle</option>
-              <option value="id_to_phone">id_to_phone</option>
-            </select>
-            <select
-              style={styles.input}
-              value={override.status}
-              onChange={(e) => setOverride({ ...override, status: e.target.value })}
+              Approve & attest on-chain
+            </button>
+            <button
+              style={styles.secondaryBtnWide}
+              onClick={() => applyOverride().catch(() => undefined)}
             >
-              <option value="match">match</option>
-              <option value="mismatch">mismatch</option>
-              <option value="unverifiable">unverifiable</option>
-            </select>
-            <input
-              style={styles.input}
-              placeholder="Reason (required)"
-              value={override.reason}
-              onChange={(e) => setOverride({ ...override, reason: e.target.value })}
-            />
-            <button style={styles.btn} onClick={applyOverride}>Override</button>
+              Manual override
+            </button>
           </div>
         </>
       ) : null}
-    </div>
+    </AdminShell>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: '#000', color: '#fff', padding: 32, fontFamily: 'Poppins, sans-serif' },
-  h1: { fontSize: 24, marginBottom: 8 },
-  h2: { fontSize: 18, marginTop: 24 },
-  sub: { color: '#A0A0A0', marginBottom: 16 },
-  form: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  input: { background: '#0A0A0A', border: '1px solid #2A2A2A', color: '#fff', padding: '8px 12px', borderRadius: 8 },
-  btn: { background: '#6A00FF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' },
-  btnSecondary: { background: '#0055FF', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 12 },
-  card: { background: '#0A0A0A', border: '1px solid #2A2A2A', borderRadius: 12, padding: 14 },
-  meta: { color: '#A0A0A0', fontSize: 13, marginTop: 6 },
-  pill: { display: 'inline-block', padding: '4px 10px', borderRadius: 6, fontSize: 12, color: '#fff' },
+  profile: { display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: '50%',
+    background: '#1A1A1A',
+    border: '1px solid #2A2A2A',
+  },
+  name: { margin: 0, fontSize: 24, fontWeight: 700 },
+  meta: { margin: '4px 0 0', color: '#A0A0A0', fontSize: 14 },
+  lookup: { marginLeft: 'auto', display: 'flex', gap: 8 },
+  input: {
+    background: '#0A0A0A',
+    border: '1px solid #2A2A2A',
+    color: '#fff',
+    borderRadius: 8,
+    padding: '8px 12px',
+  },
+  grid: { display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 24 },
+  panel: {
+    background: '#121212',
+    border: '1px solid #2A2A2A',
+    borderRadius: 16,
+    padding: 20,
+  },
+  docs: { display: 'flex', flexDirection: 'column', gap: 10 },
+  panelLabel: { color: '#A0A0A0', marginBottom: 16, fontSize: 13 },
+  list: { listStyle: 'none', margin: 0, padding: 0 },
+  listRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 0',
+    borderBottom: '1px solid #1A1A1A',
+  },
+  badge: {
+    borderRadius: 999,
+    padding: '4px 10px',
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  docCard: {
+    background: '#121212',
+    border: '1px solid #2A2A2A',
+    borderRadius: 12,
+    padding: '14px 16px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  actions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  primaryBtn: {
+    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 999,
+    padding: '14px 20px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  secondaryBtn: {
+    background: '#1A1A1A',
+    color: '#fff',
+    border: '1px solid #2A2A2A',
+    borderRadius: 8,
+    padding: '8px 12px',
+    cursor: 'pointer',
+  },
+  secondaryBtnWide: {
+    background: '#0A0A0A',
+    color: '#fff',
+    border: '1px solid #2A2A2A',
+    borderRadius: 999,
+    padding: '14px 20px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };

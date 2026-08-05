@@ -222,6 +222,40 @@ walletTransferRouter.post('/transfer/claim', authenticateToken, async (req: Auth
   }
 });
 
+/** Public preview for claim-link landing (no auth). */
+walletTransferRouter.get('/transfer/claim-preview/:code', async (req, res: Response) => {
+  try {
+    const row = (
+      await db.query(
+        `SELECT t.claim_code, t.received_amount, t.received_currency, t.status,
+                u.first_name, u.last_name
+         FROM wallet_transfers t
+         LEFT JOIN users u ON u.id = t.sender_user_id
+         WHERE t.claim_code = $1`,
+        [req.params.code]
+      )
+    ).rows[0];
+    if (!row) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Claim code not found',
+      });
+    }
+    res.json({
+      status: 'success',
+      data: {
+        claimCode: row.claim_code,
+        senderName: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Movr user',
+        amount: Number(row.received_amount),
+        currency: row.received_currency || 'NGN',
+        status: row.status,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // --- Phase 28 trip recording ---
 tripRecordingRouter.post(
   '/rides/:id/recording/notice',

@@ -5,12 +5,13 @@ import { RedisService } from './redis.service';
 
 export class RealTimeService {
   private io: Server;
-  private redis: RedisService;
+  private redis?: RedisService;
   private logger: winston.Logger;
   private driverLocations: Map<string, { lat: number; lng: number; timestamp: number }> = new Map();
 
-  constructor(io: Server) {
+  constructor(io: Server, redis?: RedisService) {
     this.io = io;
+    this.redis = redis;
     this.logger = winston.createLogger({
       defaultMeta: { service: 'realtime' }
     });
@@ -292,7 +293,31 @@ export class MatchingEngineService {
           LIMIT 20
         `;
         const result = await this.db.query(query, [pickupLng, pickupLat]);
-        if (result.rows.length) return result.rows;
+        if (result.rows.length) {
+          // Phase 7 — boost by driver stake tier priorityWeight
+          const scored = await Promise.all(
+            result.rows.map(async (row: any) => {
+              let priorityWeight = 1;
+              try {
+                const { StakingService } = require('./staking.service');
+                const staking = new StakingService(this.db);
+                const tier = await staking.getTier(row.id, 'driver');
+                priorityWeight = tier.priorityWeight || 1;
+              } catch {
+                /* staking tables may be absent */
+              }
+              return {
+                ...row,
+                priorityWeight,
+                matchScore:
+                  Number(row.avg_rating || 5) * priorityWeight -
+                  Number(row.distance_m || 0) / 10000,
+              };
+            })
+          );
+          scored.sort((a, b) => b.matchScore - a.matchScore);
+          return scored;
+        }
       } catch {
         // driver_performance or user lat/lng may not exist yet
       }

@@ -21,20 +21,22 @@ const AppLayout: React.FC = () => {
     { label: 'Rides', path: '/ride/active/new', icon: ShoppingCart },
     { label: 'Marketplace', path: '/marketplace', icon: ShoppingCart },
     { label: 'Wallet', path: '/wallet', icon: Wallet },
+    { label: 'Token', path: '/token', icon: Wallet },
+    { label: 'Staking', path: '/staking', icon: Wallet },
     { label: 'History', path: '/history', icon: Clock },
     { label: 'Profile', path: '/profile', icon: User },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
+      <header className="bg-[#0A0A0A] border-b border-[#2A2A2A] sticky top-0 z-40">
         <div className="container max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
               <span className="text-white font-black">M</span>
             </div>
-            <span className="text-xl font-black text-gray-900">MOVR</span>
+            <span className="text-xl font-black text-white">MOVR</span>
           </div>
 
           {/* Desktop Navigation */}
@@ -45,8 +47,8 @@ const AppLayout: React.FC = () => {
                 onClick={() => navigate(item.path)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
                   isActive(item.path)
-                    ? 'text-orange-600 bg-orange-50'
-                    : 'text-gray-700 hover:bg-gray-100'
+                    ? 'text-white bg-[#1A1A1A] border border-[#6A00FF]/50'
+                    : 'text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]'
                 }`}
               >
                 <item.icon size={20} />
@@ -57,19 +59,19 @@ const AppLayout: React.FC = () => {
 
           {/* User Menu */}
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
-              <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-[#1A1A1A] rounded-lg border border-[#2A2A2A]">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
                 {user?.firstName?.[0] || 'U'}
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900">{user?.firstName}</p>
-                <p className="text-xs text-gray-600">{user?.userType}</p>
+                <p className="text-sm font-semibold text-white">{user?.firstName}</p>
+                <p className="text-xs text-[#A0A0A0]">{user?.userType}</p>
               </div>
             </div>
 
             <button
               onClick={handleLogout}
-              className="hidden md:flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors"
+              className="hidden md:flex items-center gap-2 px-4 py-2 text-[#FF3B5C] hover:bg-[#1A1A1A] rounded-lg font-medium transition-colors"
             >
               <LogOut size={20} />
               Logout
@@ -77,7 +79,7 @@ const AppLayout: React.FC = () => {
 
             {/* Mobile Menu Button */}
             <button
-              className="md:hidden p-2"
+              className="md:hidden p-2 text-white"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
               {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -87,7 +89,7 @@ const AppLayout: React.FC = () => {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white">
+          <div className="md:hidden border-t border-[#2A2A2A] bg-[#0A0A0A]">
             <div className="px-4 py-4 space-y-2">
               {navItems.map((item) => (
                 <button
@@ -98,8 +100,8 @@ const AppLayout: React.FC = () => {
                   }}
                   className={`w-full flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-orange-600 bg-orange-50'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? 'text-white bg-[#1A1A1A]'
+                      : 'text-[#A0A0A0] hover:text-white'
                   }`}
                 >
                   <item.icon size={20} />
@@ -111,7 +113,7 @@ const AppLayout: React.FC = () => {
                   navigate('/settings');
                   setIsMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg font-medium"
+                className="w-full flex items-center gap-2 px-4 py-3 text-[#A0A0A0] hover:text-white rounded-lg font-medium"
               >
                 <Settings size={20} />
                 Settings
@@ -121,7 +123,7 @@ const AppLayout: React.FC = () => {
                   handleLogout();
                   setIsMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg font-medium"
+                className="w-full flex items-center gap-2 px-4 py-3 text-[#FF3B5C] rounded-lg font-medium"
               >
                 <LogOut size={20} />
                 Logout

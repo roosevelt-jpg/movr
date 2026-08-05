@@ -12,10 +12,10 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 | 004_merchant_portal.sql | 005_merchant_portal.sql | 3 |
 | 005_delivery_control.sql | 006_delivery_control.sql | 4 |
 | 005A_kyc_attestation.sql | 007_kyc_attestation.sql | 5A |
-| 006_token_system.sql *(on hold)* | 008_token_system.sql | 5B |
+| 006_token_system.sql | 008_token_system.sql | 5B |
 | 007_points.sql | 009_points.sql | 6 |
-| 008_staking.sql *(on hold)* | 010_staking.sql | 7 |
-| 009_claims.sql *(on hold)* | 011_claims.sql | 8 |
+| 008_staking.sql | 010_staking.sql | 7 |
+| 009_claims.sql | 011_claims.sql | 8 |
 | 010_referrals.sql | 012_referrals.sql | 10 |
 | 011_delivery_enhancements.sql | 013_delivery_enhancements.sql | 11 |
 | 012_driver_performance.sql | 014_driver_performance.sql | 13 |

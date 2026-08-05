@@ -1,0 +1,129 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+
+const API = process.env.REACT_APP_API_URL || '/api/v1';
+
+/** Admin login — stores JWT in movr_admin_token. */
+export default function AdminLoginPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('admin@movr.app');
+  const [password, setPassword] = useState('Admin123!');
+  const [loading, setLoading] = useState(false);
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Login failed');
+      const userType = json.data?.userType || json.data?.user?.userType;
+      if (userType !== 'admin') {
+        throw new Error('This account is not an admin');
+      }
+      localStorage.setItem('movr_admin_token', json.data.token);
+      localStorage.setItem('movr_admin_email', email);
+      toast.success('Signed in');
+      navigate('/overview');
+    } catch (err: any) {
+      toast.error(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#000',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Poppins, Montserrat, sans-serif',
+        padding: 24,
+      }}
+    >
+      <form
+        onSubmit={login}
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          background: '#111',
+          border: '1px solid #2A2A2A',
+          borderRadius: 16,
+          padding: 32,
+        }}
+      >
+        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Movr Admin</h1>
+        <p style={{ color: '#8E8E93', marginBottom: 28, fontSize: 14 }}>
+          Sign in with your admin account
+        </p>
+
+        <label style={{ display: 'block', fontSize: 13, color: '#A0A0A0', marginBottom: 6 }}>
+          Email
+        </label>
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          type="email"
+          required
+          style={inputStyle}
+        />
+
+        <label
+          style={{ display: 'block', fontSize: 13, color: '#A0A0A0', marginBottom: 6, marginTop: 16 }}
+        >
+          Password
+        </label>
+        <input
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          type="password"
+          required
+          style={inputStyle}
+        />
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            width: '100%',
+            marginTop: 28,
+            border: 'none',
+            borderRadius: 999,
+            padding: '14px 0',
+            fontWeight: 700,
+            color: '#fff',
+            cursor: 'pointer',
+            background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
+          }}
+        >
+          {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <p style={{ marginTop: 20, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+          Use seeded admin credentials from db:seed
+        </p>
+      </form>
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  background: '#1A1A1A',
+  border: '1px solid #2A2A2A',
+  borderRadius: 10,
+  padding: '12px 14px',
+  color: '#fff',
+  fontSize: 15,
+  outline: 'none',
+};

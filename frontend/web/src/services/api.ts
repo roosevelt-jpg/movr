@@ -47,8 +47,10 @@ export const ridesApi = {
   getRideHistory: (limit = 10, offset = 0) =>
     api.get('/rides', { params: { limit, offset } }),
   cancelRide: (rideId: string) => api.put(`/rides/${rideId}/cancel`),
-  rateRide: (rideId: string, rating: number, review?: string) =>
-    api.post(`/rides/${rideId}/rate`, { rating, review }),
+  rateRide: (rideId: string, data: { rating: number; review?: string; tags?: string[] } | number, review?: string) =>
+    typeof data === 'number'
+      ? api.post(`/rides/${rideId}/rate`, { rating: data, review })
+      : api.post(`/rides/${rideId}/rate`, data),
   addTip: (rideId: string, amount: number) =>
     api.post(`/rides/${rideId}/tip`, { amount }),
 };

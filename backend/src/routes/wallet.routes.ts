@@ -1,11 +1,27 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
+import { LocalizationService } from '../services/localization.service';
 
 const db = new DatabaseService();
+const localization = new LocalizationService(db);
 export const walletRouter = Router();
 
 walletRouter.use(authenticateToken);
+
+async function resolveUserCurrency(userId: string) {
+  const u = await db.query(`SELECT country, phone FROM users WHERE id = $1`, [userId]);
+  const country =
+    u.rows[0]?.country ||
+    (
+      await localization.detectCountry({
+        phoneNumber: u.rows[0]?.phone || undefined,
+      })
+    )?.code ||
+    'GH';
+  const currency = await localization.currencyForCountry(country);
+  return { country, currency };
+}
 
 walletRouter.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -18,10 +34,11 @@ walletRouter.get('/', async (req: AuthRequest, res: Response) => {
     );
 
     if (!wallet.rows[0]) {
+      const { currency } = await resolveUserCurrency(userId);
       await db.query(
         `INSERT INTO wallets (user_id, balance_fiat, balance_points, points_balance, currency)
-         VALUES ($1, 0, 0, 0, 'GHS')`,
-        [userId]
+         VALUES ($1, 0, 0, 0, $2)`,
+        [userId, currency]
       );
       wallet = await db.query(
         `SELECT id, user_id, balance_fiat AS balance, COALESCE(points_balance, balance_points, 0) AS points_balance,

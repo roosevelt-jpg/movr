@@ -133,7 +133,7 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
 router.post('/:id/rate', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { rating, review } = req.body;
+    const { rating, review, tags } = req.body;
     const db = req.app.locals.db;
 
     if (!rating || rating < 1 || rating > 5) {
@@ -143,6 +143,10 @@ router.post('/:id/rate', authenticateToken, async (req, res) => {
       });
     }
 
+    const reviewText = [review, Array.isArray(tags) && tags.length ? `Tags: ${tags.join(', ')}` : '']
+      .filter(Boolean)
+      .join('\n');
+
     const query = `
       UPDATE rides
       SET rating = $1, review = $2, updated_at = NOW()
@@ -150,7 +154,7 @@ router.post('/:id/rate', authenticateToken, async (req, res) => {
       RETURNING *
     `;
 
-    const result = await db.query(query, [rating, review || null, id]);
+    const result = await db.query(query, [rating, reviewText || null, id]);
 
     res.status(200).json({
       status: 'success',
@@ -262,6 +266,38 @@ router.put('/:id/accept', authenticateToken, requireDriver, async (req, res) => 
     res.status(500).json({
       status: 'error',
       message: 'Failed to accept ride'
+    });
+  }
+});
+
+router.put('/:id/arrived', authenticateToken, requireDriver, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = req.app.locals.db;
+    const realtime = req.app.locals.realtime;
+
+    const query = `
+      UPDATE rides
+      SET status = 'arrived', updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    const result = await db.query(query, [id]);
+
+    realtime?.broadcastToRide?.(id, 'ride:arrived', {
+      rideId: id,
+      timestamp: Date.now(),
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Driver arrived at pickup',
+      data: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to mark arrived',
     });
   }
 });

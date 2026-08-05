@@ -101,15 +101,66 @@ export class LocalizationService {
     this.logger.info('FX rates refresh touched');
   }
 
+  async listCountries() {
+    const rows = await this.db.query(
+      `SELECT code, name, currency_code, dial_code, emergency_number
+       FROM countries WHERE is_active = TRUE ORDER BY name`
+    );
+    return rows.rows;
+  }
+
+  async currencyForCountry(countryCode = 'GH') {
+    const row = await this.db.query(
+      `SELECT currency_code FROM countries WHERE code = $1 AND is_active = TRUE`,
+      [countryCode.toUpperCase()]
+    );
+    return row.rows[0]?.currency_code || 'GHS';
+  }
+
+  /** African-friendly symbols (Intl often mis-renders GHS / XOF / KES). */
   formatCurrency(amount: number, currencyCode: string) {
+    const code = (currencyCode || 'GHS').toUpperCase();
+    const n = Number(amount) || 0;
+    const symbols: Record<string, string> = {
+      GHS: 'GH₵',
+      NGN: '₦',
+      KES: 'KSh',
+      ZAR: 'R',
+      XOF: 'CFA',
+      XAF: 'FCFA',
+      TZS: 'TSh',
+      UGX: 'USh',
+      RWF: 'RF',
+      ETB: 'Br',
+      EGP: 'E£',
+      MAD: 'MAD',
+      AOA: 'Kz',
+      MZN: 'MT',
+      ZMW: 'ZK',
+      BWP: 'P',
+      NAD: 'N$',
+      USD: '$',
+    };
+    const zeroDecimal = ['XOF', 'XAF', 'UGX', 'RWF', 'GNF'].includes(code);
+    const digits = zeroDecimal ? 0 : 2;
+    const formatted = n.toLocaleString('en-GB', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    const symbol = symbols[code];
+    if (symbol) {
+      if (code === 'XOF' || code === 'XAF') return `${formatted} ${symbol}`;
+      return `${symbol}${formatted}`;
+    }
     try {
       return new Intl.NumberFormat('en', {
         style: 'currency',
-        currency: currencyCode,
-        maximumFractionDigits: 2,
-      }).format(amount);
+        currency: code,
+        maximumFractionDigits: digits,
+        minimumFractionDigits: digits,
+      }).format(n);
     } catch {
-      return `${currencyCode} ${amount.toFixed(2)}`;
+      return `${code} ${formatted}`;
     }
   }
 

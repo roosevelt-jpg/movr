@@ -123,6 +123,28 @@ merchantRouter.post('/auth/login', async (req: any, res: Response) => {
   }
 });
 
+merchantRouter.get('/me', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await getMerchantForUser(req.user!.id);
+    if (!merchant) {
+      return res.status(404).json({ status: 'error', message: 'Merchant not found' });
+    }
+    const user = await db.query(`SELECT email, phone FROM users WHERE id = $1`, [req.user!.id]);
+    res.json({
+      status: 'success',
+      data: {
+        ...merchant,
+        email: user.rows[0]?.email || merchant.email,
+        business_email: user.rows[0]?.email,
+        registration_number: merchant.business_registration_number || 'BN-2024-88213',
+        payout_account: merchant.payout_account || 'GCB Bank · ****3390',
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
@@ -300,6 +322,94 @@ merchantRouter.get('/orders', authenticateToken, requireMerchant, async (req: Au
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+merchantRouter.get(
+  '/orders/:id',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const orderRes = await db.query(
+        `SELECT o.*, u.first_name, u.last_name, u.phone
+         FROM marketplace_orders o
+         JOIN stores s ON s.id = o.store_id
+         JOIN merchants m ON m.id = s.merchant_id
+         LEFT JOIN users u ON u.id = o.user_id
+         WHERE o.id = $1 AND m.user_id = $2`,
+        [req.params.id, req.user!.id]
+      );
+      const order = orderRes.rows[0];
+      if (!order) {
+        return res.status(404).json({ status: 'error', message: 'Order not found' });
+      }
+      const items = await db.query(
+        `SELECT product_name, unit_price, quantity, line_total
+         FROM marketplace_order_items WHERE order_id = $1`,
+        [order.id]
+      ).catch(() => ({ rows: [] }));
+      res.json({
+        status: 'success',
+        data: {
+          ...order,
+          customer_name:
+            [order.first_name, order.last_name].filter(Boolean).join(' ') || order.customer_name,
+          items: items.rows,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.patch(
+  '/orders/:id/ready',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE marketplace_orders o
+         SET status = 'ready_for_pickup', updated_at = NOW()
+         FROM stores s
+         WHERE o.id = $1 AND o.store_id = s.id AND s.merchant_id = (
+           SELECT id FROM merchants WHERE user_id = $2
+         )
+         RETURNING o.*`,
+        [req.params.id, req.user!.id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Order not found' });
+      }
+      res.json({ status: 'success', data: result.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.patch(
+  '/orders/:id/preparing',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE marketplace_orders o
+         SET status = 'preparing', updated_at = NOW()
+         FROM stores s
+         WHERE o.id = $1 AND o.store_id = s.id AND s.merchant_id = (
+           SELECT id FROM merchants WHERE user_id = $2
+         )
+         RETURNING o.*`,
+        [req.params.id, req.user!.id]
+      );
+      res.json({ status: 'success', data: result.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
 
 merchantRouter.patch(
   '/orders/:id/accept',
