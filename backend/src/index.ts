@@ -57,6 +57,8 @@ const DEFAULT_CORS = [
   'http://127.0.0.1:3002',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5180',
+  'http://127.0.0.1:5180',
 ];
 
 const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) || DEFAULT_CORS;
@@ -88,11 +90,13 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Rate limiting
+// Rate limiting (generous defaults for local/dev; override via env in production)
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests, please try again later'
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '2000', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests, please try again later' },
 });
 app.use(limiter);
 
@@ -354,32 +358,141 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
   }
 });
 
+/** DB-backed register used by the web app (email and/or phone). */
+app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const {
+      email,
+      phone,
+      password,
+      firstName,
+      lastName,
+      name,
+      userType = 'customer',
+      country = 'GH',
+      city = 'Accra',
+    } = req.body;
+
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    const cleanPhone = phone ? String(phone).replace(/[\s\-()]/g, '') : null;
+    const fname = firstName || String(name || '').trim().split(/\s+/)[0] || null;
+    const lname =
+      lastName ||
+      String(name || '')
+        .trim()
+        .split(/\s+/)
+        .slice(1)
+        .join(' ') ||
+      null;
+
+    if (!password) {
+      return res.status(400).json({ status: 'error', message: 'Password is required' });
+    }
+    if (!cleanEmail && !cleanPhone) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email or phone number is required',
+      });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const inserted = await authDb.query(
+      `INSERT INTO users (email, phone, first_name, last_name, password, user_type, country, city, is_active, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)
+       RETURNING id, email, phone, first_name, last_name, user_type, country, city`,
+      [
+        cleanEmail,
+        cleanPhone,
+        fname,
+        lname,
+        hash,
+        userType === 'driver' ? 'driver' : 'customer',
+        country,
+        city,
+      ]
+    );
+    const dbUser = inserted.rows[0];
+
+    if (dbUser.user_type === 'customer') {
+      await authDb
+        .query(`INSERT INTO customers (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [dbUser.id])
+        .catch(() => undefined);
+    } else if (dbUser.user_type === 'driver') {
+      await authDb
+        .query(
+          `INSERT INTO drivers (user_id, vehicle_type, is_online, rating)
+           VALUES ($1, 'standard', false, 5.0)`,
+          [dbUser.id]
+        )
+        .catch(() => undefined);
+    }
+
+    const token = jwt.sign(
+      { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type },
+      process.env.JWT_SECRET || 'secret',
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        token,
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          firstName: dbUser.first_name || '',
+          lastName: dbUser.last_name || '',
+          phone: dbUser.phone || '',
+          userType: dbUser.user_type,
+          country: dbUser.country || 'GH',
+          city: dbUser.city || 'Accra',
+          isVerified: false,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error('Register error:', error);
+    const msg = String(error?.message || '');
+    if (msg.includes('duplicate') || msg.includes('unique')) {
+      return res.status(400).json({ status: 'error', message: 'Account already exists' });
+    }
+    res.status(500).json({ status: 'error', message: error.message || 'Registration failed' });
+  }
+});
+
 app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { email, password, phone } = req.body;
+    const { email, password, phone, identifier } = req.body;
+    const raw = String(identifier || email || phone || '').trim();
 
-    if ((!email && !phone) || !password) {
+    if (!raw || !password) {
       return res.status(400).json({
         status: 'error',
         message: 'Email/phone and password required'
       });
     }
 
+    const isEmail = raw.includes('@');
+    const cleanPhone = raw.replace(/[\s\-()]/g, '');
+
     // Prefer DB users (seeded / live)
     let dbUser: any = null;
     try {
-      if (email) {
+      if (isEmail) {
         const r = await authDb.query(
           `SELECT id, email, phone, first_name, last_name, password, user_type, country, city, is_active
-           FROM users WHERE email = $1 LIMIT 1`,
-          [email]
+           FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+          [raw]
         );
         dbUser = r.rows[0];
-      } else if (phone) {
+      } else {
         const r = await authDb.query(
           `SELECT id, email, phone, first_name, last_name, password, user_type, country, city, is_active
-           FROM users WHERE phone = $1 LIMIT 1`,
-          [phone]
+           FROM users
+           WHERE phone = $1
+              OR regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = $2
+           LIMIT 1`,
+          [raw, cleanPhone]
         );
         dbUser = r.rows[0];
       }
@@ -413,7 +526,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
             email: dbUser.email,
             firstName: dbUser.first_name || '',
             lastName: dbUser.last_name || '',
-            phone: dbUser.phone || phone || '',
+            phone: dbUser.phone || (!isEmail ? raw : ''),
             userType: dbUser.user_type,
             country: dbUser.country || 'GH',
             city: dbUser.city || 'Accra',
@@ -426,8 +539,8 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
     // In-memory users created via /auth/signup in this process only
     const user = Array.from(users.values()).find(
       (u: any) =>
-        (email && u.email === email) ||
-        (phone && u.phone === phone)
+        (isEmail && u.email === raw) ||
+        (!isEmail && (u.phone === raw || u.phone === cleanPhone))
     );
 
     if (!user) {
@@ -463,7 +576,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
           email: user.email,
           firstName: user.name?.split?.(' ')?.[0] || 'User',
           lastName: user.name?.split?.(' ')?.slice(1).join(' ') || '',
-          phone: user.phone || phone || '',
+          phone: user.phone || (!isEmail ? raw : ''),
           userType: user.userType,
           country: (user as any).country || 'GH',
           city: (user as any).city || 'Accra',

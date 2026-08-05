@@ -29,7 +29,8 @@ export default defineConfig({
     'process.env.REACT_APP_API_URL': JSON.stringify(
       process.env.REACT_APP_API_URL ||
         process.env.VITE_API_URL ||
-        'http://localhost:3000/api/v1'
+        // Same-origin /api via Vite proxy avoids CORS during local dev
+        '/api/v1'
     ),
   },
   server: {

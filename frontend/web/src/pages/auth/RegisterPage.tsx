@@ -3,9 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
 
-/** Create account — simplified mockup fields; still calls register API. */
+/** Create account — email and/or phone + password. */
 const RegisterPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -14,21 +15,25 @@ const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() && !phone.trim()) {
+      toast.error('Add an email or phone number');
+      return;
+    }
     setIsLoading(true);
     const parts = fullName.trim().split(/\s+/);
     try {
       await register({
         firstName: parts[0] || fullName,
         lastName: parts.slice(1).join(' ') || 'User',
-        email: `${phone.replace(/\D/g, '') || 'user'}@phone.movr`,
-        phone,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
         password,
-        country: 'Ghana',
+        country: 'GH',
         city: 'Accra',
         userType: 'customer',
       });
       toast.success('Account created');
-      navigate('/verify-otp', { state: { phone } });
+      navigate('/verify-otp', { state: { phone: phone.trim() || email.trim() } });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {
@@ -44,25 +49,53 @@ const RegisterPage: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error ? <p className="text-sm text-[#FF3B5C]">{error}</p> : null}
 
-        {(
-          [
-            ['Full name', fullName, setFullName, 'Ama Konadu', 'text'],
-            ['Phone number', phone, setPhone, '+233 24 000 0000', 'tel'],
-            ['Password', password, setPassword, 'Create a password', 'password'],
-          ] as const
-        ).map(([label, value, setter, placeholder, type]) => (
-          <div key={label}>
-            <label className="block text-sm text-[#888] mb-2">{label}</label>
-            <input
-              type={type}
-              value={value}
-              onChange={(e) => setter(e.target.value)}
-              placeholder={placeholder}
-              className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
-              required
-            />
-          </div>
-        ))}
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Full name</label>
+          <input
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Ama Konadu"
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com"
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Phone number</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+233 24 000 0000"
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-[#888] mb-2">Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Create a password"
+            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            required
+          />
+        </div>
+
+        <p className="text-xs text-[#666]">Provide at least an email or a phone number.</p>
 
         <p className="text-xs text-[#888] leading-relaxed">
           By continuing, you agree to Movr's{' '}

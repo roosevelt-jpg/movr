@@ -25,7 +25,7 @@ interface AuthStore {
   error: string | null;
 
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
@@ -42,10 +42,14 @@ export const useAuthStore = create<AuthStore>()(
       isLoading: false,
       error: null,
 
-      login: async (email: string, password: string) => {
+      login: async (identifier: string, password: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.post('/auth/login', { email, password });
+          const trimmed = identifier.trim();
+          const body = trimmed.includes('@')
+            ? { email: trimmed, password }
+            : { phone: trimmed.replace(/[\s\-()]/g, ''), password };
+          const response = await api.post('/auth/login', body);
           const { user, token } = response.data.data;
           if (user?.country) useLocaleStore.getState().setCountry(user.country);
           set({ user, token, isAuthenticated: true, isLoading: false });

@@ -39,20 +39,33 @@ async function getMerchantForUser(userId: string) {
   return result.rows[0] || null;
 }
 
+function normalizePhone(value: string) {
+  return String(value || '').replace(/[\s\-()]/g, '');
+}
+
 merchantRouter.post('/auth/register', async (req: any, res: Response) => {
   try {
     const { email, phone, password, firstName, lastName, businessName, category, country } =
       req.body;
-    if (!email || !password || !businessName) {
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    const cleanPhone = phone ? normalizePhone(phone) : null;
+
+    if (!password || !businessName) {
       return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+    }
+    if (!cleanEmail && !cleanPhone) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email or phone number is required',
+      });
     }
 
     const hash = await bcrypt.hash(password, 10);
     const user = await db.query(
       `INSERT INTO users (email, phone, first_name, last_name, password, user_type, country)
        VALUES ($1, $2, $3, $4, $5, 'merchant', $6)
-       RETURNING id, email, user_type`,
-      [email, phone || null, firstName || null, lastName || null, hash, country || 'GH']
+       RETURNING id, email, phone, user_type`,
+      [cleanEmail, cleanPhone, firstName || null, lastName || null, hash, country || 'GH']
     );
 
     const merchant = await db.query(
@@ -84,10 +97,29 @@ merchantRouter.post('/auth/register', async (req: any, res: Response) => {
 
 merchantRouter.post('/auth/login', async (req: any, res: Response) => {
   try {
-    const { email, password } = req.body;
-    const users = await db.query(`SELECT * FROM users WHERE email = $1 AND user_type = 'merchant'`, [
-      email,
-    ]);
+    const { email, phone, password, identifier } = req.body;
+    const raw = String(identifier || email || phone || '').trim();
+    if (!raw || !password) {
+      return res.status(400).json({ status: 'error', message: 'Email/phone and password required' });
+    }
+
+    const isEmail = raw.includes('@');
+    const users = isEmail
+      ? await db.query(
+          `SELECT * FROM users WHERE lower(email) = lower($1) AND user_type = 'merchant' LIMIT 1`,
+          [raw]
+        )
+      : await db.query(
+          `SELECT * FROM users
+           WHERE user_type = 'merchant'
+             AND (
+               phone = $1
+               OR regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = $2
+             )
+           LIMIT 1`,
+          [raw, normalizePhone(raw)]
+        );
+
     const user = users.rows[0];
     if (!user) {
       return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
@@ -111,6 +143,7 @@ merchantRouter.post('/auth/login', async (req: any, res: Response) => {
         user: {
           id: user.id,
           email: user.email,
+          phone: user.phone,
           firstName: user.first_name,
           lastName: user.last_name,
           userType: user.user_type,

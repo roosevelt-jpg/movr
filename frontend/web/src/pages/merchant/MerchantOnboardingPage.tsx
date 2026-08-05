@@ -12,6 +12,7 @@ export default function MerchantOnboardingPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     email: '',
+    phone: '',
     password: '',
     firstName: '',
     businessName: 'Boutique 22',
@@ -25,6 +26,10 @@ export default function MerchantOnboardingPage() {
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const finish = async () => {
+    if (!form.email.trim() && !form.phone.trim()) {
+      toast.error('Add an email or phone number');
+      return;
+    }
     setLoading(true);
     try {
       const res = await axios.post(`${API}/merchant/auth/register`, form);
@@ -90,24 +95,38 @@ export default function MerchantOnboardingPage() {
             <p className="text-[#A0A0A0]">Step 1 of 3 · Account details</p>
             {(
               [
-                ['email', 'Email', 'email'],
-                ['password', 'Password', 'password'],
-                ['firstName', 'Your name', 'text'],
+                ['email', 'Email', 'email', 'merchant@business.com'],
+                ['phone', 'Phone number', 'tel', '+233 24 000 0000'],
+                ['password', 'Password', 'password', ''],
+                ['firstName', 'Your name', 'text', ''],
               ] as const
-            ).map(([key, label, type]) => (
+            ).map(([key, label, type, placeholder]) => (
               <div key={key}>
                 <label className="block text-sm text-[#888] mb-2">{label}</label>
                 <input
                   type={type}
-                  className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+                  className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+                  placeholder={placeholder || undefined}
                   value={form[key]}
                   onChange={(e) => set(key, e.target.value)}
+                  required={key === 'password' || key === 'firstName'}
                 />
               </div>
             ))}
+            <p className="text-xs text-[#666]">Provide at least an email or a phone number.</p>
             <button
               type="button"
-              onClick={() => setStep(2)}
+              onClick={() => {
+                if (!form.email.trim() && !form.phone.trim()) {
+                  toast.error('Add an email or phone number');
+                  return;
+                }
+                if (!form.password || !form.firstName) {
+                  toast.error('Name and password are required');
+                  return;
+                }
+                setStep(2);
+              }}
               className="w-full rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF]"
             >
               Continue

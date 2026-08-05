@@ -26,9 +26,11 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
     const { logout } = useAuthStore.getState();
+    const url = error.config?.url || '';
+    const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/signup');
 
-    if (error.response?.status === 401) {
-      // Token expired or invalid
+    // Don't bounce failed login/register attempts — only expire real sessions
+    if (error.response?.status === 401 && !isAuthAttempt) {
       logout();
       window.location.href = '/login';
     }

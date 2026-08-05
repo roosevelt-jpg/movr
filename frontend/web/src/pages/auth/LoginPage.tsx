@@ -4,9 +4,9 @@ import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
-/** Sign in — phone/email + password (dark mockup). */
+/** Sign in — email or phone + password. */
 const LoginPage: React.FC = () => {
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,8 +17,7 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const email = phone.includes('@') ? phone : `${phone.replace(/\s/g, '')}@phone.movr`;
-      await login(email, password);
+      await login(identifier, password);
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (err: any) {
@@ -39,14 +38,15 @@ const LoginPage: React.FC = () => {
         {error ? <p className="text-sm text-[#FF3B5C]">{error}</p> : null}
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Phone number</label>
+          <label className="block text-sm text-[#888] mb-2">Email or phone</label>
           <div className="relative">
             <Mail className="absolute left-3 top-3.5 text-[#888]" size={18} />
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+233 24 000 0000"
+              type="text"
+              autoComplete="username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="you@email.com or +233…"
               className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] pl-10 pr-4 py-3 text-white placeholder:text-[#666]"
               required
             />

@@ -5,10 +5,10 @@ import toast from 'react-hot-toast';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
-/** Merchant login — Movr for Merchants mockup. */
+/** Merchant login — email or phone + password. */
 export default function MerchantLoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +16,10 @@ export default function MerchantLoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post(`${API}/merchant/auth/login`, { email, password });
+      const body = identifier.includes('@')
+        ? { email: identifier.trim(), password }
+        : { phone: identifier.trim(), password };
+      const res = await axios.post(`${API}/merchant/auth/login`, body);
       localStorage.setItem('movr_merchant_token', res.data.data.token);
       localStorage.setItem('movr_merchant', JSON.stringify(res.data.data.merchant));
       toast.success('Welcome back');
@@ -37,13 +40,14 @@ export default function MerchantLoginPage() {
         </div>
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Email</label>
+          <label className="block text-sm text-[#888] mb-2">Email or phone</label>
           <input
             className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
-            placeholder="merchant@business.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="merchant@business.com or +233…"
+            type="text"
+            autoComplete="username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
           />
         </div>
