@@ -1,178 +1,347 @@
-import React, { useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth.store';
-import { Menu, X, LogOut, User, Settings, Wallet, Home, ShoppingCart, Clock, HelpCircle } from 'lucide-react';
+import { usersApi } from '../services/api';
+import toast from 'react-hot-toast';
+import {
+  Menu,
+  X,
+  LogOut,
+  User,
+  Settings,
+  Wallet,
+  Home,
+  Car,
+  Store,
+  Coins,
+  Layers,
+  Clock,
+  HelpCircle,
+  Camera,
+  ChevronDown,
+} from 'lucide-react';
+
+const NAV_ITEMS = [
+  { label: 'Dashboard', path: '/dashboard', icon: Home, match: ['/dashboard'] },
+  { label: 'Rides', path: '/ride/active/new', icon: Car, match: ['/ride'] },
+  { label: 'Marketplace', path: '/marketplace', icon: Store, match: ['/marketplace', '/store', '/cart'] },
+  { label: 'Wallet', path: '/wallet', icon: Wallet, match: ['/wallet'] },
+  { label: 'Token', path: '/token', icon: Coins, match: ['/token', '/claim'] },
+  { label: 'Staking', path: '/staking', icon: Layers, match: ['/staking'] },
+  { label: 'History', path: '/history', icon: Clock, match: ['/history'] },
+  { label: 'Support', path: '/support', icon: HelpCircle, match: ['/support', '/bot', '/channels/bot'] },
+  { label: 'Profile', path: '/profile', icon: User, match: ['/profile'] },
+  { label: 'Settings', path: '/settings', icon: Settings, match: ['/settings'] },
+];
+
+function formatDateTime(d: Date) {
+  const date = d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const time = d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return { date, time };
+}
 
 const AppLayout: React.FC = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, setUser } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    setProfileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!dropdownRef.current?.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (item: (typeof NAV_ITEMS)[number]) =>
+    item.match.some(
+      (prefix) =>
+        location.pathname === prefix || location.pathname.startsWith(`${prefix}/`)
+    );
 
-  const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: Home },
-    { label: 'Rides', path: '/ride/active/new', icon: ShoppingCart },
-    { label: 'Marketplace', path: '/marketplace', icon: ShoppingCart },
-    { label: 'Wallet', path: '/wallet', icon: Wallet },
-    { label: 'Token', path: '/token', icon: Wallet },
-    { label: 'Staking', path: '/staking', icon: Wallet },
-    { label: 'History', path: '/history', icon: Clock },
-    { label: 'Profile', path: '/profile', icon: User },
-  ];
+  const go = (path: string) => {
+    navigate(path);
+    setIsMenuOpen(false);
+    setProfileOpen(false);
+  };
+
+  const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      try {
+        const res = await usersApi.uploadAvatar(file);
+        const url = res.data?.data?.avatarUrl || res.data?.data?.avatar_url || res.data?.url;
+        if (url) {
+          setUser({ ...user, avatarUrl: url });
+          toast.success('Profile photo updated');
+          setProfileOpen(false);
+          return;
+        }
+      } catch {
+        // Fall back to local preview if API upload is unavailable
+      }
+
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.readAsDataURL(file);
+      });
+      setUser({ ...user, avatarUrl: dataUrl });
+      toast.success('Profile photo updated');
+      setProfileOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const { date, time } = formatDateTime(now);
+
+  const Avatar = ({ size = 'md' }: { size?: 'sm' | 'md' }) => {
+    const cls = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-8 h-8 text-sm';
+    if (user?.avatarUrl) {
+      return (
+        <img
+          src={user.avatarUrl}
+          alt=""
+          className={`${cls} rounded-full object-cover border border-[#2A2A2A]`}
+        />
+      );
+    }
+    return (
+      <div
+        className={`${cls} rounded-full flex items-center justify-center text-white font-bold bg-gradient-to-br from-[#6A00FF] to-[#0055FF]`}
+      >
+        {user?.firstName?.[0] || 'U'}
+      </div>
+    );
+  };
+
+  const SidebarNav = ({ onNavigate }: { onNavigate?: (path: string) => void }) => (
+    <>
+      <div className="flex items-center gap-2 px-2 mb-6">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
+          <span className="text-white font-black text-sm">M</span>
+        </div>
+        <span className="text-xl font-black text-white">MOVR</span>
+      </div>
+
+      <nav className="space-y-1 flex-1 overflow-y-auto">
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item);
+          return (
+            <button
+              key={item.path}
+              type="button"
+              onClick={() => (onNavigate ? onNavigate(item.path) : go(item.path))}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF] text-white'
+                  : 'text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]'
+              }`}
+            >
+              <Icon size={16} />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A] w-full"
+      >
+        <LogOut size={16} /> Sign out
+      </button>
+    </>
+  );
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
-      <header className="bg-[#0A0A0A] border-b border-[#2A2A2A] sticky top-0 z-40">
-        <div className="container max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
-              <span className="text-white font-black">M</span>
-            </div>
-            <span className="text-xl font-black text-white">MOVR</span>
-          </div>
+    <div className="min-h-screen bg-[#0A0A0A] text-white flex font-[Poppins,Montserrat,sans-serif]">
+      <aside className="hidden md:flex w-56 shrink-0 border-r border-[#2A2A2A] bg-black p-4 flex-col sticky top-0 h-screen">
+        <SidebarNav />
+      </aside>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navItems.map((item) => (
+      {isMenuOpen ? (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <aside className="relative z-10 w-64 max-w-[80vw] h-full bg-black border-r border-[#2A2A2A] p-4 flex flex-col">
+            <div className="flex justify-end mb-2">
               <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
-                  isActive(item.path)
-                    ? 'text-white bg-[#1A1A1A] border border-[#6A00FF]/50'
-                    : 'text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]'
-                }`}
+                type="button"
+                className="p-2 text-[#A0A0A0] hover:text-white"
+                onClick={() => setIsMenuOpen(false)}
+                aria-label="Close"
               >
-                <item.icon size={20} />
-                {item.label}
+                <X size={22} />
               </button>
-            ))}
-          </nav>
-
-          {/* User Menu */}
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-[#1A1A1A] rounded-lg border border-[#2A2A2A]">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
-                {user?.firstName?.[0] || 'U'}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white">{user?.firstName}</p>
-                <p className="text-xs text-[#A0A0A0]">{user?.userType}</p>
-              </div>
             </div>
-
-            <button
-              onClick={handleLogout}
-              className="hidden md:flex items-center gap-2 px-4 py-2 text-[#FF3B5C] hover:bg-[#1A1A1A] rounded-lg font-medium transition-colors"
-            >
-              <LogOut size={20} />
-              Logout
-            </button>
-
-            {/* Mobile Menu Button */}
-            <button
-              className="md:hidden p-2 text-white"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-            >
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
+            <SidebarNav onNavigate={go} />
+          </aside>
         </div>
+      ) : null}
 
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden border-t border-[#2A2A2A] bg-[#0A0A0A]">
-            <div className="px-4 py-4 space-y-2">
-              {navItems.map((item) => (
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        <header className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#2A2A2A] px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              className="md:hidden p-2 -ml-2 text-white shrink-0"
+              onClick={() => setIsMenuOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+            <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
+                <span className="text-white font-black text-xs">M</span>
+              </div>
+              <span className="font-black">MOVR</span>
+            </Link>
+
+            {/* Live date & time on every dashboard page */}
+            <div className="hidden sm:flex flex-col leading-tight min-w-0">
+              <span className="text-sm font-medium text-white truncate">{date}</span>
+              <span className="text-xs text-[#A0A0A0] tabular-nums">{time}</span>
+            </div>
+            <div className="sm:hidden flex flex-col leading-tight min-w-0">
+              <span className="text-xs text-[#A0A0A0] tabular-nums">{time}</span>
+            </div>
+          </div>
+
+          <div className="relative shrink-0" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setProfileOpen((v) => !v)}
+              aria-expanded={profileOpen}
+              aria-haspopup="menu"
+              className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 bg-[#1A1A1A] rounded-full border border-[#2A2A2A] hover:border-[#6A00FF]/50 transition-colors"
+            >
+              <Avatar />
+              <div className="hidden sm:block text-left">
+                <p className="text-sm font-semibold text-white leading-tight">
+                  {user?.firstName || 'User'}
+                </p>
+                <p className="text-xs text-[#A0A0A0] capitalize">{user?.userType || 'customer'}</p>
+              </div>
+              <ChevronDown
+                size={16}
+                className={`text-[#A0A0A0] transition-transform ${profileOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {profileOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-56 rounded-2xl border border-[#2A2A2A] bg-[#121212] shadow-xl overflow-hidden z-50"
+              >
+                <div className="px-4 py-3 border-b border-[#2A2A2A]">
+                  <p className="text-sm font-semibold truncate">
+                    {user?.firstName} {user?.lastName}
+                  </p>
+                  <p className="text-xs text-[#888] truncate">{user?.email || user?.phone}</p>
+                </div>
+
                 <button
-                  key={item.path}
-                  onClick={() => {
-                    navigate(item.path);
-                    setIsMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                    isActive(item.path)
-                      ? 'text-white bg-[#1A1A1A]'
-                      : 'text-[#A0A0A0] hover:text-white'
-                  }`}
+                  type="button"
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A]"
+                  onClick={() => go('/profile')}
                 >
-                  <item.icon size={20} />
-                  {item.label}
+                  <User size={16} /> Profile
                 </button>
-              ))}
-              <button
-                onClick={() => {
-                  navigate('/settings');
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-[#A0A0A0] hover:text-white rounded-lg font-medium"
-              >
-                <Settings size={20} />
-                Settings
-              </button>
-              <button
-                onClick={() => {
-                  handleLogout();
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-[#FF3B5C] rounded-lg font-medium"
-              >
-                <LogOut size={20} />
-                Logout
-              </button>
-            </div>
-          </div>
-        )}
-      </header>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A]"
+                  onClick={() => go('/settings')}
+                >
+                  <Settings size={16} /> Settings
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={uploading}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A] disabled:opacity-50"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Camera size={16} /> {uploading ? 'Uploading…' : 'Upload profile photo'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#FF3B5C] hover:bg-[#1A1A1A] border-t border-[#2A2A2A]"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={16} /> Log out
+                </button>
+              </div>
+            ) : null}
 
-      {/* Main Content */}
-      <main className="container max-w-7xl mx-auto px-4 py-8">
-        <Outlet />
-      </main>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onAvatarSelected}
+            />
+          </div>
+        </header>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 mt-16">
-        <div className="container max-w-7xl mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h4 className="text-white font-semibold mb-4">About MOVR</h4>
-              <p className="text-sm">Africa's leading super-app for mobility, commerce, and delivery.</p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Quick Links</h4>
-              <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition">About</button></li>
-                <li><button className="hover:text-white transition">Support</button></li>
-                <li><button className="hover:text-white transition">Blog</button></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Policies</h4>
-              <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition">Privacy</button></li>
-                <li><button className="hover:text-white transition">Terms</button></li>
-                <li><button className="hover:text-white transition">Safety</button></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Contact</h4>
-              <p className="text-sm">support@movr.io</p>
-              <p className="text-sm">+1 234 567 8900</p>
-            </div>
+        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 overflow-auto">
+          <div className="max-w-7xl mx-auto">
+            <Outlet />
           </div>
-          <div className="border-t border-gray-800 pt-8 text-center text-sm">
-            <p>&copy; 2024 MOVR. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+        </main>
+      </div>
     </div>
   );
 };

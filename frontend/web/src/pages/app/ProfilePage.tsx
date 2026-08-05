@@ -49,7 +49,17 @@ const ProfilePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-16 h-16 rounded-full bg-[#2A2A2A]" />
+        {user?.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt=""
+            className="w-16 h-16 rounded-full object-cover border border-[#2A2A2A]"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#6A00FF] to-[#0055FF] flex items-center justify-center text-2xl font-bold">
+            {(user?.firstName?.[0] || 'U').toUpperCase()}
+          </div>
+        )}
         <div>
           <h1 className="text-2xl font-bold">{name}</h1>
           <p className="text-[#888] mt-1">{phone}</p>
