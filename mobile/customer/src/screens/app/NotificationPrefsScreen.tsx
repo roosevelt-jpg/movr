@@ -85,9 +85,9 @@ export default function NotificationPrefsScreen({ onBack }: { onBack?: () => voi
               <Switch
                 value={prefs[row.key]}
                 onValueChange={() => toggle(row.key)}
-                trackColor={{ false: '#3A3A3A', true: '#6A00FF' }}
-                thumbColor="#fff"
-                ios_backgroundColor="#3A3A3A"
+                trackColor={{ false: colors.border, true: colors.electricViolet }}
+                thumbColor={colors.pureWhite}
+                ios_backgroundColor={colors.border}
               />
             </View>
           ))}
@@ -100,10 +100,10 @@ export default function NotificationPrefsScreen({ onBack }: { onBack?: () => voi
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   back: { color: colors.textSecondary, marginBottom: spacing[3] },
-  title: { color: '#fff', fontSize: 28, fontWeight: '700', marginBottom: spacing[6] },
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[6] },
   section: { marginBottom: spacing[6] },
   sectionTitle: {
-    color: '#8E8E93',
+    color: colors.textSecondary,
     fontSize: 12,
     letterSpacing: 1,
     marginBottom: spacing[2],
@@ -114,6 +114,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
   },
-  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2A2A2A' },
-  label: { color: '#fff', fontSize: 16, fontWeight: '500' },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  label: { color: colors.pureWhite, fontSize: 16, fontWeight: '500' },
 });

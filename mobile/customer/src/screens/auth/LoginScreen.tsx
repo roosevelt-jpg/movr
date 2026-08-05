@@ -54,7 +54,7 @@ export default function LoginScreen({
         <TextInput
           style={styles.input}
           placeholder="+233 24 000 0000"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSecondary}
           keyboardType="phone-pad"
           value={phone}
           onChangeText={setPhone}
@@ -67,7 +67,7 @@ export default function LoginScreen({
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSecondary}
           secureTextEntry={!show}
           value={password}
           onChangeText={setPassword}
@@ -100,38 +100,38 @@ export default function LoginScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 72 },
-  brand: { color: '#fff', fontSize: 32, fontWeight: '800', textAlign: 'center' },
-  sub: { color: '#888', textAlign: 'center', marginTop: 8, marginBottom: 36 },
-  label: { color: '#888', fontSize: 13, marginBottom: 8 },
+  brand: { color: colors.pureWhite, fontSize: 32, fontWeight: '800', textAlign: 'center' },
+  sub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 36 },
+  label: { color: colors.textSecondary, fontSize: 13, marginBottom: 8 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: colors.border,
     paddingHorizontal: 14,
     marginBottom: spacing[4],
   },
   fieldIcon: { marginRight: 10, fontSize: 14 },
-  input: { flex: 1, color: '#fff', paddingVertical: 14, fontSize: 15 },
+  input: { flex: 1, color: colors.pureWhite, paddingVertical: 14, fontSize: 15 },
   eye: { fontSize: 16, padding: 4 },
   forgotWrap: { alignSelf: 'flex-end', marginBottom: spacing[5] },
-  link: { color: '#4A72FF', fontWeight: '600' },
-  error: { color: '#FF3B5C', marginBottom: 12 },
+  link: { color: colors.motionBlue, fontWeight: '600' },
+  error: { color: colors.error, marginBottom: 12 },
   cta: {
     borderRadius: radius.pill,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#3F7048',
+    backgroundColor: colors.movrGreen,
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
     opacity: 0.55,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
-  footer: { color: '#888', textAlign: 'center', marginTop: spacing[5] },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  footer: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[5] },
 });

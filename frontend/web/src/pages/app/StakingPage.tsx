@@ -69,9 +69,9 @@ const StakingPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl p-8 text-white bg-gradient-to-r from-[#0A0A0A] to-[#3F7048]">
+      <div className="rounded-xl p-8 text-pure-white bg-gradient-to-r from-surface to-movr-green">
         <h1 className="text-3xl font-bold">Staking</h1>
-        <p className="text-white/80 mt-2">Driver priority · Merchant fees · Public points APY</p>
+        <p className="text-pure-white/80 mt-2">Driver priority · Merchant fees · Public points APY</p>
         {!enabled && (
           <p className="mt-3 text-amber-200 text-sm">STAKING_SYSTEM_ENABLED is off — views only.</p>
         )}
@@ -103,7 +103,7 @@ const StakingPage: React.FC = () => {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
-          <button onClick={stake} className="bg-[#3F7048] text-white px-5 py-2 rounded-lg font-semibold">
+          <button onClick={stake} className="bg-movr-green text-pure-white px-5 py-2 rounded-lg font-semibold">
             Stake
           </button>
         </div>
@@ -124,7 +124,7 @@ const StakingPage: React.FC = () => {
               {s.status !== 'withdrawn' && (
                 <button
                   onClick={() => unstake(s.id)}
-                  className="text-[#6A00FF] font-semibold"
+                  className="text-electric-violet font-semibold"
                 >
                   Unstake
                 </button>

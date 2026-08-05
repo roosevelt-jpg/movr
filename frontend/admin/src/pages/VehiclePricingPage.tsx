@@ -136,7 +136,7 @@ export default function VehiclePricingPage() {
         </button>
       </div>
 
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.tableWrap}>
         <div style={styles.thead}>
@@ -229,53 +229,53 @@ const styles: Record<string, React.CSSProperties> = {
   },
   h1: { fontSize: 24, margin: 0, fontWeight: 700 },
   addBtn: {
-    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
+    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
     border: 'none',
-    color: '#fff',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '10px 16px',
     fontWeight: 700,
     cursor: 'pointer',
   },
   tableWrap: {
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     overflow: 'hidden',
-    background: '#0A0A0A',
+    background: 'var(--surface)',
   },
   thead: {
     display: 'grid',
     gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
     gap: 8,
     padding: '14px 16px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     fontSize: 13,
-    borderBottom: '1px solid #1A1A1A',
+    borderBottom: '1px solid var(--surface-elevated)',
   },
   row: {
     display: 'grid',
     gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
     gap: 8,
     padding: '16px',
-    borderBottom: '1px solid #1A1A1A',
+    borderBottom: '1px solid var(--surface-elevated)',
     alignItems: 'center',
-    color: '#CFCFCF',
+    color: 'var(--text-secondary)',
   },
-  empty: { padding: 24, color: '#888' },
+  empty: { padding: 24, color: 'var(--text-secondary)' },
   edit: {
     background: 'transparent',
     border: 'none',
-    color: '#4A86E8',
+    color: 'var(--motion-blue)',
     cursor: 'pointer',
     fontWeight: 600,
     justifySelf: 'end',
   },
   panel: {
     marginTop: 20,
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
-    background: '#121212',
+    background: 'var(--surface-elevated)',
   },
   form: {
     display: 'grid',
@@ -284,9 +284,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 12,
   },
   input: {
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 8,
     padding: 10,
     width: '100%',
@@ -294,8 +294,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ghost: {
     background: 'transparent',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '10px 16px',
     cursor: 'pointer',

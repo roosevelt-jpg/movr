@@ -116,11 +116,11 @@ const styles = StyleSheet.create({
   banner: {
     height: 140,
     borderRadius: radius.md,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     marginBottom: spacing[4],
   },
   title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700' },
-  gold: { color: '#D4AF37', marginTop: 6, fontWeight: '600' },
+  gold: { color: colors.warning, marginTop: 6, fontWeight: '600' },
   meta: { color: colors.textSecondary, marginTop: 4 },
   card: {
     flex: 1,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   thumb: {
     height: 90,
     borderRadius: radius.sm,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
     marginBottom: spacing[3],
   },
   cardTitle: { color: colors.pureWhite, fontWeight: '600', minHeight: 40 },

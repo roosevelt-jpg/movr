@@ -728,8 +728,8 @@ export default function CmsPagesPage() {
         </button>
       </div>
 
-      {message ? <p style={{ color: '#9BE0A8' }}>{message}</p> : null}
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.pageMeta}>
         <Field
@@ -777,19 +777,19 @@ export default function CmsPagesPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  intro: { color: '#A0A0A0', fontSize: 14, marginBottom: 16, maxWidth: 720, lineHeight: 1.5 },
+  intro: { color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16, maxWidth: 720, lineHeight: 1.5 },
   toolbar: { display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
   select: {
-    background: '#121212',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
     minWidth: 280,
   },
   btn: {
-    background: 'linear-gradient(90deg,#6A00FF,#0055FF)',
-    color: '#fff',
+    background: 'linear-gradient(90deg,var(--electric-violet),var(--motion-blue))',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 999,
     padding: '10px 18px',
@@ -797,27 +797,27 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   ghost: {
-    background: '#1A1A1A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 999,
     padding: '10px 18px',
     cursor: 'pointer',
   },
   danger: {
-    background: '#1A1A1A',
-    color: '#FF8FA0',
-    border: '1px solid #3A2A2A',
+    background: 'var(--surface-elevated)',
+    color: 'var(--error)',
+    border: '1px solid var(--surface-elevated)',
     borderRadius: 999,
     padding: '10px 18px',
     cursor: 'pointer',
   },
-  hint: { color: '#8E8E93', fontSize: 13 },
+  hint: { color: 'var(--text-secondary)', fontSize: 13 },
   pageMeta: { marginBottom: 16, maxWidth: 480 },
   sections: { display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 40 },
   sectionCard: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     padding: 20,
   },
@@ -828,22 +828,22 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
   },
   sectionHeading: { margin: 0, fontSize: 18, fontWeight: 700 },
-  toggle: { display: 'flex', alignItems: 'center', gap: 8, color: '#A0A0A0', fontSize: 13 },
+  toggle: { display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 },
   field: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, flex: 1 },
-  label: { fontSize: 12, color: '#8E8E93', letterSpacing: 0.3 },
+  label: { fontSize: 12, color: 'var(--text-secondary)', letterSpacing: 0.3 },
   input: {
-    background: '#0A0A0A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
     fontSize: 14,
     fontFamily: 'Poppins, Montserrat, sans-serif',
   },
   textarea: {
-    background: '#0A0A0A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
     fontSize: 14,
@@ -853,19 +853,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' },
   group: { marginBottom: 12 },
-  groupTitle: { color: '#C8C8C8', fontSize: 13, fontWeight: 600, marginBottom: 8 },
+  groupTitle: { color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, marginBottom: 8 },
   card: {
-    background: '#0A0A0A',
-    border: '1px solid #1F1F1F',
+    background: 'var(--surface)',
+    border: '1px solid var(--surface-elevated)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
   },
-  cardTitle: { color: '#A0A0A0', fontSize: 12, marginBottom: 10, letterSpacing: 0.4 },
+  cardTitle: { color: 'var(--text-secondary)', fontSize: 12, marginBottom: 10, letterSpacing: 0.4 },
   smallGhost: {
     background: 'transparent',
-    color: '#8FB3FF',
-    border: '1px solid #2A2A2A',
+    color: 'var(--motion-blue)',
+    border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '6px 10px',
     cursor: 'pointer',
@@ -873,8 +873,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   smallDanger: {
     background: 'transparent',
-    color: '#FF8FA0',
-    border: '1px solid #3A2A2A',
+    color: 'var(--error)',
+    border: '1px solid var(--surface-elevated)',
     borderRadius: 8,
     padding: '8px 10px',
     cursor: 'pointer',

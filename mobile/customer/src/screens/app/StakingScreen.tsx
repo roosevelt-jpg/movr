@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
   },
   btn: {
-    backgroundColor: colors.forestGreen || '#3F7048',
+    backgroundColor: colors.forestGreen || colors.movrGreen,
     borderRadius: radius.md,
     padding: spacing[3],
     alignItems: 'center',

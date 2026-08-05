@@ -14,9 +14,9 @@ const TABS = [
 
 const ICON_META: Record<string, { bg: string; glyph: string }> = {
   ride_update: { bg: colors.motionBlue, glyph: '🚗' },
-  order_update: { bg: '#8B6914', glyph: '📦' },
+  order_update: { bg: colors.warning, glyph: '📦' },
   rewards: { bg: colors.movrGreen, glyph: '🎁' },
-  security: { bg: '#6B2D2D', glyph: '🛡' },
+  security: { bg: colors.error, glyph: '🛡' },
   promo: { bg: colors.electricViolet, glyph: '✨' },
   system: { bg: colors.surfaceElevated, glyph: 'ℹ' },
 };
@@ -67,7 +67,7 @@ export default function InboxScreen({
       {onOpenWhatsApp ? (
         <Pressable onPress={onOpenWhatsApp} style={styles.waRow}>
           <View style={styles.waAvatar}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>M</Text>
+            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>M</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.waTitle}>Movr</Text>
@@ -79,21 +79,21 @@ export default function InboxScreen({
 
       {onOpenBot ? (
         <Pressable onPress={onOpenBot} style={styles.waRow}>
-          <View style={[styles.waAvatar, { backgroundColor: '#6A00FF' }]}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>M</Text>
+          <View style={[styles.waAvatar, { backgroundColor: colors.electricViolet }]}>
+            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>M</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.waTitle}>Movr Bot</Text>
             <Text style={styles.waSub}>Book by chat · Telegram</Text>
           </View>
-          <Text style={[styles.online, { color: '#7CFC9A' }]}>bot</Text>
+          <Text style={[styles.online, { color: colors.success }]}>bot</Text>
         </Pressable>
       ) : null}
 
       {onOpenSupport ? (
         <Pressable onPress={onOpenSupport} style={styles.waRow}>
-          <View style={[styles.waAvatar, { backgroundColor: '#2A6B45' }]}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>?</Text>
+          <View style={[styles.waAvatar, { backgroundColor: colors.movrGreen }]}>
+            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>?</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.waTitle}>Movr Support</Text>
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   waTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
   waSub: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  online: { color: '#25D366', fontSize: 12, fontWeight: '600' },
+  online: { color: colors.success, fontSize: 12, fontWeight: '600' },
   tabs: { gap: spacing[5], paddingVertical: spacing[4] },
   tab: { paddingBottom: spacing[2] },
   tabText: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
@@ -214,5 +214,5 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
   meta: { color: colors.textSecondary, marginTop: 4, fontSize: 13, lineHeight: 18 },
-  time: { color: '#666', marginTop: 8, fontSize: 12 },
+  time: { color: colors.textSecondary, marginTop: 8, fontSize: 12 },
 });

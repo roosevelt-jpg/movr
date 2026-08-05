@@ -64,7 +64,7 @@ export default function SignupScreen({
           <TextInput
             style={styles.input}
             placeholder={placeholder}
-            placeholderTextColor="#666"
+            placeholderTextColor={colors.textSecondary}
             value={value}
             onChangeText={setter}
             secureTextEntry={label === 'Password'}
@@ -104,36 +104,36 @@ export default function SignupScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 64 },
-  title: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  sub: { color: '#888', marginTop: 8, marginBottom: 28 },
-  label: { color: '#888', fontSize: 13, marginBottom: 8 },
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
+  sub: { color: colors.textSecondary, marginTop: 8, marginBottom: 28 },
+  label: { color: colors.textSecondary, fontSize: 13, marginBottom: 8 },
   input: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    color: '#fff',
+    borderColor: colors.border,
+    color: colors.pureWhite,
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: spacing[4],
     fontSize: 15,
   },
-  legal: { color: '#888', fontSize: 12, lineHeight: 18, marginBottom: spacing[5] },
-  link: { color: '#4A72FF', fontWeight: '600' },
-  error: { color: '#FF3B5C', marginBottom: 12 },
+  legal: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: spacing[5] },
+  link: { color: colors.motionBlue, fontWeight: '600' },
+  error: { color: colors.error, marginBottom: 12 },
   cta: {
     borderRadius: radius.pill,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#3F7048',
+    backgroundColor: colors.movrGreen,
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
     opacity: 0.55,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
-  footer: { color: '#888', textAlign: 'center', marginTop: spacing[5] },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  footer: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[5] },
 });

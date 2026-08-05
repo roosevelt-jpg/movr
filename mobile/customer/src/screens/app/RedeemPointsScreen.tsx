@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   },
   cardOn: { borderColor: colors.motionBlue },
   cardLabel: { color: colors.pureWhite, fontWeight: '600', flex: 1, paddingRight: 8 },
-  cardPts: { color: '#8FB3FF', fontWeight: '600' },
+  cardPts: { color: colors.motionBlue, fontWeight: '600' },
   btn: {
     marginTop: spacing[4],
     borderRadius: 999,
@@ -114,6 +114,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.motionBlue,
   },
   btnDisabled: { opacity: 0.4 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  msg: { color: '#8FCF9A', textAlign: 'center', marginTop: spacing[3] },
+  btnText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
+  msg: { color: colors.success, textAlign: 'center', marginTop: spacing[3] },
 });

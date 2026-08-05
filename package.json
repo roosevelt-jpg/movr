@@ -20,6 +20,8 @@
     "build:admin": "pnpm --filter @movr/admin build",
     "start": "pnpm --filter @movr/backend start",
     "lint": "pnpm recursive run lint",
+    "lint:tokens": "node scripts/check-raw-hex.js",
+    "lint:tokens:strict": "node scripts/check-raw-hex.js --strict",
     "test": "pnpm recursive run test",
     "db:migrate": "pnpm --filter @movr/backend run db:migrate",
     "db:seed": "pnpm --filter @movr/backend run db:seed"

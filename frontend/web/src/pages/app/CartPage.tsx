@@ -67,7 +67,7 @@ const CartPage: React.FC = () => {
               </div>
             </div>
 
-            <button className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors">
+            <button className="w-full bg-green-600 text-pure-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors">
               Checkout
             </button>
           </>

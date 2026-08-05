@@ -74,7 +74,7 @@ export default function RewardsRulesPage() {
       <p style={styles.sub}>
         DVT column shows 0 while Phase 5B is on hold — points-only for now.
       </p>
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.table}>
         <div style={styles.header}>
@@ -101,7 +101,7 @@ export default function RewardsRulesPage() {
                   r.points_display || `${r.points_amount} pts`
                 )}
               </span>
-              <span style={{ color: '#888' }}>0 (on hold)</span>
+              <span style={{ color: 'var(--text-secondary)' }}>0 (on hold)</span>
               <span>
                 <button
                   type="button"
@@ -142,14 +142,14 @@ export default function RewardsRulesPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, marginBottom: 8 },
-  sub: { color: '#A0A0A0', marginBottom: 20, fontSize: 14 },
-  table: { borderTop: '1px solid #1A1A1A' },
+  sub: { color: 'var(--text-secondary)', marginBottom: 20, fontSize: 14 },
+  table: { borderTop: '1px solid var(--surface-elevated)' },
   header: {
     display: 'grid',
     gridTemplateColumns: '1.6fr 1fr 1.1fr 0.9fr 0.6fr',
     gap: 8,
     padding: '12px 4px',
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: 13,
   },
   row: {
@@ -157,14 +157,14 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: '1.6fr 1fr 1.1fr 0.9fr 0.6fr',
     gap: 8,
     padding: '16px 4px',
-    borderTop: '1px solid #1A1A1A',
+    borderTop: '1px solid var(--surface-elevated)',
     alignItems: 'center',
   },
-  empty: { padding: '24px 4px', color: '#888' },
+  empty: { padding: '24px 4px', color: 'var(--text-secondary)' },
   input: {
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 8,
     padding: '8px 10px',
     width: 80,
@@ -177,12 +177,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
   },
-  active: { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8' },
-  paused: { background: 'rgba(120,40,40,0.45)', color: '#FFB0B0' },
+  active: { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' },
+  paused: { background: 'rgba(120,40,40,0.45)', color: 'var(--error)' },
   edit: {
     background: 'transparent',
     border: 'none',
-    color: '#4A86E8',
+    color: 'var(--motion-blue)',
     cursor: 'pointer',
     fontWeight: 600,
   },

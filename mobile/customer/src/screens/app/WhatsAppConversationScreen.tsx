@@ -225,7 +225,7 @@ export default function WhatsAppConversationScreen() {
         <TextInput
           style={styles.input}
           placeholder="Message"
-          placeholderTextColor="#7A9A8F"
+          placeholderTextColor={colors.textSecondary}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={() => sendText().catch(() => undefined)}
@@ -239,16 +239,16 @@ export default function WhatsAppConversationScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0B141A' },
+  root: { flex: 1, backgroundColor: colors.surface },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
-    backgroundColor: '#1F2C34',
+    backgroundColor: colors.surfaceElevated,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A3942',
+    borderBottomColor: colors.border,
   },
   avatar: {
     width: 40,
@@ -258,9 +258,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 18 },
-  title: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  online: { color: '#25D366', fontSize: 12, marginTop: 2 },
+  avatarText: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
+  title: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
+  online: { color: colors.success, fontSize: 12, marginTop: 2 },
   list: { padding: spacing[4], gap: spacing[2], paddingBottom: spacing[6] },
   bubble: {
     maxWidth: '82%',
@@ -271,51 +271,51 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#005C4B',
+    backgroundColor: colors.movrGreen,
     borderTopRightRadius: 4,
   },
   botBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#1F2C34',
+    backgroundColor: colors.surfaceElevated,
     borderTopLeftRadius: 4,
   },
-  userText: { color: '#fff', fontSize: 15, lineHeight: 20 },
-  botText: { color: '#E9EDEF', fontSize: 15, lineHeight: 22 },
+  userText: { color: colors.pureWhite, fontSize: 15, lineHeight: 20 },
+  botText: { color: colors.textPrimary, fontSize: 15, lineHeight: 22 },
   bold: { fontWeight: '700' },
-  hint: { color: '#8696A0', fontSize: 12, marginTop: 4 },
+  hint: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
   voiceBubble: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 180 },
   mic: { fontSize: 16 },
   wave: { flex: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2 },
-  waveBar: { width: '40%', height: 3, backgroundColor: '#fff', borderRadius: 2 },
-  duration: { color: '#fff', fontSize: 12 },
+  waveBar: { width: '40%', height: 3, backgroundColor: colors.pureWhite, borderRadius: 2 },
+  duration: { color: colors.pureWhite, fontSize: 12 },
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: 10,
-    backgroundColor: '#1F2C34',
+    backgroundColor: colors.surfaceElevated,
   },
   voiceBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#005C4B',
+    backgroundColor: colors.movrGreen,
     alignItems: 'center',
     justifyContent: 'center',
   },
   input: {
     flex: 1,
-    backgroundColor: '#2A3942',
+    backgroundColor: colors.border,
     borderRadius: radius.pill,
-    color: '#fff',
+    color: colors.pureWhite,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   sendBtn: {
-    backgroundColor: '#005C4B',
+    backgroundColor: colors.movrGreen,
     borderRadius: radius.pill,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  sendText: { color: '#fff', fontWeight: '700' },
+  sendText: { color: colors.pureWhite, fontWeight: '700' },
 });

@@ -75,31 +75,31 @@ export default function ClaimTransferPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center justify-center px-6 font-[Poppins,Montserrat,sans-serif]">
       <p className="text-2xl font-bold mb-10">Movr</p>
       {loading ? (
-        <p className="text-[#A0A0A0]">Loading transfer…</p>
+        <p className="text-text-secondary">Loading transfer…</p>
       ) : error || !preview ? (
         <>
           <p className="text-xl font-semibold mb-2">{error || 'Transfer not found'}</p>
-          <p className="text-[#A0A0A0] text-center max-w-xs">
+          <p className="text-text-secondary text-center max-w-xs">
             This claim link is invalid or has expired.
           </p>
         </>
       ) : (
         <>
-          <div className="w-20 h-20 rounded-full bg-[#1A3A2A] border-2 border-[#3FCF7A] flex items-center justify-center text-3xl mb-8">
+          <div className="w-20 h-20 rounded-full bg-movr-green/20 border-2 border-success flex items-center justify-center text-3xl mb-8">
             ✈
           </div>
-          <p className="text-[#A0A0A0] mb-2">{preview.senderName} sent you</p>
+          <p className="text-text-secondary mb-2">{preview.senderName} sent you</p>
           <p className="text-5xl font-bold mb-4 tracking-tight">{fmt()}</p>
-          <p className="text-[#A0A0A0] text-center max-w-xs mb-10 leading-relaxed">
+          <p className="text-text-secondary text-center max-w-xs mb-10 leading-relaxed">
             Create a free Movr account to claim this transfer. Takes less than a minute.
           </p>
           <button
             type="button"
             onClick={claim}
-            className="w-full max-w-sm rounded-full py-4 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+            className="w-full max-w-sm rounded-full py-4 font-semibold bg-movr-gradient"
           >
             Claim with your phone number
           </button>

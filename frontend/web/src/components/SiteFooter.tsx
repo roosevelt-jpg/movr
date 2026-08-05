@@ -59,16 +59,16 @@ export default function SiteFooter() {
     links: { label: string; href: string }[];
   }) => (
     <div>
-      <p className="text-xs tracking-wider text-[#8E8E93] mb-4">{title}</p>
-      <ul className="space-y-3 text-sm text-[#C8C8C8]">
+      <p className="text-xs tracking-wider text-text-secondary mb-4">{title}</p>
+      <ul className="space-y-3 text-sm text-text-secondary">
         {(links || []).map((l) => (
           <li key={l.label}>
             {(l.href || '').includes('#') ? (
-              <a href={l.href} className="hover:text-white">
+              <a href={l.href} className="hover:text-pure-white">
                 {l.label}
               </a>
             ) : (
-              <Link to={l.href || '/'} className="hover:text-white">
+              <Link to={l.href || '/'} className="hover:text-pure-white">
                 {l.label}
               </Link>
             )}
@@ -79,11 +79,11 @@ export default function SiteFooter() {
   );
 
   return (
-    <footer className="bg-black text-white border-t border-[#2A2A2A] font-[Poppins,Montserrat,sans-serif]">
+    <footer className="bg-jet-black text-pure-white border-t border-border font-[Poppins,Montserrat,sans-serif]">
       <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-5 gap-10">
         <div className="col-span-2 md:col-span-1">
           <p className="text-xl font-bold mb-3">{footer.brand || 'Movr'}</p>
-          <p className="text-sm text-[#A0A0A0] leading-relaxed mb-4">
+          <p className="text-sm text-text-secondary leading-relaxed mb-4">
             {footer.tagline || ''}
           </p>
           <div className="flex gap-2">
@@ -91,7 +91,7 @@ export default function SiteFooter() {
               <a
                 key={i}
                 href="#"
-                className="w-9 h-9 rounded-lg bg-[#1A1A1A] border border-[#2A2A2A] flex items-center justify-center text-[#A0A0A0] hover:text-white"
+                className="w-9 h-9 rounded-lg bg-surface-elevated border border-border flex items-center justify-center text-text-secondary hover:text-pure-white"
                 aria-label="Social"
               >
                 <Icon size={16} />
@@ -105,14 +105,14 @@ export default function SiteFooter() {
         ))}
 
         <div>
-          <p className="text-xs tracking-wider text-[#8E8E93] mb-4">GET THE APP</p>
+          <p className="text-xs tracking-wider text-text-secondary mb-4">GET THE APP</p>
           <div className="space-y-3">
             {(footer.appButtons || []).map((b: any) => (
               <button
                 key={b.label}
                 type="button"
                 onClick={() => navigate(b.href || '/download')}
-                className="w-full rounded-xl border border-[#3A3A3A] bg-[#121212] px-4 py-3 text-sm font-semibold text-left"
+                className="w-full rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm font-semibold text-left"
               >
                 {b.label}
               </button>
@@ -121,14 +121,14 @@ export default function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-[#2A2A2A]">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm text-[#8E8E93]">
+      <div className="border-t border-border">
+        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm text-text-secondary">
           <p>{footer.copyright || ''}</p>
           <div className="flex flex-wrap items-center gap-5">
             <label className="inline-flex items-center gap-2">
               <span aria-hidden>🌐</span>
               <select
-                className="bg-transparent border border-[#2A2A2A] rounded-lg px-2 py-1 text-[#C8C8C8]"
+                className="bg-transparent border border-border rounded-lg px-2 py-1 text-text-secondary"
                 value={country}
                 onChange={(e) => {
                   const next = e.target.value.toUpperCase();
@@ -145,14 +145,14 @@ export default function SiteFooter() {
                       currencyCode: currencyForCountry(code),
                     }))
                 ).map((c) => (
-                  <option key={c.code} value={c.code} className="bg-black text-white">
+                  <option key={c.code} value={c.code} className="bg-jet-black text-pure-white">
                     {c.name} · {c.currencyCode || currencyForCountry(c.code)}
                   </option>
                 ))}
               </select>
             </label>
             {(footer.legalLinks || []).map((l: any) => (
-              <Link key={l.label} to={l.href || '/'} className="hover:text-white">
+              <Link key={l.label} to={l.href || '/'} className="hover:text-pure-white">
                 {l.label}
               </Link>
             ))}

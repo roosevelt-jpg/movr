@@ -31,9 +31,9 @@ export default function MerchantSettingsPage() {
   }, []);
 
   const Row = ({ label, value }: { label: string; value: string }) => (
-    <div className="flex justify-between gap-4 py-4 border-b border-[#2A2A2A]">
-      <span className="text-white">{label}</span>
-      <span className="text-[#A0A0A0] text-right">{value}</span>
+    <div className="flex justify-between gap-4 py-4 border-b border-border">
+      <span className="text-pure-white">{label}</span>
+      <span className="text-text-secondary text-right">{value}</span>
     </div>
   );
 
@@ -41,34 +41,34 @@ export default function MerchantSettingsPage() {
     <MerchantShell activePath="/merchant/settings">
       <h1 className="text-3xl font-bold mb-8">Account settings</h1>
 
-      <p className="text-xs tracking-wider text-[#8E8E93] mb-2">BUSINESS</p>
+      <p className="text-xs tracking-wider text-text-secondary mb-2">BUSINESS</p>
       <div className="mb-10 max-w-xl">
         <Row label="Business email" value={business.email} />
         <Row label="Registration number" value={business.reg} />
         <Row label="Payout account" value={business.payout} />
       </div>
 
-      <p className="text-xs tracking-wider text-[#8E8E93] mb-2">NOTIFICATIONS</p>
+      <p className="text-xs tracking-wider text-text-secondary mb-2">NOTIFICATIONS</p>
       <div className="mb-10 max-w-xl">
         <button
           type="button"
-          className="w-full flex justify-between gap-4 py-4 border-b border-[#2A2A2A] text-left"
+          className="w-full flex justify-between gap-4 py-4 border-b border-border text-left"
           onClick={() => setAlerts((a) => ({ ...a, newOrders: !a.newOrders }))}
         >
           <span>New order alerts</span>
-          <span className="text-[#A0A0A0]">{alerts.newOrders ? 'On' : 'Off'}</span>
+          <span className="text-text-secondary">{alerts.newOrders ? 'On' : 'Off'}</span>
         </button>
         <button
           type="button"
-          className="w-full flex justify-between gap-4 py-4 border-b border-[#2A2A2A] text-left"
+          className="w-full flex justify-between gap-4 py-4 border-b border-border text-left"
           onClick={() => setAlerts((a) => ({ ...a, dailySummary: !a.dailySummary }))}
         >
           <span>Daily sales summary</span>
-          <span className="text-[#A0A0A0]">{alerts.dailySummary ? 'On' : 'Off'}</span>
+          <span className="text-text-secondary">{alerts.dailySummary ? 'On' : 'Off'}</span>
         </button>
       </div>
 
-      <Link to="/merchant/store" className="text-sm text-[#8FB3FF] hover:underline">
+      <Link to="/merchant/store" className="text-sm text-motion-blue hover:underline">
         Edit store profile →
       </Link>
     </MerchantShell>

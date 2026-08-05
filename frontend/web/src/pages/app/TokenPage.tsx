@@ -53,16 +53,16 @@ const TokenPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl p-8 text-white bg-gradient-to-br from-[#0A0A0A] via-[#6A00FF] to-[#0055FF]">
+      <div className="rounded-xl p-8 text-pure-white bg-gradient-to-br from-surface via-electric-violet to-motion-blue">
         <h1 className="text-3xl font-bold mb-2">DriveToken (DVT)</h1>
-        <p className="text-white/80 text-sm mb-6">Utility rewards balance — pending vs on-chain</p>
+        <p className="text-pure-white/80 text-sm mb-6">Utility rewards balance — pending vs on-chain</p>
         <p className="text-5xl font-bold">{balance?.total?.toFixed?.(2) ?? '—'}</p>
-        <div className="mt-4 flex gap-6 text-sm text-white/90">
+        <div className="mt-4 flex gap-6 text-sm text-pure-white/90">
           <span>Pending: {balance?.pending ?? 0}</span>
           <span>On-chain: {balance?.onchain ?? 0}</span>
         </div>
         {balance?.address && (
-          <p className="mt-3 text-xs text-white/60 font-mono truncate">{balance.address}</p>
+          <p className="mt-3 text-xs text-pure-white/60 font-mono truncate">{balance.address}</p>
         )}
         {!balance?.enabled && (
           <p className="mt-4 text-amber-200 text-sm">
@@ -82,18 +82,18 @@ const TokenPage: React.FC = () => {
           />
           <button
             onClick={redeem}
-            className="bg-[#6A00FF] text-white px-5 py-2 rounded-lg font-semibold"
+            className="bg-electric-violet text-pure-white px-5 py-2 rounded-lg font-semibold"
           >
             Redeem
           </button>
         </div>
         {msg && <p className="mt-2 text-sm text-gray-700">{msg}</p>}
         <p className="mt-4 text-sm">
-          <Link className="text-[#0055FF] font-medium" to="/claim">
+          <Link className="text-motion-blue font-medium" to="/claim">
             Claim airdrop →
           </Link>
           {' · '}
-          <Link className="text-[#0055FF] font-medium" to="/staking">
+          <Link className="text-motion-blue font-medium" to="/staking">
             Stake DVT →
           </Link>
         </p>

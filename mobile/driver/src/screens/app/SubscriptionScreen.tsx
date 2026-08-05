@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  activeText: { color: '#9BE0A8', fontWeight: '700', fontSize: 12 },
+  activeText: { color: colors.success, fontWeight: '700', fontSize: 12 },
   section: { color: colors.textSecondary, fontSize: 13, marginBottom: spacing[3] },
   discountRow: {
     flexDirection: 'row',
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   },
   discountLeft: { flexDirection: 'row', alignItems: 'center' },
   discountLabel: { color: colors.pureWhite, fontWeight: '600' },
-  discountPct: { color: '#9BE0A8', fontWeight: '700' },
+  discountPct: { color: colors.success, fontWeight: '700' },
   summary: {
     marginTop: spacing[4],
     marginBottom: spacing[5],
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing[2] },
   muted: { color: colors.textSecondary },
-  green: { color: '#9BE0A8', fontWeight: '600' },
+  green: { color: colors.success, fontWeight: '600' },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing[3] },
   totalLabel: { color: colors.pureWhite, fontWeight: '700' },
   totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },

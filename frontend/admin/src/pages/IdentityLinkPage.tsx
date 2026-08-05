@@ -85,10 +85,10 @@ export default function IdentityLinkPage() {
     const s = String(status || 'pending').toLowerCase();
     const style =
       s === 'match' || s === 'verified'
-        ? { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8' }
+        ? { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' }
         : s === 'mismatch'
-          ? { background: 'rgba(255,59,92,0.25)', color: '#FF8FA0' }
-          : { background: 'rgba(255,184,0,0.2)', color: '#FFB800' };
+          ? { background: 'rgba(255,59,92,0.25)', color: 'var(--error)' }
+          : { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' };
     const label = s === 'match' ? 'Match' : s.charAt(0).toUpperCase() + s.slice(1);
     return <span style={{ ...styles.badge, ...style }}>{label}</span>;
   };
@@ -152,11 +152,11 @@ export default function IdentityLinkPage() {
         </div>
       </div>
 
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
-      {loading ? <p style={{ color: '#888' }}>Loading…</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
+      {loading ? <p style={{ color: 'var(--text-secondary)' }}>Loading…</p> : null}
 
       {!userId && !loading ? (
-        <p style={{ color: '#888' }}>No user selected. Open from Users/KYC or enter a user id.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>No user selected. Open from Users/KYC or enter a user id.</p>
       ) : !loading && data ? (
         <>
           <div style={styles.grid}>
@@ -175,7 +175,7 @@ export default function IdentityLinkPage() {
             <div style={styles.docs}>
               <p style={styles.panelLabel}>Submitted documents</p>
               {docs.length === 0 ? (
-                <p style={{ color: '#888', margin: 0 }}>No documents submitted</p>
+                <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No documents submitted</p>
               ) : (
                 docs.map((d: any, i: number) => (
                   <div key={d.id || d.type || i} style={styles.docCard}>
@@ -220,35 +220,35 @@ const styles: Record<string, React.CSSProperties> = {
     width: 56,
     height: 56,
     borderRadius: '50%',
-    background: '#1A1A1A',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
   },
   name: { margin: 0, fontSize: 24, fontWeight: 700 },
-  meta: { margin: '4px 0 0', color: '#A0A0A0', fontSize: 14 },
+  meta: { margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 14 },
   lookup: { marginLeft: 'auto', display: 'flex', gap: 8 },
   input: {
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 8,
     padding: '8px 12px',
   },
   grid: { display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 24 },
   panel: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     padding: 20,
   },
   docs: { display: 'flex', flexDirection: 'column', gap: 10 },
-  panelLabel: { color: '#A0A0A0', marginBottom: 16, fontSize: 13 },
+  panelLabel: { color: 'var(--text-secondary)', marginBottom: 16, fontSize: 13 },
   list: { listStyle: 'none', margin: 0, padding: 0 },
   listRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 0',
-    borderBottom: '1px solid #1A1A1A',
+    borderBottom: '1px solid var(--surface-elevated)',
   },
   badge: {
     borderRadius: 999,
@@ -257,8 +257,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   docCard: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 12,
     padding: '14px 16px',
     display: 'flex',
@@ -266,8 +266,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   primaryBtn: {
-    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
-    color: '#fff',
+    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 999,
     padding: '14px 20px',
@@ -275,17 +275,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   secondaryBtn: {
-    background: '#1A1A1A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '8px 12px',
     cursor: 'pointer',
   },
   secondaryBtnWide: {
-    background: '#0A0A0A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 999,
     padding: '14px 20px',
     fontWeight: 700,

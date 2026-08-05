@@ -108,7 +108,7 @@ export default function SmsConversationScreen() {
           value={input}
           onChangeText={setInput}
           placeholder="Text message"
-          placeholderTextColor="#888"
+          placeholderTextColor={colors.textSecondary}
           onSubmitEditing={send}
         />
         <Pressable style={styles.send} onPress={send}>
@@ -120,14 +120,14 @@ export default function SmsConversationScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: colors.jetBlack },
   header: {
     textAlign: 'center',
-    color: '#888',
+    color: colors.textSecondary,
     fontSize: 13,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#222',
+    borderBottomColor: colors.border,
   },
   list: { padding: spacing[4], paddingBottom: 24 },
   bubble: {
@@ -139,37 +139,37 @@ const styles = StyleSheet.create({
   },
   user: {
     alignSelf: 'flex-end',
-    backgroundColor: '#0A84FF',
+    backgroundColor: colors.motionBlue,
     borderBottomRightRadius: 4,
   },
   bot: {
     alignSelf: 'flex-start',
-    backgroundColor: '#2C2C2E',
+    backgroundColor: colors.border,
     borderBottomLeftRadius: 4,
   },
   text: { fontSize: 15, lineHeight: 20 },
-  userText: { color: '#fff' },
-  botText: { color: '#fff' },
+  userText: { color: colors.pureWhite },
+  botText: { color: colors.pureWhite },
   composer: {
     flexDirection: 'row',
     gap: 8,
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#222',
+    borderTopColor: colors.border,
   },
   input: {
     flex: 1,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.pill,
-    color: '#fff',
+    color: colors.pureWhite,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   send: {
-    backgroundColor: '#0A84FF',
+    backgroundColor: colors.motionBlue,
     borderRadius: radius.pill,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
-  sendText: { color: '#fff', fontWeight: '700' },
+  sendText: { color: colors.pureWhite, fontWeight: '700' },
 });

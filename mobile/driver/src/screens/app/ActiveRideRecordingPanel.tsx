@@ -83,13 +83,13 @@ export async function acknowledgeRecordingNotice(rideId: string) {
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing[3],
     marginTop: spacing[3],
   },
   title: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  sub: { color: '#A0A0A0', marginTop: 4, marginBottom: spacing[2], fontSize: 13 },
+  sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[2], fontSize: 13 },
   btn: {
     backgroundColor: colors.electricViolet,
     borderRadius: radius.md,
@@ -97,6 +97,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: colors.pureWhite, fontWeight: '600' },
-  meta: { color: '#666', marginTop: spacing[2], fontSize: 12 },
+  meta: { color: colors.textSecondary, marginTop: spacing[2], fontSize: 12 },
   note: { color: colors.movrGreen, marginTop: spacing[2], fontSize: 13 },
 });

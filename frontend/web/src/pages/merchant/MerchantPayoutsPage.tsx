@@ -86,8 +86,8 @@ export default function MerchantPayoutsPage() {
           { label: 'This month', value: summary.month },
           { label: 'Pending settlement', value: summary.pending },
         ].map((c) => (
-          <div key={c.label} className="rounded-2xl bg-[#121212] border border-[#2A2A2A] p-5">
-            <p className="text-sm text-[#A0A0A0]">{c.label}</p>
+          <div key={c.label} className="rounded-2xl bg-surface-elevated border border-border p-5">
+            <p className="text-sm text-text-secondary">{c.label}</p>
             <p className="text-3xl font-bold mt-3">{formatMoney(Number(c.value))}</p>
           </div>
         ))}
@@ -95,7 +95,7 @@ export default function MerchantPayoutsPage() {
 
       <button
         onClick={() => setShowForm((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-xl px-5 py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF] mb-6"
+        className="inline-flex items-center gap-2 rounded-xl px-5 py-3 font-semibold bg-movr-gradient mb-6"
       >
         ↓ Withdraw to bank
       </button>
@@ -103,44 +103,44 @@ export default function MerchantPayoutsPage() {
       {showForm ? (
         <form
           onSubmit={withdraw}
-          className="max-w-lg space-y-3 bg-[#121212] border border-[#2A2A2A] rounded-2xl p-5 mb-6"
+          className="max-w-lg space-y-3 bg-surface-elevated border border-border rounded-2xl p-5 mb-6"
         >
           <input
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
             placeholder={`Amount (${currency})`}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
           <input
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
             placeholder="Account number"
             value={accountNumber}
             onChange={(e) => setAccountNumber(e.target.value)}
           />
           <input
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
             placeholder="Bank code"
             value={bankCode}
             onChange={(e) => setBankCode(e.target.value)}
           />
-          <button className="w-full rounded-xl py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]">
+          <button className="w-full rounded-xl py-3 font-semibold bg-movr-gradient">
             Confirm withdrawal
           </button>
         </form>
       ) : null}
 
-      <p className="text-sm text-[#A0A0A0] mb-3">Recent payouts</p>
+      <p className="text-sm text-text-secondary mb-3">Recent payouts</p>
       <div className="space-y-2">
         {payouts.length === 0 ? (
-          <p className="text-sm text-[#8E8E93]">No payouts yet</p>
+          <p className="text-sm text-text-secondary">No payouts yet</p>
         ) : (
           payouts.map((p) => (
             <div
               key={p.id}
-              className="flex justify-between gap-4 rounded-xl bg-[#121212] border border-[#2A2A2A] px-4 py-3"
+              className="flex justify-between gap-4 rounded-xl bg-surface-elevated border border-border px-4 py-3"
             >
               <span>{p.label}</span>
-              <span className="text-[#9BE0A8] font-medium">
+              <span className="text-success font-medium">
                 {formatMoney(Number(p.amount))} · {p.status}
               </span>
             </div>

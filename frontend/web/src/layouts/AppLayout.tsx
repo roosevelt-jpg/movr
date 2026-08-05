@@ -147,13 +147,13 @@ const AppLayout: React.FC = () => {
         <img
           src={user.avatarUrl}
           alt=""
-          className={`${cls} rounded-full object-cover border border-[#2A2A2A]`}
+          className={`${cls} rounded-full object-cover border border-border`}
         />
       );
     }
     return (
       <div
-        className={`${cls} rounded-full flex items-center justify-center text-white font-bold bg-gradient-to-br from-[#6A00FF] to-[#0055FF]`}
+        className={`${cls} rounded-full flex items-center justify-center text-pure-white font-bold bg-movr-gradient`}
       >
         {user?.firstName?.[0] || 'U'}
       </div>
@@ -180,8 +180,8 @@ const AppLayout: React.FC = () => {
               onClick={() => (onNavigate ? onNavigate(item.path) : go(item.path))}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF] text-white'
-                  : 'text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A]'
+                  ? 'bg-movr-gradient text-pure-white'
+                  : 'text-text-secondary hover:text-pure-white hover:bg-surface-elevated'
               }`}
             >
               <Icon size={16} />
@@ -194,7 +194,7 @@ const AppLayout: React.FC = () => {
       <button
         type="button"
         onClick={handleLogout}
-        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A] w-full"
+        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-text-secondary hover:text-pure-white hover:bg-surface-elevated w-full"
       >
         <LogOut size={16} /> Sign out
       </button>
@@ -202,8 +202,8 @@ const AppLayout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white flex font-[Poppins,Montserrat,sans-serif]">
-      <aside className="hidden md:flex w-56 shrink-0 border-r border-[#2A2A2A] bg-black p-4 flex-col sticky top-0 h-screen">
+    <div className="min-h-screen bg-surface text-pure-white flex font-[Poppins,Montserrat,sans-serif]">
+      <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-jet-black p-4 flex-col sticky top-0 h-screen">
         <SidebarNav />
       </aside>
 
@@ -212,14 +212,14 @@ const AppLayout: React.FC = () => {
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-jet-black/60"
             onClick={() => setIsMenuOpen(false)}
           />
-          <aside className="relative z-10 w-64 max-w-[80vw] h-full bg-black border-r border-[#2A2A2A] p-4 flex flex-col">
+          <aside className="relative z-10 w-64 max-w-[80vw] h-full bg-jet-black border-r border-border p-4 flex flex-col">
             <div className="flex justify-end mb-2">
               <button
                 type="button"
-                className="p-2 text-[#A0A0A0] hover:text-white"
+                className="p-2 text-text-secondary hover:text-pure-white"
                 onClick={() => setIsMenuOpen(false)}
                 aria-label="Close"
               >
@@ -232,11 +232,11 @@ const AppLayout: React.FC = () => {
       ) : null}
 
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        <header className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur border-b border-[#2A2A2A] px-4 py-3 flex items-center justify-between gap-3">
+        <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              className="md:hidden p-2 -ml-2 text-white shrink-0"
+              className="md:hidden p-2 -ml-2 text-pure-white shrink-0"
               onClick={() => setIsMenuOpen(true)}
               aria-label="Open menu"
             >
@@ -251,11 +251,11 @@ const AppLayout: React.FC = () => {
 
             {/* Live date & time on every dashboard page */}
             <div className="hidden sm:flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-medium text-white truncate">{date}</span>
-              <span className="text-xs text-[#A0A0A0] tabular-nums">{time}</span>
+              <span className="text-sm font-medium text-pure-white truncate">{date}</span>
+              <span className="text-xs text-text-secondary tabular-nums">{time}</span>
             </div>
             <div className="sm:hidden flex flex-col leading-tight min-w-0">
-              <span className="text-xs text-[#A0A0A0] tabular-nums">{time}</span>
+              <span className="text-xs text-text-secondary tabular-nums">{time}</span>
             </div>
           </div>
 
@@ -265,37 +265,37 @@ const AppLayout: React.FC = () => {
               onClick={() => setProfileOpen((v) => !v)}
               aria-expanded={profileOpen}
               aria-haspopup="menu"
-              className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 bg-[#1A1A1A] rounded-full border border-[#2A2A2A] hover:border-[#6A00FF]/50 transition-colors"
+              className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 bg-surface-elevated rounded-full border border-border hover:border-electric-violet/50 transition-colors"
             >
               <Avatar />
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-semibold text-white leading-tight">
+                <p className="text-sm font-semibold text-pure-white leading-tight">
                   {user?.firstName || 'User'}
                 </p>
-                <p className="text-xs text-[#A0A0A0] capitalize">{user?.userType || 'customer'}</p>
+                <p className="text-xs text-text-secondary capitalize">{user?.userType || 'customer'}</p>
               </div>
               <ChevronDown
                 size={16}
-                className={`text-[#A0A0A0] transition-transform ${profileOpen ? 'rotate-180' : ''}`}
+                className={`text-text-secondary transition-transform ${profileOpen ? 'rotate-180' : ''}`}
               />
             </button>
 
             {profileOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 mt-2 w-56 rounded-2xl border border-[#2A2A2A] bg-[#121212] shadow-xl overflow-hidden z-50"
+                className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-surface-elevated shadow-xl overflow-hidden z-50"
               >
-                <div className="px-4 py-3 border-b border-[#2A2A2A]">
+                <div className="px-4 py-3 border-b border-border">
                   <p className="text-sm font-semibold truncate">
                     {user?.firstName} {user?.lastName}
                   </p>
-                  <p className="text-xs text-[#888] truncate">{user?.email || user?.phone}</p>
+                  <p className="text-xs text-text-secondary truncate">{user?.email || user?.phone}</p>
                 </div>
 
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A]"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-text-primary hover:bg-surface-elevated"
                   onClick={() => go('/profile')}
                 >
                   <User size={16} /> Profile
@@ -303,7 +303,7 @@ const AppLayout: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A]"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-text-primary hover:bg-surface-elevated"
                   onClick={() => go('/settings')}
                 >
                   <Settings size={16} /> Settings
@@ -312,7 +312,7 @@ const AppLayout: React.FC = () => {
                   type="button"
                   role="menuitem"
                   disabled={uploading}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#E0E0E0] hover:bg-[#1A1A1A] disabled:opacity-50"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-text-primary hover:bg-surface-elevated disabled:opacity-50"
                   onClick={() => fileRef.current?.click()}
                 >
                   <Camera size={16} /> {uploading ? 'Uploading…' : 'Upload profile photo'}
@@ -320,7 +320,7 @@ const AppLayout: React.FC = () => {
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-[#FF3B5C] hover:bg-[#1A1A1A] border-t border-[#2A2A2A]"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left text-error hover:bg-surface-elevated border-t border-border"
                   onClick={handleLogout}
                 >
                   <LogOut size={16} /> Log out

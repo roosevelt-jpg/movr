@@ -101,7 +101,7 @@ const AdminDashboard: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" stroke="#8b5cf6" />
+                <Line type="monotone" dataKey="revenue" stroke="var(--electric-violet)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -116,7 +116,7 @@ const AdminDashboard: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="count" fill="#8b5cf6" />
+                <Bar dataKey="count" fill="var(--electric-violet)" />
               </BarChart>
             </ResponsiveContainer>
           </div>

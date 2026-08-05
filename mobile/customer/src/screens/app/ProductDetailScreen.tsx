@@ -5,7 +5,7 @@ import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const SIZES = ['S', 'M', 'L', 'XL'] as const;
-const SWATCHES = ['#0055FF', '#2A2A2A', '#E8E8E8'] as const;
+const SWATCHES = [colors.motionBlue, colors.border, colors.textPrimary] as const;
 
 /** Product detail — size/color, wishlist, add to cart (keeps cart API when available). */
 export default function ProductDetailScreen({
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   image: {
     height: 220,
     borderRadius: radius.lg,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     marginBottom: spacing[4],
   },
   title: { color: colors.pureWhite, fontSize: 26, fontWeight: '700' },
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  swatchOn: { borderColor: '#fff' },
+  swatchOn: { borderColor: colors.pureWhite },
   footer: {
     position: 'absolute',
     left: spacing[4],
@@ -146,12 +146,12 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
   wishOn: { backgroundColor: 'rgba(106,0,255,0.25)' },
-  wishIcon: { color: '#fff', fontSize: 22 },
+  wishIcon: { color: colors.pureWhite, fontSize: 22 },
   cta: {
     flex: 1,
     height: 52,
@@ -166,5 +166,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.motionBlue,
     opacity: 0.45,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

@@ -28,12 +28,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 function statusBadge(status: string) {
   const s = status.toLowerCase().replace(/\s+/g, '_');
   if (s.includes('connected') || s === 'active') {
-    return { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8', label: 'Connected' };
+    return { background: 'rgba(63,112,72,0.35)', color: 'var(--success)', label: 'Connected' };
   }
   if (s.includes('configur') && !s.includes('not')) {
-    return { background: 'rgba(255,184,0,0.2)', color: '#FFB800', label: 'Configured' };
+    return { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)', label: 'Configured' };
   }
-  return { background: 'rgba(255,59,92,0.2)', color: '#FF8FA0', label: 'Not configured' };
+  return { background: 'rgba(255,59,92,0.2)', color: 'var(--error)', label: 'Not configured' };
 }
 
 /** Integrations hub — categorized cards matching admin mockup. */
@@ -104,10 +104,10 @@ export default function IntegrationsHubPage() {
     <AdminShell activeLabel="Integrations">
       <h1 style={styles.h1}>Integrations</h1>
       {message ? <p style={styles.msg}>{message}</p> : null}
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       {items.length === 0 && !error ? (
-        <p style={{ color: '#888' }}>No integrations configured</p>
+        <p style={{ color: 'var(--text-secondary)' }}>No integrations configured</p>
       ) : null}
 
       {Object.keys(grouped).map((cat) => (
@@ -174,17 +174,17 @@ export default function IntegrationsHubPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, marginBottom: 8 },
-  msg: { color: '#6A00FF' },
+  msg: { color: 'var(--electric-violet)' },
   section: { marginTop: 28 },
-  cat: { color: '#808080', fontSize: 12, letterSpacing: 1.2, marginBottom: 12, fontWeight: 600 },
+  cat: { color: 'var(--text-secondary)', fontSize: 12, letterSpacing: 1.2, marginBottom: 12, fontWeight: 600 },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
     gap: 12,
   },
   card: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
     minHeight: 120,
@@ -193,7 +193,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardTop: { display: 'flex', justifyContent: 'space-between', gap: 8 },
   cardTitle: { fontSize: 16 },
-  cardCat: { color: '#808080', fontSize: 13, marginTop: 6 },
+  cardCat: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 },
   badge: {
     borderRadius: 999,
     padding: '4px 10px',
@@ -206,7 +206,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 'auto',
     background: 'transparent',
     border: 'none',
-    color: '#4A90E2',
+    color: 'var(--motion-blue)',
     padding: 0,
     textAlign: 'left',
     cursor: 'pointer',
@@ -214,25 +214,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   panel: {
     marginTop: 24,
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 20,
   },
-  label: { display: 'block', marginTop: 10, fontSize: 13, color: '#A0A0A0' },
+  label: { display: 'block', marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' },
   input: {
     display: 'block',
     width: '100%',
     marginTop: 6,
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 8,
     padding: '8px 12px',
   },
   primary: {
-    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
-    color: '#fff',
+    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 8,
     padding: '8px 14px',
@@ -241,8 +241,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ghost: {
     background: 'transparent',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '8px 14px',
     cursor: 'pointer',

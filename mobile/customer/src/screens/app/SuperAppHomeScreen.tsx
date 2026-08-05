@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
     minHeight: 220,
-    backgroundColor: '#111111',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.lg,
     overflow: 'hidden',
     marginBottom: spacing[4],
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     opacity: 0.35,
     borderWidth: 1,
-    borderColor: '#222',
+    borderColor: colors.border,
   },
   pulseOuter: {
     width: 56,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#005C4B',
+    backgroundColor: colors.movrGreen,
     alignItems: 'center',
     justifyContent: 'center',
   },

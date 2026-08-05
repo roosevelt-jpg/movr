@@ -58,32 +58,32 @@ const WalletPage: React.FC = () => {
   const fmt = (n: number) => formatCurrency(Math.abs(n), walletCurrency || currency);
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 space-y-6">
+    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white p-6 md:p-8 space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
 
-      <div className="rounded-2xl p-6 bg-gradient-to-br from-[#1a1040] via-[#6A00FF]/70 to-[#0055FF]">
-        <p className="text-white/70 text-sm">Available balance</p>
+      <div className="rounded-2xl p-6 bg-gradient-to-br from-surface via-electric-violet/70 to-motion-blue">
+        <p className="text-pure-white/70 text-sm">Available balance</p>
         <p className="text-4xl md:text-5xl font-bold mt-1">{fmt(balance)}</p>
         <div className="h-px bg-white/20 my-5" />
         <div className="flex justify-between items-end gap-4">
           <div>
-            <p className="text-white/70 text-sm">Movr points</p>
+            <p className="text-pure-white/70 text-sm">Movr points</p>
             <p className="text-2xl font-bold">{points.toLocaleString()} pts</p>
           </div>
-          <p className="text-white/80 text-sm">≈ {estimatedDvt.toLocaleString()} DVT at TGE</p>
+          <p className="text-pure-white/80 text-sm">≈ {estimatedDvt.toLocaleString()} DVT at TGE</p>
         </div>
       </div>
 
       <div className="flex gap-3">
         <Link
           to="/token"
-          className="flex-1 flex items-center justify-center gap-2 rounded-full py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          className="flex-1 flex items-center justify-center gap-2 rounded-full py-3 font-semibold bg-movr-gradient"
         >
           <Send size={18} /> Send money
         </Link>
         <Link
           to="/wallet/topup"
-          className="flex-1 rounded-full py-3 font-semibold bg-[#1A1A1A] border border-[#2A2A2A]"
+          className="flex-1 rounded-full py-3 font-semibold bg-surface-elevated border border-border"
         >
           <span className="inline-flex items-center gap-2 justify-center w-full">
             <Plus size={18} /> Top up
@@ -93,28 +93,28 @@ const WalletPage: React.FC = () => {
 
       <Link
         to="/wallet/redeem"
-        className="block text-center text-sm text-[#8FB3FF] hover:underline"
+        className="block text-center text-sm text-motion-blue hover:underline"
       >
         Redeem points →
       </Link>
 
       <div>
-        <p className="text-sm text-[#A0A0A0] mb-3">Recent activity</p>
+        <p className="text-sm text-text-secondary mb-3">Recent activity</p>
         {activity.length === 0 ? (
-          <p className="text-[#A0A0A0] text-sm">No transactions yet.</p>
+          <p className="text-text-secondary text-sm">No transactions yet.</p>
         ) : (
           <ul className="space-y-3">
             {activity.map((row) => (
               <li
                 key={row.id}
-                className="flex justify-between gap-4 rounded-xl border border-[#2A2A2A] bg-[#1A1A1A] p-4"
+                className="flex justify-between gap-4 rounded-xl border border-border bg-surface-elevated p-4"
               >
                 <div>
                   <p className="font-semibold">{row.title}</p>
-                  <p className="text-sm text-[#A0A0A0] mt-1">{row.when}</p>
+                  <p className="text-sm text-text-secondary mt-1">{row.when}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`font-bold ${row.kind === 'pts' ? 'text-[#0055FF]' : ''}`}>
+                  <p className={`font-bold ${row.kind === 'pts' ? 'text-motion-blue' : ''}`}>
                     {row.kind === 'pts'
                       ? `+${row.amount} pts`
                       : `${row.amount < 0 ? '-' : '+'}${fmt(row.amount)}`}
@@ -122,8 +122,8 @@ const WalletPage: React.FC = () => {
                   <span
                     className={`inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
                       row.status === 'Reward'
-                        ? 'bg-[#6A00FF]/40'
-                        : 'bg-[#3F7048]/40'
+                        ? 'bg-electric-violet/40'
+                        : 'bg-movr-green/40'
                     }`}
                   >
                     {row.status}

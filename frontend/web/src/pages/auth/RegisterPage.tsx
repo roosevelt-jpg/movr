@@ -69,66 +69,66 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="w-full">
       <h1 className="text-3xl font-bold">Create account</h1>
-      <p className="text-[#888] mt-2 mb-8">Ride, shop, and deliver in one app</p>
+      <p className="text-text-secondary mt-2 mb-8">Ride, shop, and deliver in one app</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error ? <p className="text-sm text-[#FF3B5C]">{error}</p> : null}
+        {error ? <p className="text-sm text-error">{error}</p> : null}
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Full name</label>
+          <label className="block text-sm text-text-secondary mb-2">Full name</label>
           <input
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Ama Konadu"
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Email</label>
+          <label className="block text-sm text-text-secondary mb-2">Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@email.com"
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
           />
         </div>
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Phone number</label>
+          <label className="block text-sm text-text-secondary mb-2">Phone number</label>
           <input
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+233 24 000 0000"
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
           />
         </div>
 
         <div>
-          <label className="block text-sm text-[#888] mb-2">Password</label>
+          <label className="block text-sm text-text-secondary mb-2">Password</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Create a password"
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
             required
           />
         </div>
 
-        <p className="text-xs text-[#666]">Provide at least an email or a phone number.</p>
+        <p className="text-xs text-text-secondary">Provide at least an email or a phone number.</p>
 
-        <p className="text-xs text-[#888] leading-relaxed">
+        <p className="text-xs text-text-secondary leading-relaxed">
           By continuing, you agree to Movr's{' '}
-          <a className="text-[#4A72FF]" href="/terms">
+          <a className="text-motion-blue" href="/terms">
             Terms of Service
           </a>{' '}
           and{' '}
-          <a className="text-[#4A72FF]" href="/privacy">
+          <a className="text-motion-blue" href="/privacy">
             Privacy Policy
           </a>
           .
@@ -137,14 +137,14 @@ const RegisterPage: React.FC = () => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
         >
           {isLoading ? 'Creating...' : 'Create account'}
         </button>
 
-        <p className="text-center text-[#888] text-sm">
+        <p className="text-center text-text-secondary text-sm">
           Already have an account?{' '}
-          <Link to="/login" className="text-[#4A72FF] font-semibold">
+          <Link to="/login" className="text-motion-blue font-semibold">
             Sign in
           </Link>
         </p>

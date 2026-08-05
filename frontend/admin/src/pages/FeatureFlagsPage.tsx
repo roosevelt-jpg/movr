@@ -61,7 +61,7 @@ export default function FeatureFlagsPage() {
   return (
     <AdminShell activeLabel="Feature flags">
       <h1 style={styles.h1}>Feature flags</h1>
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.table}>
         <div style={{ ...styles.row, ...styles.head }}>
@@ -86,7 +86,7 @@ export default function FeatureFlagsPage() {
                   onClick={() => toggle(f.key, !f.enabled)}
                   style={{
                     ...styles.toggle,
-                    background: f.enabled ? '#6A00FF' : '#3A3A3A',
+                    background: f.enabled ? 'var(--electric-violet)' : 'var(--border)',
                     justifyContent: f.enabled ? 'flex-end' : 'flex-start',
                   }}
                 >
@@ -104,24 +104,24 @@ export default function FeatureFlagsPage() {
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 32, fontWeight: 700, marginBottom: 28 },
   table: {
-    background: '#111',
+    background: 'var(--surface-elevated)',
     borderRadius: 16,
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     overflow: 'hidden',
   },
-  head: { color: '#8E8E93', fontSize: 13 },
+  head: { color: 'var(--text-secondary)', fontSize: 13 },
   row: {
     display: 'grid',
     gridTemplateColumns: '1.4fr 1.2fr 100px',
     gap: 16,
     alignItems: 'center',
     padding: '18px 24px',
-    borderBottom: '1px solid #2A2A2A',
+    borderBottom: '1px solid var(--border)',
   },
-  empty: { padding: '24px', color: '#888' },
+  empty: { padding: '24px', color: 'var(--text-secondary)' },
   label: { fontWeight: 600, fontSize: 16 },
-  phase: { color: '#8E8E93', fontSize: 13, marginTop: 4 },
-  rollout: { color: '#C8C8C8' },
+  phase: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 },
+  rollout: { color: 'var(--text-secondary)' },
   toggle: {
     width: 48,
     height: 28,
@@ -135,7 +135,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 22,
     height: 22,
     borderRadius: '50%',
-    background: '#fff',
+    background: 'var(--pure-white)',
     display: 'block',
   },
 };

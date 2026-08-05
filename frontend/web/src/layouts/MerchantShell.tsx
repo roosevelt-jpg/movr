@@ -34,8 +34,8 @@ export default function MerchantShell({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white flex font-[Poppins,Montserrat,sans-serif]">
-      <aside className="w-56 shrink-0 border-r border-[#2A2A2A] bg-black p-4 flex flex-col">
+    <div className="min-h-screen bg-surface text-pure-white flex font-[Poppins,Montserrat,sans-serif]">
+      <aside className="w-56 shrink-0 border-r border-border bg-jet-black p-4 flex flex-col">
         <div className="font-bold text-xl mb-6 px-2">Movr</div>
         <div className="space-y-2 flex-1">
           {NAV.map((item) => {
@@ -47,28 +47,28 @@ export default function MerchantShell({
                 to={item.to}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium ${
                   active
-                    ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF] text-white'
-                    : 'text-[#A0A0A0] hover:text-white'
+                    ? 'bg-movr-gradient text-pure-white'
+                    : 'text-text-secondary hover:text-pure-white'
                 }`}
               >
                 <Icon size={16} /> {item.label}
               </Link>
             );
           })}
-          <Link to="/merchant/analytics" className="block text-[#A0A0A0] text-sm px-3 pt-4 hover:text-white">
+          <Link to="/merchant/analytics" className="block text-text-secondary text-sm px-3 pt-4 hover:text-pure-white">
             Analytics
           </Link>
-          <Link to="/merchant/store" className="block text-[#A0A0A0] text-sm px-3 hover:text-white">
+          <Link to="/merchant/store" className="block text-text-secondary text-sm px-3 hover:text-pure-white">
             Store profile
           </Link>
-          <Link to="/merchant/staking" className="block text-[#A0A0A0] text-sm px-3 hover:text-white">
+          <Link to="/merchant/staking" className="block text-text-secondary text-sm px-3 hover:text-pure-white">
             Staking
           </Link>
         </div>
         <button
           type="button"
           onClick={signOut}
-          className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-[#A0A0A0] hover:text-white hover:bg-[#1A1A1A] w-full"
+          className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-text-secondary hover:text-pure-white hover:bg-surface-elevated w-full"
         >
           <LogOut size={16} /> Sign out
         </button>

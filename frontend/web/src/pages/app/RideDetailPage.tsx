@@ -55,7 +55,7 @@ const RideDetailPage: React.FC = () => {
         </div>
 
         <div className="border-t border-gray-200 pt-6 space-y-3">
-          <button className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+          <button className="w-full bg-blue-600 text-pure-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
             Help
           </button>
           <button className="w-full border border-gray-300 text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors">

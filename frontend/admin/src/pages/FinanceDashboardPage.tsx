@@ -112,17 +112,17 @@ export default function FinanceDashboardPage() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
-                <CartesianGrid stroke="#1A1A1A" vertical={false} />
-                <XAxis dataKey="name" stroke="#666" />
-                <YAxis stroke="#666" hide />
+                <CartesianGrid stroke="var(--surface-elevated)" vertical={false} />
+                <XAxis dataKey="name" stroke="var(--text-secondary)" />
+                <YAxis stroke="var(--text-secondary)" hide />
                 <Tooltip
-                  contentStyle={{ background: '#121212', border: '1px solid #2A2A2A' }}
+                  contentStyle={{ background: 'var(--surface-elevated)', border: '1px solid var(--border)' }}
                 />
                 <Bar dataKey="gmv" fill="url(#gmvGrad)" radius={[6, 6, 0, 0]} />
                 <defs>
                   <linearGradient id="gmvGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6A00FF" />
-                    <stop offset="100%" stopColor="#0055FF" />
+                    <stop offset="0%" stopColor="var(--electric-violet)" />
+                    <stop offset="100%" stopColor="var(--motion-blue)" />
                   </linearGradient>
                 </defs>
               </BarChart>
@@ -131,7 +131,7 @@ export default function FinanceDashboardPage() {
         </div>
       </div>
 
-      {message ? <p style={{ color: '#00D97A' }}>{message}</p> : null}
+      {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
 
       <div style={styles.actions}>
         <button style={styles.btn} onClick={exportCsv}>
@@ -176,16 +176,16 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
   },
   card: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
   },
-  label: { color: '#A0A0A0', fontSize: 13 },
+  label: { color: 'var(--text-secondary)', fontSize: 13 },
   value: { fontSize: 28, fontWeight: 700, marginTop: 8 },
   chartCard: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
@@ -195,13 +195,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#888',
+    color: 'var(--text-secondary)',
   },
   actions: { display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 },
   btn: {
-    background: 'linear-gradient(90deg, #3F7048 0%, #6A00FF 50%, #0055FF 100%)',
+    background: 'linear-gradient(90deg, var(--movr-green) 0%, var(--electric-violet) 50%, var(--motion-blue) 100%)',
     border: 'none',
-    color: '#fff',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '12px 18px',
     fontWeight: 700,
@@ -209,16 +209,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   btnGhost: {
     background: 'transparent',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '12px 18px',
     cursor: 'pointer',
   },
   batch: {
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     borderRadius: 12,
     padding: 16,
-    background: '#121212',
+    background: 'var(--surface-elevated)',
   },
 };

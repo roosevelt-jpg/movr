@@ -19,7 +19,7 @@ function Ring({
   return (
     <View style={styles.ringCol}>
       <View style={[styles.ringOuter, { borderColor: color }]}>
-        <View style={[styles.ringTrack, { borderColor: '#2A2A2A' }]} />
+        <View style={[styles.ringTrack, { borderColor: colors.border }]} />
         <Text style={styles.ringValue}>{Math.round(value)}%</Text>
       </View>
       {/* Simple arc hint via colored top border weight */}
@@ -60,9 +60,9 @@ export default function PerformanceScreen() {
       </View>
 
       <View style={styles.metricsCard}>
-        <Ring value={acceptance} label="Acceptance" color="#74D38F" />
-        <Ring value={cancellation} label="Cancellation" color="#F37474" />
-        <Ring value={onTime} label="On-time" color="#749CF3" />
+        <Ring value={acceptance} label="Acceptance" color={colors.success} />
+        <Ring value={cancellation} label="Cancellation" color={colors.error} />
+        <Ring value={onTime} label="On-time" color={colors.motionBlue} />
       </View>
 
       <View style={styles.progressCard}>
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
   tierRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing[2], marginBottom: spacing[4] },
   tierIcon: { fontSize: 16 },
-  tierText: { color: '#D4AF37', fontWeight: '700', fontSize: 15 },
+  tierText: { color: colors.warning, fontWeight: '700', fontSize: 15 },
   metricsCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     borderWidth: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
   },
   ringTrack: {
     ...StyleSheet.absoluteFillObject,
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   barTrack: {
     height: 10,
     borderRadius: radius.pill,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   barFill: {

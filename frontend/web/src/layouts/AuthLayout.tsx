@@ -11,7 +11,7 @@ const AuthLayout: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <Outlet />
       </div>

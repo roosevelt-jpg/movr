@@ -47,23 +47,23 @@ const ForgotPasswordPage: React.FC = () => {
   return (
     <div className="w-full text-center">
       <div className="flex justify-center mb-4">
-        <Lock className="text-[#0055FF]" size={40} />
+        <Lock className="text-motion-blue" size={40} />
       </div>
       <h1 className="text-2xl font-bold">Reset your password</h1>
-      <p className="text-[#888] mt-3 mb-8">
+      <p className="text-text-secondary mt-3 mb-8">
         Enter your email or phone and we&apos;ll send a reset code
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5 text-left">
         <div>
-          <label className="block text-sm text-[#888] mb-2">Email or phone</label>
+          <label className="block text-sm text-text-secondary mb-2">Email or phone</label>
           <input
             type="text"
             autoComplete="username"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             placeholder="you@email.com or +233…"
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
             required
           />
         </div>
@@ -71,12 +71,12 @@ const ForgotPasswordPage: React.FC = () => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
         >
           {isLoading ? 'Sending...' : 'Send reset code'}
         </button>
 
-        <Link to="/login" className="block text-center text-sm text-[#4A72FF]">
+        <Link to="/login" className="block text-center text-sm text-motion-blue">
           Back to sign in
         </Link>
       </form>

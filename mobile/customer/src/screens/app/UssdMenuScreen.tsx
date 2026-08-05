@@ -94,7 +94,7 @@ export default function UssdMenuScreen({
           onChangeText={setInput}
           keyboardType="default"
           placeholder="Reply with a number"
-          placeholderTextColor="#4A7A4A"
+          placeholderTextColor={colors.movrGreen}
           onSubmitEditing={() => reply(input)}
         />
         <Pressable style={styles.send} onPress={() => reply(input)}>
@@ -106,34 +106,34 @@ export default function UssdMenuScreen({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#1A2F1A' },
+  root: { flex: 1, backgroundColor: colors.movrGreen },
   term: { flex: 1 },
   mono: {
     fontFamily: 'Courier',
-    color: '#7CFF7C',
+    color: colors.success,
     fontSize: 14,
     lineHeight: 22,
   },
   row: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#2F4F2F',
+    borderTopColor: colors.movrGreen,
     padding: 8,
     gap: 8,
   },
   input: {
     flex: 1,
-    color: '#7CFF7C',
+    color: colors.success,
     fontFamily: 'Courier',
     padding: 10,
-    backgroundColor: '#0F1F0F',
+    backgroundColor: colors.surface,
     borderRadius: 4,
   },
   send: {
-    backgroundColor: '#2F4F2F',
+    backgroundColor: colors.movrGreen,
     borderRadius: 4,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },
-  sendText: { color: '#7CFF7C', fontWeight: '700' },
+  sendText: { color: colors.success, fontWeight: '700' },
 });

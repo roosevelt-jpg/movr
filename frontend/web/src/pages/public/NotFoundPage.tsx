@@ -6,10 +6,10 @@ import { CmsSections } from '../../cms/sections';
 export default function NotFoundPage() {
   const { page, loading } = useCmsPage('not-found');
   if (loading) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading…</div>;
+    return <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">Loading…</div>;
   }
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
       <CmsSections sections={page?.sections} />
     </div>
   );

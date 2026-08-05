@@ -46,13 +46,13 @@ export default function MerchantStakingPage() {
   return (
     <MerchantShell activePath="/merchant/staking">
       <h1 className="text-3xl font-bold mb-2">Merchant staking</h1>
-      <p className="text-[#A0A0A0] mb-6">
+      <p className="text-text-secondary mb-6">
         Higher stake → lower platform fee + boosted store placement.
         {tier?.tier ? ` Current tier: ${tier.tier} (−${tier.feeDiscountPct}% fee)` : ''}
       </p>
-      <div className="bg-[#121212] border border-[#2A2A2A] rounded-2xl p-5 space-y-3 mb-6 max-w-lg">
+      <div className="bg-surface-elevated border border-border rounded-2xl p-5 space-y-3 mb-6 max-w-lg">
         <select
-          className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl px-3 py-2"
+          className="w-full bg-surface border border-border rounded-xl px-3 py-2"
           value={poolId}
           onChange={(e) => setPoolId(e.target.value)}
         >
@@ -63,14 +63,14 @@ export default function MerchantStakingPage() {
           ))}
         </select>
         <input
-          className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-xl px-3 py-2"
+          className="w-full bg-surface border border-border rounded-xl px-3 py-2"
           placeholder="DVT amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
         <button
           onClick={() => stake().catch((e) => toast.error(e.response?.data?.message || e.message))}
-          className="rounded-xl px-5 py-2.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          className="rounded-xl px-5 py-2.5 font-semibold bg-movr-gradient"
         >
           Stake
         </button>
@@ -81,7 +81,7 @@ export default function MerchantStakingPage() {
           .map((s) => (
             <li
               key={s.id}
-              className="border border-[#2A2A2A] rounded-xl bg-[#121212] p-3 text-sm"
+              className="border border-border rounded-xl bg-surface-elevated p-3 text-sm"
             >
               {s.pool_name}: {Number(s.amount).toFixed(2)} DVT · {s.status}
             </li>

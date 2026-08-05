@@ -10,18 +10,18 @@ export default function DownloadAppPage() {
   const nav = global.section('nav');
 
   if (loading) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading…</div>;
+    return <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">Loading…</div>;
   }
   if (error || !page) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">
         Download page not published in CMS
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
       {nav ? <CmsNav payload={nav.payload} /> : null}
       <CmsSections sections={page.sections} />
       <SiteFooter />

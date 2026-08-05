@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[6],
     paddingHorizontal: spacing[4],
     alignItems: 'center',
-    backgroundColor: '#1a1040',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
     marginBottom: spacing[5],
   },
@@ -143,5 +143,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.motionBlue,
   },
-  redeemText: { color: '#fff', fontWeight: '700' },
+  redeemText: { color: colors.pureWhite, fontWeight: '700' },
 });

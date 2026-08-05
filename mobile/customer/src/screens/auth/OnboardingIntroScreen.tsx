@@ -64,12 +64,12 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: radius.lg,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[8],
   },
-  illustIcon: { fontSize: 48, color: '#4B8BFF' },
+  illustIcon: { fontSize: 48, color: colors.motionBlue },
   title: {
     color: colors.pureWhite,
     fontSize: 24,
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   body: { color: colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
   footer: { gap: spacing[5] },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3A3A3A' },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border },
   dotActive: {
     width: 28,
     backgroundColor: colors.motionBlue,
@@ -91,5 +91,5 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  btnText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
 });

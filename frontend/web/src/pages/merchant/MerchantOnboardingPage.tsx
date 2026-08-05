@@ -66,17 +66,17 @@ export default function MerchantOnboardingPage() {
           <div
             className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${
               n < step
-                ? 'bg-gradient-to-br from-[#6A00FF] to-[#0055FF]'
+                ? 'bg-movr-gradient'
                 : n === step
-                  ? 'bg-gradient-to-br from-[#6A00FF] to-[#0055FF]'
-                  : 'bg-[#2A2A2A] text-[#888]'
+                  ? 'bg-movr-gradient'
+                  : 'bg-border text-text-secondary'
             }`}
           >
             {n < step ? <Check size={16} /> : n}
           </div>
           {n < 3 ? (
             <div
-              className={`w-16 h-0.5 ${n < step ? 'bg-[#3F7048]' : 'bg-[#2A2A2A]'}`}
+              className={`w-16 h-0.5 ${n < step ? 'bg-movr-green' : 'bg-border'}`}
             />
           ) : null}
         </React.Fragment>
@@ -85,14 +85,14 @@ export default function MerchantOnboardingPage() {
   );
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 py-10 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center px-4 py-10 font-[Poppins,Montserrat,sans-serif]">
       <div className="w-full max-w-md">
         <StepDots />
 
         {step === 1 ? (
           <div className="space-y-4">
             <h1 className="text-3xl font-bold">Create your account</h1>
-            <p className="text-[#A0A0A0]">Step 1 of 3 · Account details</p>
+            <p className="text-text-secondary">Step 1 of 3 · Account details</p>
             {(
               [
                 ['email', 'Email', 'email', 'merchant@business.com'],
@@ -102,10 +102,10 @@ export default function MerchantOnboardingPage() {
               ] as const
             ).map(([key, label, type, placeholder]) => (
               <div key={key}>
-                <label className="block text-sm text-[#888] mb-2">{label}</label>
+                <label className="block text-sm text-text-secondary mb-2">{label}</label>
                 <input
                   type={type}
-                  className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 placeholder:text-[#666]"
+                  className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
                   placeholder={placeholder || undefined}
                   value={form[key]}
                   onChange={(e) => set(key, e.target.value)}
@@ -113,7 +113,7 @@ export default function MerchantOnboardingPage() {
                 />
               </div>
             ))}
-            <p className="text-xs text-[#666]">Provide at least an email or a phone number.</p>
+            <p className="text-xs text-text-secondary">Provide at least an email or a phone number.</p>
             <button
               type="button"
               onClick={() => {
@@ -127,7 +127,7 @@ export default function MerchantOnboardingPage() {
                 }
                 setStep(2);
               }}
-              className="w-full rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF]"
+              className="w-full rounded-xl py-3.5 font-semibold bg-movr-gradient"
             >
               Continue
             </button>
@@ -137,21 +137,21 @@ export default function MerchantOnboardingPage() {
         {step === 2 ? (
           <div className="space-y-4">
             <h1 className="text-3xl font-bold">Business registration</h1>
-            <p className="text-[#A0A0A0]">Step 2 of 3 · KYC verification</p>
+            <p className="text-text-secondary">Step 2 of 3 · KYC verification</p>
             <div>
-              <label className="block text-sm text-[#888] mb-2">Business name</label>
+              <label className="block text-sm text-text-secondary mb-2">Business name</label>
               <input
-                className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+                className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
                 value={form.businessName}
                 onChange={(e) => set('businessName', e.target.value)}
               />
             </div>
             <div>
-              <label className="block text-sm text-[#888] mb-2">
+              <label className="block text-sm text-text-secondary mb-2">
                 Business registration number
               </label>
               <input
-                className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+                className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
                 value={form.registrationNumber}
                 onChange={(e) => set('registrationNumber', e.target.value)}
               />
@@ -164,7 +164,7 @@ export default function MerchantOnboardingPage() {
                   form.documentUrl || `https://uploads.movr.local/certs/${Date.now()}.pdf`
                 )
               }
-              className="w-full rounded-xl border border-dashed border-[#444] bg-[#111] py-10 flex flex-col items-center gap-2 text-[#A0A0A0] hover:border-[#6A00FF]"
+              className="w-full rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated py-10 flex flex-col items-center gap-2 text-text-secondary hover:border-electric-violet"
             >
               <Upload size={22} />
               <span>
@@ -175,14 +175,14 @@ export default function MerchantOnboardingPage() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="rounded-xl px-5 py-3 border border-[#2A2A2A]"
+                className="rounded-xl px-5 py-3 border border-border"
               >
                 Back
               </button>
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="flex-1 rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF]"
+                className="flex-1 rounded-xl py-3.5 font-semibold bg-movr-gradient"
               >
                 Continue
               </button>
@@ -193,9 +193,9 @@ export default function MerchantOnboardingPage() {
         {step === 3 ? (
           <div className="space-y-4">
             <h1 className="text-3xl font-bold">Store category</h1>
-            <p className="text-[#A0A0A0]">Step 3 of 3 · Almost done</p>
+            <p className="text-text-secondary">Step 3 of 3 · Almost done</p>
             <select
-              className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+              className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
               value={form.category}
               onChange={(e) => set('category', e.target.value)}
             >
@@ -207,7 +207,7 @@ export default function MerchantOnboardingPage() {
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="rounded-xl px-5 py-3 border border-[#2A2A2A]"
+                className="rounded-xl px-5 py-3 border border-border"
               >
                 Back
               </button>
@@ -215,7 +215,7 @@ export default function MerchantOnboardingPage() {
                 type="button"
                 disabled={loading}
                 onClick={finish}
-                className="flex-1 rounded-xl py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+                className="flex-1 rounded-xl py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create storefront'}
               </button>
@@ -223,9 +223,9 @@ export default function MerchantOnboardingPage() {
           </div>
         ) : null}
 
-        <p className="text-sm text-[#A0A0A0] text-center mt-8">
+        <p className="text-sm text-text-secondary text-center mt-8">
           Already registered?{' '}
-          <Link className="text-[#5E9EFF]" to="/merchant/login">
+          <Link className="text-motion-blue" to="/merchant/login">
             Sign in
           </Link>
         </p>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../lib/currency';
 import { useLocalCurrency } from '../hooks/useLocalCurrency';
+import MovrWordmark from '../components/MovrWordmark';
 import type { CmsSection } from '../services/cms';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -35,10 +36,10 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
             'radial-gradient(circle at 50% 40%, rgba(0,85,255,0.55), rgba(106,0,255,0.25), transparent 70%)',
         }}
       />
-      <div className="relative rounded-[2.4rem] border border-[#2A2A2A] bg-[#111] p-2.5 shadow-[0_30px_80px_rgba(0,85,255,0.25)]">
-        <div className="rounded-[2rem] bg-black overflow-hidden border border-[#1A1A1A]">
+      <div className="relative rounded-[2.4rem] border border-border bg-surface-elevated p-2.5 shadow-active-glow">
+        <div className="rounded-[2rem] bg-jet-black overflow-hidden border border-border">
           <div className="flex justify-center pt-2">
-            <div className="w-20 h-1.5 rounded-full bg-[#2A2A2A]" />
+            <div className="w-20 h-1.5 rounded-full bg-border" />
           </div>
           {children}
         </div>
@@ -50,36 +51,36 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 function PhoneRideMock() {
   return (
     <PhoneFrame>
-      <div className="flex justify-between text-[10px] px-5 pt-2 text-[#A0A0A0]">
+      <div className="flex justify-between text-[10px] px-5 pt-2 text-text-secondary">
         <span>9:41</span>
         <span>●●●</span>
       </div>
       <p className="text-center font-bold mt-1 mb-2 text-sm">Movr</p>
-      <div className="flex justify-center gap-6 text-xs border-b border-[#2A2A2A] pb-2 px-2">
-        <span className="text-white border-b-2 border-[#0055FF] pb-2 font-medium">Ride</span>
-        <span className="text-[#666]">Shop</span>
-        <span className="text-[#666]">Deliver</span>
+      <div className="flex justify-center gap-6 text-xs border-b border-border pb-2 px-2">
+        <span className="text-pure-white border-b-2 border-motion-blue pb-2 font-medium">Ride</span>
+        <span className="text-text-secondary">Shop</span>
+        <span className="text-text-secondary">Deliver</span>
       </div>
-      <div className="relative m-3 h-40 rounded-xl overflow-hidden bg-[#141414]">
+      <div className="relative m-3 h-40 rounded-xl overflow-hidden bg-surface-elevated">
         <div
           className="absolute inset-0 opacity-50"
           style={{
             backgroundImage:
-              'linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px)',
+              'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
             backgroundSize: '18px 18px',
           }}
         />
-        <div className="absolute left-[22%] top-[28%] w-2.5 h-2.5 rounded-full bg-[#0055FF] shadow-[0_0_12px_#0055FF]" />
+        <div className="absolute left-[22%] top-[28%] w-2.5 h-2.5 rounded-full bg-motion-blue shadow-active-glow" />
         <div className="absolute right-[30%] bottom-[32%] w-2.5 h-2.5 rounded-full bg-white" />
       </div>
       <div className="px-3 space-y-2 pb-4">
-        <div className="rounded-xl bg-[#1A1A1A] h-9 flex items-center px-3 text-xs text-[#888]">
+        <div className="rounded-xl bg-surface-elevated h-9 flex items-center px-3 text-xs text-text-secondary">
           Pickup · Current location
         </div>
-        <div className="rounded-xl bg-[#1A1A1A] h-9 flex items-center px-3 text-xs text-[#666]">
+        <div className="rounded-xl bg-surface-elevated h-9 flex items-center px-3 text-xs text-text-secondary">
           Enter destination
         </div>
-        <div className="rounded-full h-10 bg-gradient-to-r from-[#6A00FF] to-[#0055FF] flex items-center justify-center text-xs font-semibold">
+        <div className="rounded-full h-10 bg-movr-gradient flex items-center justify-center text-xs font-semibold">
           Confirm pickup
         </div>
       </div>
@@ -103,12 +104,18 @@ function go(navigate: ReturnType<typeof useNavigate>, href?: string) {
 export function CmsNav({ payload }: { payload: any }) {
   const navigate = useNavigate();
   return (
-    <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10">
+    <header className="sticky top-0 z-40 bg-jet-black/80 backdrop-blur-md border-b border-border">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-        <button type="button" onClick={() => navigate('/')} className="text-xl font-bold tracking-tight">
-          {payload.brand || 'Movr'}
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 text-xl font-bold tracking-tight"
+          aria-label={payload.brand || 'MOVR'}
+        >
+          <MovrWordmark height={28} />
+          <span className="sr-only">{payload.brand || 'MOVR'}</span>
         </button>
-        <nav className="hidden lg:flex items-center gap-7 text-sm text-white/90">
+        <nav className="hidden lg:flex items-center gap-7 text-sm text-text-primary/90">
           {(payload.links || []).map((l: any) =>
             l.href?.startsWith('/#') || l.href?.startsWith('#') ? (
               <a key={l.label} href={l.href} className="hover:opacity-80">
@@ -130,7 +137,7 @@ export function CmsNav({ payload }: { payload: any }) {
           <button
             type="button"
             onClick={() => go(navigate, payload.cta.href)}
-            className="rounded-full px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+            className="rounded-pill px-5 py-2.5 text-sm font-semibold bg-movr-gradient"
           >
             {payload.cta.label}
           </button>
@@ -146,30 +153,33 @@ export function CmsHero({ payload }: { payload: any }) {
 
   if (centered) {
     return (
-      <section className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-tight">
+      <section className="movr-hero max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+        <div className="movr-hero-glow movr-hero-glow-a" />
+        <div className="movr-hero-glow movr-hero-glow-b" />
+        <div className="movr-hero-shimmer mb-8 rounded-pill" />
+        <h1 className="relative text-4xl md:text-6xl font-bold tracking-tight leading-tight">
           {payload.headline}
         </h1>
         {payload.subhead ? (
-          <p className="mt-5 text-[#A0A0A0] text-lg max-w-2xl mx-auto">{payload.subhead}</p>
+          <p className="relative mt-5 text-text-secondary text-lg max-w-2xl mx-auto">{payload.subhead}</p>
         ) : null}
         {payload.primaryCta ? (
           <button
             type="button"
             onClick={() => go(navigate, payload.primaryCta.href)}
-            className="mt-8 rounded-full px-8 py-3.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+            className="relative mt-8 rounded-pill px-8 py-3.5 font-semibold bg-movr-gradient"
           >
             {payload.primaryCta.label}
           </button>
         ) : null}
         {payload.storeButtons?.length ? (
-          <div className="mt-10 flex flex-wrap justify-center gap-4">
+          <div className="relative mt-10 flex flex-wrap justify-center gap-4">
             {payload.storeButtons.map((b: any) => (
               <button
                 key={b.label}
                 type="button"
                 onClick={() => go(navigate, b.href)}
-                className="inline-flex items-center gap-3 rounded-2xl bg-[#1A1A1A] border border-[#2A2A2A] px-6 py-4 font-semibold"
+                className="inline-flex items-center gap-3 rounded-2xl bg-surface-elevated border border-border px-6 py-4 font-semibold"
               >
                 <Download size={18} /> {b.label}
               </button>
@@ -181,28 +191,24 @@ export function CmsHero({ payload }: { payload: any }) {
   }
 
   return (
-    <section className="relative overflow-hidden">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            'radial-gradient(ellipse 70% 50% at 75% 45%, rgba(0,85,255,0.35), transparent 60%)',
-        }}
-      />
+    <section className="movr-hero">
+      <div className="movr-hero-glow movr-hero-glow-a" />
+      <div className="movr-hero-glow movr-hero-glow-b" />
+      <div className="movr-hero-shimmer" />
       <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 grid lg:grid-cols-2 gap-12 items-center">
         <div>
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
             {payload.headline}
           </h1>
           {payload.subhead ? (
-            <p className="mt-5 text-[#A0A0A0] text-lg max-w-md leading-relaxed">{payload.subhead}</p>
+            <p className="mt-5 text-text-secondary text-lg max-w-md leading-relaxed">{payload.subhead}</p>
           ) : null}
           <div className="mt-8 flex flex-wrap gap-3">
             {payload.primaryCta ? (
               <button
                 type="button"
                 onClick={() => go(navigate, payload.primaryCta.href)}
-                className="rounded-full px-7 py-3.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF] shadow-[0_10px_40px_rgba(106,0,255,0.35)]"
+                className="rounded-pill px-7 py-3.5 font-semibold bg-movr-gradient shadow-active-glow"
               >
                 {payload.primaryCta.label}
               </button>
@@ -211,7 +217,7 @@ export function CmsHero({ payload }: { payload: any }) {
               <button
                 type="button"
                 onClick={() => go(navigate, payload.secondaryCta.href)}
-                className="rounded-full px-7 py-3.5 font-semibold border border-white/70 hover:bg-white/5"
+                className="rounded-pill px-7 py-3.5 font-semibold border border-pure-white/70 hover:bg-pure-white/5"
               >
                 {payload.secondaryCta.label}
               </button>
@@ -236,11 +242,11 @@ export function CmsFourWays({ payload }: { payload: any }) {
               key={c.title}
               href={c.anchor ? `#${c.anchor}` : undefined}
               id={c.anchor && c.anchor !== 'ride' ? c.anchor : undefined}
-              className="rounded-2xl bg-[#121212] border border-[#2A2A2A] p-5 hover:border-[#0055FF]/50 transition-colors block"
+              className="rounded-2xl bg-surface-elevated border border-border p-5 hover:border-motion-blue/50 transition-colors block"
             >
               <Icon size={22} className="mb-4" />
               <h3 className="font-bold text-lg">{c.title}</h3>
-              <p className="text-[#A0A0A0] text-sm mt-2 leading-relaxed">{c.body}</p>
+              <p className="text-text-secondary text-sm mt-2 leading-relaxed">{c.body}</p>
             </a>
           );
         })}
@@ -265,7 +271,7 @@ export function CmsStories({ payload }: { payload: any }) {
       <h2 className="text-2xl md:text-3xl font-bold">{payload.heading}</h2>
       {(payload.cards || []).map((card: any) => {
         const media = (
-          <div className="relative min-h-[260px] md:min-h-full overflow-hidden bg-[#0A0A0A]">
+          <div className="relative min-h-[260px] md:min-h-full overflow-hidden bg-surface">
             {card.imageUrl ? (
               <img
                 src={card.imageUrl}
@@ -276,23 +282,23 @@ export function CmsStories({ payload }: { payload: any }) {
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
             <button
               type="button"
-              className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-black/45 border border-white/35 flex items-center justify-center"
+              className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-jet-black/45 border border-pure-white/35 flex items-center justify-center"
               aria-label="Play"
             >
-              <Play size={22} fill="#fff" />
+              <Play size={22} fill="var(--pure-white)" />
             </button>
           </div>
         );
         const text = (
           <div className="p-8 md:p-10 flex flex-col justify-center">
-            <p className="text-xs tracking-wider text-[#8E8E93] mb-2">{card.eyebrow}</p>
+            <p className="text-xs tracking-wider text-text-secondary mb-2">{card.eyebrow}</p>
             <h3 className="text-2xl font-bold mb-3">{card.title}</h3>
-            <p className="text-[#A0A0A0] leading-relaxed mb-5">{card.quote}</p>
+            <p className="text-text-secondary leading-relaxed mb-5">{card.quote}</p>
             <div className="flex flex-wrap gap-8 text-sm">
               {(card.stats || []).map((s: any) => (
                 <span key={s.label}>
-                  <strong className="text-white text-base">{statValue(s)}</strong>
-                  <span className="text-[#A0A0A0]"> {s.label}</span>
+                  <strong className="text-pure-white text-base">{statValue(s)}</strong>
+                  <span className="text-text-secondary"> {s.label}</span>
                 </span>
               ))}
             </div>
@@ -302,7 +308,7 @@ export function CmsStories({ payload }: { payload: any }) {
         return (
           <div
             key={card.title}
-            className="rounded-2xl bg-[#121212] border border-[#2A2A2A] overflow-hidden grid md:grid-cols-2"
+            className="rounded-2xl bg-surface-elevated border border-border overflow-hidden grid md:grid-cols-2"
           >
             {mediaLeft ? (
               <>
@@ -326,13 +332,13 @@ export function CmsCtaBanner({ payload }: { payload: any }) {
   const navigate = useNavigate();
   return (
     <section id={payload.anchor || 'drivers'} className="max-w-6xl mx-auto px-6 pb-16">
-      <div className="rounded-2xl bg-gradient-to-r from-[#6A00FF] to-[#0055FF] p-8 md:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_20px_60px_rgba(106,0,255,0.3)]">
+      <div className="rounded-2xl bg-movr-gradient p-8 md:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-active-glow">
         <p className="text-xl md:text-2xl font-bold max-w-2xl leading-snug">{payload.body}</p>
         {payload.button ? (
           <button
             type="button"
             onClick={() => go(navigate, payload.button.href)}
-            className="shrink-0 rounded-full px-7 py-3.5 bg-black font-semibold"
+            className="shrink-0 rounded-full px-7 py-3.5 bg-jet-black font-semibold"
           >
             {payload.button.label}
           </button>
@@ -349,7 +355,7 @@ export function CmsDownload({ payload }: { payload: any }) {
       <div>
         <h2 className="text-3xl md:text-4xl font-bold leading-tight">{payload.heading}</h2>
         {payload.body ? (
-          <p className="text-[#A0A0A0] mt-4 max-w-md leading-relaxed">{payload.body}</p>
+          <p className="text-text-secondary mt-4 max-w-md leading-relaxed">{payload.body}</p>
         ) : null}
         <div className="mt-8 flex flex-wrap gap-3">
           {(payload.storeButtons || []).map((b: any) => (
@@ -357,7 +363,7 @@ export function CmsDownload({ payload }: { payload: any }) {
               key={b.label}
               type="button"
               onClick={() => go(navigate, b.href)}
-              className="rounded-xl bg-[#121212] border border-[#3A3A3A] px-5 py-3 text-sm font-semibold"
+              className="rounded-xl bg-surface-elevated border border-border px-5 py-3 text-sm font-semibold"
             >
               {b.label}
             </button>
@@ -370,33 +376,33 @@ export function CmsDownload({ payload }: { payload: any }) {
                 className="w-full h-full opacity-80"
                 style={{
                   backgroundImage:
-                    'repeating-linear-gradient(90deg,#000 0 2px,transparent 2px 4px),repeating-linear-gradient(0deg,#000 0 2px,transparent 2px 4px)',
+                    'repeating-linear-gradient(90deg,var(--jet-black) 0 2px,transparent 2px 4px),repeating-linear-gradient(0deg,var(--jet-black) 0 2px,transparent 2px 4px)',
                 }}
               />
             </div>
-            <p className="text-sm text-[#A0A0A0] max-w-[160px]">{payload.qrHint}</p>
+            <p className="text-sm text-text-secondary max-w-[160px]">{payload.qrHint}</p>
           </div>
         ) : null}
       </div>
       {payload.showPhoneMock !== false ? (
         <PhoneFrame>
-          <div className="flex justify-between text-[10px] px-5 pt-2 text-[#A0A0A0]">
+          <div className="flex justify-between text-[10px] px-5 pt-2 text-text-secondary">
             <span>9:41</span>
             <span>●●●</span>
           </div>
           <p className="text-center font-bold mt-1 mb-2 text-sm">Movr</p>
-          <div className="relative mx-3 h-52 rounded-xl overflow-hidden bg-[#141414] mb-3">
+          <div className="relative mx-3 h-52 rounded-xl overflow-hidden bg-surface-elevated mb-3">
             <div
               className="absolute inset-0 opacity-45"
               style={{
                 backgroundImage:
-                  'linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px)',
+                  'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
                 backgroundSize: '16px 16px',
               }}
             />
           </div>
           <div className="px-3 pb-5">
-            <div className="rounded-full h-11 bg-gradient-to-r from-[#6A00FF] to-[#0055FF] flex items-center justify-center text-sm font-semibold">
+            <div className="rounded-full h-11 bg-movr-gradient flex items-center justify-center text-sm font-semibold">
               Confirm pickup
             </div>
           </div>
@@ -415,11 +421,11 @@ export function CmsFeatureCards({ payload }: { payload: any }) {
           return (
             <div
               key={c.title}
-              className="rounded-2xl bg-[#0d0d0d] border border-[#2A2A2A] p-6 text-left"
+              className="rounded-2xl bg-surface border border-border p-6 text-left"
             >
               <Icon size={22} className="mb-4" />
               <h3 className="text-lg font-bold">{c.title}</h3>
-              <p className="text-[#A0A0A0] mt-2 text-sm leading-relaxed">{c.body}</p>
+              <p className="text-text-secondary mt-2 text-sm leading-relaxed">{c.body}</p>
             </div>
           );
         })}
@@ -448,7 +454,7 @@ export function CmsHelpHub({ payload }: { payload: any }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={payload.searchPlaceholder || 'Search'}
-          className="w-full rounded-full bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-2.5 text-sm"
+          className="w-full rounded-full bg-surface-elevated border border-border px-4 py-2.5 text-sm"
         />
       </div>
       <h1 className="text-4xl md:text-5xl font-bold text-center mb-12">{payload.heading}</h1>
@@ -460,11 +466,11 @@ export function CmsHelpHub({ payload }: { payload: any }) {
               key={c.id}
               type="button"
               onClick={() => navigate(`/help/${c.id}`)}
-              className="text-left rounded-2xl bg-[#121212] border border-[#2A2A2A] p-6 hover:border-[#0055FF]"
+              className="text-left rounded-2xl bg-surface-elevated border border-border p-6 hover:border-motion-blue"
             >
               <Icon size={22} className="mb-4" />
               <h2 className="font-bold text-lg">{c.title}</h2>
-              <p className="text-[#888] text-sm mt-2 leading-relaxed">{c.body}</p>
+              <p className="text-text-secondary text-sm mt-2 leading-relaxed">{c.body}</p>
             </button>
           );
         })}
@@ -477,7 +483,7 @@ export function CmsRichText({ payload }: { payload: any }) {
   return (
     <main className="max-w-3xl mx-auto px-6 py-12">
       <h1 className="text-3xl md:text-4xl font-bold mb-8">{payload.heading}</h1>
-      <div className="space-y-4 text-[#A0A0A0] leading-relaxed">
+      <div className="space-y-4 text-text-secondary leading-relaxed">
         {(payload.paragraphs || []).map((p: string, i: number) => (
           <p key={i}>{p}</p>
         ))}
@@ -491,14 +497,14 @@ export function CmsLegal({ payload }: { payload: any }) {
     <main className="max-w-3xl mx-auto px-6 py-12">
       <h1 className="text-3xl md:text-4xl font-bold">{payload.heading}</h1>
       {payload.updatedLabel ? (
-        <p className="text-[#A0A0A0] mt-3 mb-10">{payload.updatedLabel}</p>
+        <p className="text-text-secondary mt-3 mb-10">{payload.updatedLabel}</p>
       ) : (
         <div className="mb-10" />
       )}
-      <ol className="space-y-6 text-[#A0A0A0] leading-relaxed list-none">
+      <ol className="space-y-6 text-text-secondary leading-relaxed list-none">
         {(payload.clauses || []).map((c: any) => (
           <li key={c.title}>
-            <span className="text-white font-medium">{c.title}</span> — {c.body}
+            <span className="text-pure-white font-medium">{c.title}</span> — {c.body}
           </li>
         ))}
       </ol>
@@ -514,14 +520,14 @@ export function CmsOnboarding({ payload }: { payload: any }) {
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
       <h1 className="text-3xl font-bold mb-3">{slide.title}</h1>
-      <p className="text-[#A0A0A0] max-w-md mb-8">{slide.body}</p>
+      <p className="text-text-secondary max-w-md mb-8">{slide.body}</p>
       <div className="flex gap-2 mb-8">
         {slides.map((_: any, idx: number) => (
           <button
             key={idx}
             type="button"
             onClick={() => setI(idx)}
-            className={`w-2 h-2 rounded-full ${idx === i ? 'bg-[#0055FF]' : 'bg-[#333]'}`}
+            className={`w-2 h-2 rounded-full ${idx === i ? 'bg-motion-blue' : 'bg-[var(--border)]'}`}
           />
         ))}
       </div>
@@ -529,7 +535,7 @@ export function CmsOnboarding({ payload }: { payload: any }) {
         <button
           type="button"
           onClick={() => setI((x) => x + 1)}
-          className="rounded-full px-8 py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          className="rounded-full px-8 py-3 font-semibold bg-movr-gradient"
         >
           Next
         </button>
@@ -540,7 +546,7 @@ export function CmsOnboarding({ payload }: { payload: any }) {
             localStorage.setItem('movr_onboarding_done', '1');
             go(navigate, payload.cta.href);
           }}
-          className="rounded-full px-8 py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          className="rounded-full px-8 py-3 font-semibold bg-movr-gradient"
         >
           {payload.cta.label}
         </button>

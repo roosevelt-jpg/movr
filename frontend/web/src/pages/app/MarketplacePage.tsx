@@ -1,64 +1,95 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Star, Heart, ShoppingCart } from 'lucide-react';
+import axios from 'axios';
+import { Search, MapPin, Star } from 'lucide-react';
+import { mediaUrl } from '../../lib/media';
 
+const API = process.env.REACT_APP_API_URL || '/api/v1';
+
+/** Live marketplace — stores + shared category chips from API. */
 const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState<{ slug: string; name?: string }>({
+    slug: 'all',
+  });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const categories = [
-    { id: 'all', name: 'All' },
-    { id: 'food', name: '🍕 Food & Drinks' },
-    { id: 'grocery', name: '🛒 Groceries' },
-    { id: 'fashion', name: '👕 Fashion' },
-    { id: 'electronics', name: '📱 Electronics' },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [catRes, storeRes] = await Promise.all([
+          axios.get(`${API}/categories`),
+          axios.get(`${API}/stores`, {
+            params: {
+              search: searchQuery || undefined,
+              category:
+                selectedCategory.slug !== 'all'
+                  ? selectedCategory.name || selectedCategory.slug
+                  : undefined,
+            },
+          }),
+        ]);
+        if (cancelled) return;
+        setCategories(catRes.data.data || []);
+        setStores(storeRes.data.data || []);
+        setError('');
+      } catch (e: any) {
+        if (!cancelled) setError(e?.response?.data?.message || e.message || 'Failed to load');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory, searchQuery]);
 
-  const stores = [
-    { id: 1, name: 'Foodco Supermarket', category: 'grocery', rating: 4.8, reviews: 245, distance: '0.5 km', image: '🏪' },
-    { id: 2, name: 'Pizza Palace', category: 'food', rating: 4.6, reviews: 512, distance: '1.2 km', image: '🍕' },
-    { id: 3, name: 'Tech Hub', category: 'electronics', rating: 4.9, reviews: 189, distance: '2 km', image: '📱' },
-    { id: 4, name: 'Fashion Boutique', category: 'fashion', rating: 4.7, reviews: 324, distance: '1.8 km', image: '👔' },
-    { id: 5, name: 'Fresh Juices', category: 'food', rating: 4.5, reviews: 156, distance: '0.8 km', image: '🥤' },
-    { id: 6, name: 'Shoe Store Plus', category: 'fashion', rating: 4.4, reviews: 278, distance: '2.3 km', image: '👞' },
-  ];
-
-  const filteredStores = selectedCategory === 'all' 
-    ? stores 
-    : stores.filter(s => s.category === selectedCategory);
+  const chips = useMemo(
+    () => [{ id: 'all', name: 'All', slug: 'all' }, ...categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug }))],
+    [categories]
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-8 text-white">
+      <div className="rounded-xl p-8 text-pure-white bg-movr-gradient">
         <h1 className="text-4xl font-bold mb-2">Marketplace</h1>
-        <p className="text-green-100">Shop from thousands of stores and merchants</p>
+        <p className="text-pure-white/80">Shop from neighbourhood stores on Movr</p>
       </div>
 
-      {/* Search Bar */}
-      <div className="card p-6">
+      <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="relative mb-6">
-          <Search className="absolute left-4 top-3 text-gray-400" size={20} />
+          <Search className="absolute left-4 top-3 text-text-secondary" size={20} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search stores or products..."
-            className="input-base pl-12 text-lg"
+            placeholder="Search stores..."
+            className="w-full rounded-xl bg-surface-elevated border border-border pl-12 pr-4 py-3"
           />
         </div>
 
-        {/* Categories */}
         <div className="flex overflow-x-auto gap-2 pb-2">
-          {categories.map((cat) => (
+          {chips.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
+              type="button"
+              onClick={() =>
+                setSelectedCategory(
+                  cat.slug === 'all'
+                    ? { slug: 'all' }
+                    : { slug: cat.slug || cat.id, name: cat.name }
+                )
+              }
               className={`px-4 py-2 rounded-full whitespace-nowrap transition-all ${
-                selectedCategory === cat.id
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                selectedCategory.slug === (cat.slug || cat.id)
+                  ? 'bg-motion-blue text-pure-white'
+                  : 'bg-surface-elevated text-text-primary hover:border-electric-violet border border-transparent'
               }`}
             >
               {cat.name}
@@ -67,35 +98,49 @@ const MarketplacePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Stores Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredStores.map((store) => (
-          <div
-            key={store.id}
-            className="card overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-            onClick={() => navigate(`/store/${store.id}`)}
-          >
-            <div className="h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-6xl">
-              {store.image}
-            </div>
-            <div className="p-4">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">{store.name}</h3>
-              <div className="flex items-center gap-2 mb-3">
-                <Star className="text-yellow-400 fill-yellow-400" size={16} />
-                <span className="font-semibold text-gray-900">{store.rating}</span>
-                <span className="text-gray-600">({store.reviews})</span>
+      {error ? <p className="text-error">{error}</p> : null}
+      {loading ? <p className="text-text-secondary">Loading stores…</p> : null}
+
+      {!loading && stores.length === 0 ? (
+        <p className="text-text-secondary">No stores found. Merchants can publish storefronts from the merchant portal.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {stores.map((store) => (
+            <button
+              key={store.id}
+              type="button"
+              className="text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors"
+              onClick={() => navigate(`/store/${store.id}`)}
+            >
+              <div className="h-40 bg-surface-elevated flex items-center justify-center overflow-hidden">
+                {store.banner_url ? (
+                  <img
+                    src={mediaUrl(store.banner_url)}
+                    alt={store.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl opacity-40">🏪</span>
+                )}
               </div>
-              <div className="flex items-center gap-1 text-gray-600 mb-4">
-                <MapPin size={16} />
-                <span className="text-sm">{store.distance}</span>
+              <div className="p-4 space-y-2">
+                <h3 className="font-semibold text-lg truncate">{store.name}</h3>
+                <p className="text-sm text-text-secondary truncate">{store.category || 'Store'}</p>
+                <div className="flex items-center justify-between text-sm text-text-secondary">
+                  <span className="inline-flex items-center gap-1">
+                    <Star size={14} className="text-warning" />
+                    {Number(store.rating || 0).toFixed(1)}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin size={14} />
+                    Nearby
+                  </span>
+                </div>
               </div>
-              <button className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors">
-                View Store
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

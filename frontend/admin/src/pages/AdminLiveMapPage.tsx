@@ -13,14 +13,14 @@ type Marker = {
 };
 
 const KIND_COLOR: Record<string, string> = {
-  ride: '#0055FF',
-  rides: '#0055FF',
-  parcel: '#3F7048',
-  parcels: '#3F7048',
-  shop: '#FFB800',
-  shops: '#FFB800',
-  rental: '#6A00FF',
-  rentals: '#6A00FF',
+  ride: 'var(--motion-blue)',
+  rides: 'var(--motion-blue)',
+  parcel: 'var(--movr-green)',
+  parcels: 'var(--movr-green)',
+  shop: 'var(--warning)',
+  shops: 'var(--warning)',
+  rental: 'var(--electric-violet)',
+  rentals: 'var(--electric-violet)',
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -116,7 +116,7 @@ export default function AdminLiveMapPage() {
       ...m,
       left: `${clamp(left, 4, 96)}%`,
       top: `${clamp(top, 4, 96)}%`,
-      color: KIND_COLOR[kind] || '#0055FF',
+      color: KIND_COLOR[kind] || 'var(--motion-blue)',
     };
   });
 
@@ -172,25 +172,25 @@ export default function AdminLiveMapPage() {
 const styles: Record<string, React.CSSProperties> = {
   filters: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
   pill: {
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     borderRadius: 999,
     padding: '8px 14px',
     background: 'transparent',
-    color: '#A0A0A0',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
     fontWeight: 600,
   },
   pillOn: {
-    background: '#1E1B4B',
-    borderColor: '#1E1B4B',
-    color: '#fff',
+    background: 'var(--surface-elevated)',
+    borderColor: 'var(--surface-elevated)',
+    color: 'var(--pure-white)',
   },
   map: {
     position: 'relative',
     height: '70vh',
     borderRadius: 16,
-    border: '1px solid #2A2A2A',
-    background: '#0A0A0A',
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
     overflow: 'hidden',
   },
   grid: {
@@ -198,7 +198,7 @@ const styles: Record<string, React.CSSProperties> = {
     inset: 0,
     opacity: 0.35,
     backgroundImage:
-      'linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px)',
+      'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
     backgroundSize: '32px 32px',
   },
   dot: {
@@ -213,7 +213,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#888',
+    color: 'var(--text-secondary)',
     pointerEvents: 'none',
   },
   list: {
@@ -224,17 +224,17 @@ const styles: Record<string, React.CSSProperties> = {
     maxHeight: '60%',
     overflow: 'auto',
     background: 'rgba(0,0,0,0.85)',
-    border: '1px solid #333',
+    border: '1px solid var(--border)',
     borderRadius: 12,
     padding: 10,
   },
-  listItem: { fontSize: 12, color: '#CFCFCF', padding: '4px 0' },
+  listItem: { fontSize: 12, color: 'var(--text-secondary)', padding: '4px 0' },
   badge: {
     position: 'absolute',
     left: 16,
     bottom: 16,
-    background: '#000',
-    border: '1px solid #333',
+    background: 'var(--jet-black)',
+    border: '1px solid var(--border)',
     borderRadius: 999,
     padding: '8px 12px',
     fontSize: 13,

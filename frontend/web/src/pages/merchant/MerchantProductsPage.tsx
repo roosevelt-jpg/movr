@@ -3,52 +3,130 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import { mediaUrl, uploadCatalogImage } from '../../lib/media';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
-const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
+const API = process.env.REACT_APP_API_URL || '/api/v1';
+const token = () => localStorage.getItem('movr_merchant_token') || '';
+const headers = () => ({ Authorization: `Bearer ${token()}` });
 
-/** Products table — checkboxes, variants, stock badges, add product. */
+/** Products CRUD — category picker, image, stock, edit/delete. */
 export default function MerchantProductsPage() {
   const { formatMoney } = useLocalCurrency();
   const [products, setProducts] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [categories, setCategories] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ storeId: '', name: '', price: '', variant: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    storeId: '',
+    name: '',
+    price: '',
+    variant: '',
+    description: '',
+    categoryId: '',
+    imageUrl: '',
+  });
 
   const load = async () => {
-    const [p, s] = await Promise.all([
+    const [p, s, c] = await Promise.all([
       axios.get(`${API}/merchant/products`, { headers: headers() }),
       axios.get(`${API}/merchant/stores`, { headers: headers() }),
+      axios.get(`${API}/merchant/categories`, { headers: headers() }),
     ]);
-    const rows = p.data.data || [];
-    setProducts(rows);
+    setProducts(p.data.data || []);
     setStores(s.data.data || []);
-    if (s.data.data?.[0] && !form.storeId) setForm((f) => ({ ...f, storeId: s.data.data[0].id }));
+    setCategories(c.data.data || []);
+    if (s.data.data?.[0] && !form.storeId) {
+      setForm((f) => ({ ...f, storeId: s.data.data[0].id }));
+    }
   };
 
   useEffect(() => {
     load().catch((e) => toast.error(e.message));
   }, []);
 
+  const resetForm = () => {
+    setForm((f) => ({
+      ...f,
+      name: '',
+      price: '',
+      variant: '',
+      description: '',
+      categoryId: '',
+      imageUrl: '',
+    }));
+    setEditingId(null);
+    setShowAdd(false);
+  };
+
+  const startEdit = (p: any) => {
+    setEditingId(p.id);
+    setShowAdd(true);
+    setForm({
+      storeId: p.store_id,
+      name: p.name || '',
+      price: String(p.price ?? ''),
+      variant: p.variants?.[0]?.name || '',
+      description: p.description || '',
+      categoryId: p.category_id || '',
+      imageUrl: p.image_url || '',
+    });
+  };
+
+  const onImage = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      const url = await uploadCatalogImage(file, token());
+      setForm((f) => ({ ...f, imageUrl: url }));
+      toast.success('Image uploaded');
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await axios.post(
-      `${API}/merchant/products`,
-      { storeId: form.storeId, name: form.name, price: Number(form.price) },
-      { headers: headers() }
-    );
-    if (form.variant) {
-      await axios.post(
-        `${API}/merchant/products/${res.data.data.id}/variants`,
-        { name: form.variant, priceDelta: 0 },
-        { headers: headers() }
-      );
+    try {
+      if (editingId) {
+        await axios.patch(
+          `${API}/merchant/products/${editingId}`,
+          {
+            name: form.name,
+            price: Number(form.price),
+            description: form.description || undefined,
+            categoryId: form.categoryId || undefined,
+            imageUrl: form.imageUrl || undefined,
+          },
+          { headers: headers() }
+        );
+        toast.success('Product updated');
+      } else {
+        const res = await axios.post(
+          `${API}/merchant/products`,
+          {
+            storeId: form.storeId,
+            name: form.name,
+            price: Number(form.price),
+            description: form.description || undefined,
+            categoryId: form.categoryId || undefined,
+            imageUrl: form.imageUrl || undefined,
+          },
+          { headers: headers() }
+        );
+        if (form.variant) {
+          await axios.post(
+            `${API}/merchant/products/${res.data.data.id}/variants`,
+            { name: form.variant, priceDelta: 0 },
+            { headers: headers() }
+          );
+        }
+        toast.success('Product added');
+      }
+      resetForm();
+      await load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message);
     }
-    toast.success('Product added');
-    setForm((f) => ({ ...f, name: '', price: '', variant: '' }));
-    setShowAdd(false);
-    await load();
   };
 
   const toggleStock = async (p: any) => {
@@ -59,10 +137,19 @@ export default function MerchantProductsPage() {
         { headers: headers() }
       );
       await load();
-    } catch {
-      setProducts((prev) =>
-        prev.map((row) => (row.id === p.id ? { ...row, in_stock: !row.in_stock } : row))
-      );
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const remove = async (p: any) => {
+    if (!window.confirm(`Delete ${p.name}?`)) return;
+    try {
+      await axios.delete(`${API}/merchant/products/${p.id}`, { headers: headers() });
+      toast.success('Deleted');
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
     }
   };
 
@@ -71,8 +158,11 @@ export default function MerchantProductsPage() {
       <div className="flex items-center justify-between gap-4 mb-6">
         <h1 className="text-3xl font-bold">Products</h1>
         <button
-          onClick={() => setShowAdd((v) => !v)}
-          className="rounded-xl px-4 py-2.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          onClick={() => {
+            resetForm();
+            setShowAdd(true);
+          }}
+          className="rounded-xl px-4 py-2.5 font-semibold bg-movr-gradient"
         >
           + Add product
         </button>
@@ -81,12 +171,13 @@ export default function MerchantProductsPage() {
       {showAdd ? (
         <form
           onSubmit={create}
-          className="grid md:grid-cols-5 gap-3 bg-[#121212] border border-[#2A2A2A] rounded-2xl p-4 mb-6"
+          className="grid md:grid-cols-3 gap-3 bg-surface-elevated border border-border rounded-2xl p-4 mb-6"
         >
           <select
-            className="rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2"
+            className="rounded-xl bg-surface border border-border px-3 py-2"
             value={form.storeId}
             onChange={(e) => setForm({ ...form, storeId: e.target.value })}
+            disabled={!!editingId}
           >
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
@@ -94,67 +185,131 @@ export default function MerchantProductsPage() {
               </option>
             ))}
           </select>
+          <select
+            className="rounded-xl bg-surface border border-border px-3 py-2"
+            value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+          >
+            <option value="">Category…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
           <input
-            className="rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2"
+            className="rounded-xl bg-surface border border-border px-3 py-2"
             placeholder="Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
           />
           <input
-            className="rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2"
-            placeholder="Variant"
-            value={form.variant}
-            onChange={(e) => setForm({ ...form, variant: e.target.value })}
-          />
-          <input
-            className="rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2"
+            className="rounded-xl bg-surface border border-border px-3 py-2"
             placeholder="Price"
             value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })}
+            required
           />
-          <button className="rounded-xl bg-gradient-to-r from-[#6A00FF] to-[#0055FF] font-semibold">
-            Save
-          </button>
+          {!editingId ? (
+            <input
+              className="rounded-xl bg-surface border border-border px-3 py-2"
+              placeholder="Variant (optional)"
+              value={form.variant}
+              onChange={(e) => setForm({ ...form, variant: e.target.value })}
+            />
+          ) : (
+            <div />
+          )}
+          <label className="rounded-xl border border-dashed border-border px-3 py-2 text-center cursor-pointer text-sm text-text-secondary">
+            {form.imageUrl ? 'Change image' : 'Upload image'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => onImage(e.target.files?.[0])}
+            />
+          </label>
+          <textarea
+            className="md:col-span-2 rounded-xl bg-surface border border-border px-3 py-2 min-h-[72px]"
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <div className="flex gap-2">
+            <button type="submit" className="flex-1 rounded-xl bg-movr-gradient font-semibold py-2">
+              {editingId ? 'Update' : 'Save'}
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-border px-4"
+              onClick={resetForm}
+            >
+              Cancel
+            </button>
+          </div>
+          {form.imageUrl ? (
+            <img
+              src={mediaUrl(form.imageUrl)}
+              alt=""
+              className="md:col-span-3 h-28 w-full object-cover rounded-xl"
+            />
+          ) : null}
         </form>
       ) : null}
 
-      <div className="rounded-2xl border border-[#2A2A2A] overflow-hidden bg-[#0A0A0A]">
-        <div className="grid grid-cols-[40px_1.4fr_1.2fr_0.8fr_0.9fr] gap-2 px-4 py-3 text-sm text-[#888]">
-          <span />
+      <div className="rounded-2xl border border-border overflow-hidden bg-surface">
+        <div className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.9fr] gap-2 px-4 py-3 text-sm text-text-secondary">
           <span>Product</span>
-          <span>Variant</span>
+          <span>Category</span>
           <span>Price</span>
           <span>Status</span>
+          <span />
         </div>
-        {products.map((p) => (
-          <div
-            key={p.id}
-            className="grid grid-cols-[40px_1.4fr_1.2fr_0.8fr_0.9fr] gap-2 px-4 py-4 border-t border-[#1A1A1A] items-center text-sm"
-          >
-            <input
-              type="checkbox"
-              checked={!!selected[p.id]}
-              onChange={() => setSelected((s) => ({ ...s, [p.id]: !s[p.id] }))}
-              className="accent-[#6A00FF]"
-            />
-            <span className="font-medium">{p.name}</span>
-            <span className="text-[#A0A0A0]">
-              {p.variant || p.variants?.[0]?.name || '—'}
-            </span>
-            <span className="text-[#A0A0A0]">{formatMoney(Number(p.price))}</span>
-            <button onClick={() => toggleStock(p)}>
-              <span
-                className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  p.in_stock !== false
-                    ? 'bg-[#3F7048]/30 text-[#9BE0A8]'
-                    : 'bg-[#FF3B5C]/20 text-[#FF8FA0]'
-                }`}
-              >
-                {p.in_stock !== false ? 'In stock' : 'Out of stock'}
+        {products.length === 0 ? (
+          <p className="px-4 py-8 text-text-secondary text-sm">No products yet. Add your first one.</p>
+        ) : (
+          products.map((p) => (
+            <div
+              key={p.id}
+              className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.9fr] gap-2 px-4 py-4 border-t border-border items-center text-sm"
+            >
+              <span className="font-medium flex items-center gap-2 min-w-0">
+                {p.image_url ? (
+                  <img
+                    src={mediaUrl(p.image_url)}
+                    alt=""
+                    className="w-10 h-10 rounded-lg object-cover shrink-0"
+                  />
+                ) : (
+                  <span className="w-10 h-10 rounded-lg bg-border shrink-0" />
+                )}
+                <span className="truncate">{p.name}</span>
               </span>
-            </button>
-          </div>
-        ))}
+              <span className="text-text-secondary">{p.category_name || '—'}</span>
+              <span className="text-text-secondary">{formatMoney(Number(p.price))}</span>
+              <button type="button" onClick={() => toggleStock(p)}>
+                <span
+                  className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    p.in_stock !== false
+                      ? 'bg-movr-green/30 text-success'
+                      : 'bg-error/20 text-error'
+                  }`}
+                >
+                  {p.in_stock !== false ? 'In stock' : 'Out of stock'}
+                </span>
+              </button>
+              <div className="flex gap-3 justify-end">
+                <button type="button" className="text-motion-blue" onClick={() => startEdit(p)}>
+                  Edit
+                </button>
+                <button type="button" className="text-error" onClick={() => remove(p)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </MerchantShell>
   );

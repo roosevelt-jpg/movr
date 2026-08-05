@@ -92,14 +92,14 @@ export default function MovrBotPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-black text-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2A2A2A]">
-        <div className="w-10 h-10 rounded-full bg-[#6A00FF] flex items-center justify-center font-bold">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+        <div className="w-10 h-10 rounded-full bg-electric-violet flex items-center justify-center font-bold">
           M
         </div>
         <div>
           <p className="font-semibold">Movr Bot</p>
-          <p className="text-xs text-[#7CFC9A]">bot</p>
+          <p className="text-xs text-success">bot</p>
         </div>
       </div>
 
@@ -108,11 +108,11 @@ export default function MovrBotPage() {
           <div
             key={m.id}
             className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm ${
-              m.from === 'user' ? 'ml-auto bg-[#0055FF]' : 'bg-[#1A1A1A]'
+              m.from === 'user' ? 'ml-auto bg-motion-blue' : 'bg-surface-elevated'
             }`}
           >
             <p>{m.text}</p>
-            {m.hint ? <p className="text-[#7CFC9A] text-xs mt-1">{m.hint}</p> : null}
+            {m.hint ? <p className="text-success text-xs mt-1">{m.hint}</p> : null}
           </div>
         ))}
         <div ref={endRef} />
@@ -122,7 +122,7 @@ export default function MovrBotPage() {
         <button
           type="button"
           onClick={shareLocation}
-          className="mx-4 mb-2 rounded-full border border-[#3A3A3A] py-3 text-sm font-semibold"
+          className="mx-4 mb-2 rounded-full border border-border py-3 text-sm font-semibold"
         >
           📍 Share location
         </button>
@@ -133,32 +133,32 @@ export default function MovrBotPage() {
           <button
             type="button"
             onClick={() => confirm('economy')}
-            className="flex-1 rounded-full border border-[#0055FF] py-3 font-semibold"
+            className="flex-1 rounded-full border border-motion-blue py-3 font-semibold"
           >
             Economy
           </button>
           <button
             type="button"
             onClick={() => confirm('comfort')}
-            className="flex-1 rounded-full border border-[#0055FF] py-3 font-semibold"
+            className="flex-1 rounded-full border border-motion-blue py-3 font-semibold"
           >
             Comfort
           </button>
         </div>
       ) : null}
 
-      <div className="p-3 border-t border-[#2A2A2A] flex gap-2">
+      <div className="p-3 border-t border-border flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Type a message..."
-          className="flex-1 rounded-full bg-[#1A1A1A] px-5 py-3 outline-none placeholder:text-[#666]"
+          className="flex-1 rounded-full bg-surface-elevated px-5 py-3 outline-none placeholder:text-text-secondary"
         />
         <button
           type="button"
           onClick={send}
-          className="rounded-full bg-[#0055FF] px-5 font-semibold"
+          className="rounded-full bg-motion-blue px-5 font-semibold"
         >
           Send
         </button>

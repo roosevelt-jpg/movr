@@ -76,19 +76,19 @@ export default function NotificationPrefsPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-black text-white p-6 md:p-8 max-w-lg font-[Poppins,Montserrat,sans-serif]">
-      <button type="button" onClick={() => navigate('/profile')} className="text-[#A0A0A0] text-sm mb-4">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white p-6 md:p-8 max-w-lg font-[Poppins,Montserrat,sans-serif]">
+      <button type="button" onClick={() => navigate('/profile')} className="text-text-secondary text-sm mb-4">
         ← Profile
       </button>
       <h1 className="text-3xl font-bold mb-8">Notifications</h1>
 
       {SECTIONS.map((sec) => (
         <div key={sec.title} className="mb-8">
-          <p className="text-xs tracking-wider text-[#8E8E93] mb-2">{sec.title}</p>
+          <p className="text-xs tracking-wider text-text-secondary mb-2">{sec.title}</p>
           {sec.keys.map((row) => (
             <div
               key={row.key}
-              className="flex items-center justify-between py-4 border-b border-[#2A2A2A]"
+              className="flex items-center justify-between py-4 border-b border-border"
             >
               <span className="font-medium">{row.label}</span>
               <button
@@ -97,8 +97,8 @@ export default function NotificationPrefsPage() {
                 onClick={() => toggle(row.key)}
                 className={`w-12 h-7 rounded-full p-0.5 flex ${
                   prefs[row.key]
-                    ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF] justify-end'
-                    : 'bg-[#3A3A3A] justify-start'
+                    ? 'bg-movr-gradient justify-end'
+                    : 'bg-border justify-start'
                 }`}
               >
                 <span className="w-6 h-6 rounded-full bg-white block" />

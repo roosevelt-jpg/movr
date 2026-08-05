@@ -82,10 +82,10 @@ export default function MerchantDashboardPage() {
 
   const statusBadge = (status: string) => {
     const s = String(status).toLowerCase();
-    if (s.includes('prepar')) return 'bg-[#0055FF]/25 text-[#8FB3FF] border-[#0055FF]/40';
+    if (s.includes('prepar')) return 'bg-motion-blue/25 text-motion-blue border-motion-blue/40';
     if (s.includes('delivery') || s.includes('courier'))
-      return 'bg-[#FFB800]/15 text-[#FFB800] border-[#FFB800]/40';
-    return 'bg-[#2A2A2A] text-[#A0A0A0] border-[#2A2A2A]';
+      return 'bg-warning/15 text-warning border-warning/40';
+    return 'bg-border text-text-secondary border-border';
   };
 
   return (
@@ -96,7 +96,7 @@ export default function MerchantDashboardPage() {
           <button
             onClick={() => setFilter('all')}
             className={`rounded-full px-4 py-1.5 text-sm border ${
-              filter === 'all' ? 'border-white text-white' : 'border-[#2A2A2A] text-[#A0A0A0]'
+              filter === 'all' ? 'border-pure-white text-pure-white' : 'border-border text-text-secondary'
             }`}
           >
             All
@@ -104,7 +104,7 @@ export default function MerchantDashboardPage() {
           <button
             onClick={() => setFilter('pending')}
             className={`rounded-full px-4 py-1.5 text-sm border ${
-              filter === 'pending' ? 'border-[#0055FF] text-white' : 'border-[#2A2A2A] text-[#A0A0A0]'
+              filter === 'pending' ? 'border-motion-blue text-pure-white' : 'border-border text-text-secondary'
             }`}
           >
             Pending ({pendingCount})
@@ -118,14 +118,14 @@ export default function MerchantDashboardPage() {
           return (
             <div
               key={o.id}
-              className="rounded-2xl bg-[#141414] border border-[#2A2A2A] p-4 flex flex-wrap items-center justify-between gap-4"
+              className="rounded-2xl bg-surface-elevated border border-border p-4 flex flex-wrap items-center justify-between gap-4"
             >
               <div>
                 <p className="font-semibold">
                   Order #{String(o.id).slice(0, 4).toUpperCase()}
                   {o.customer_name ? ` · ${o.customer_name}` : ''}
                 </p>
-                <p className="text-sm text-[#A0A0A0] mt-1">
+                <p className="text-sm text-text-secondary mt-1">
                   {o.item_count || o.items_count || '—'} items · {formatMoney(Number(o.total || 0))}
                 </p>
               </div>
@@ -133,13 +133,13 @@ export default function MerchantDashboardPage() {
                 {pending ? (
                   <>
                     <button
-                      className="rounded-lg px-4 py-2 text-sm font-semibold bg-[#3F7048]"
+                      className="rounded-lg px-4 py-2 text-sm font-semibold bg-movr-green"
                       onClick={() => act(o.id, 'accept')}
                     >
                       Accept
                     </button>
                     <button
-                      className="rounded-lg px-4 py-2 text-sm font-semibold border border-[#FF3B5C]/50 text-[#FF3B5C]"
+                      className="rounded-lg px-4 py-2 text-sm font-semibold border border-error/50 text-error"
                       onClick={() => act(o.id, 'reject')}
                     >
                       Reject
@@ -151,19 +151,19 @@ export default function MerchantDashboardPage() {
                   </span>
                 )}
                 <button
-                  className="text-sm text-[#0055FF]"
+                  className="text-sm text-motion-blue"
                   onClick={() => navigate(`/merchant/orders/${o.id}`)}
                 >
                   View
                 </button>
                 <button
-                  className="text-sm text-[#A0A0A0]"
+                  className="text-sm text-text-secondary"
                   onClick={() => openTracking(o).catch((e) => toast.error(e.message))}
                 >
                   Track
                 </button>
                 <button
-                  className="text-xs text-[#A0A0A0]"
+                  className="text-xs text-text-secondary"
                   onClick={() => setDeliveryMode(o.id, 'movr_courier')}
                 >
                   MOVR courier
@@ -172,7 +172,7 @@ export default function MerchantDashboardPage() {
             </div>
           );
         })}
-        {!visible.length ? <p className="text-[#A0A0A0]">No orders in this filter.</p> : null}
+        {!visible.length ? <p className="text-text-secondary">No orders in this filter.</p> : null}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -184,17 +184,17 @@ export default function MerchantDashboardPage() {
           { label: 'Orders', value: String(stats.orders) },
           { label: 'Avg order', value: formatMoney(stats.avg) },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl bg-[#141414] border border-[#2A2A2A] p-5">
-            <p className="text-sm text-[#A0A0A0]">{s.label}</p>
+          <div key={s.label} className="rounded-2xl bg-surface-elevated border border-border p-5">
+            <p className="text-sm text-text-secondary">{s.label}</p>
             <p className="text-3xl font-bold mt-3">{s.value}</p>
           </div>
         ))}
       </div>
 
       {selected && tracking ? (
-        <div className="mt-6 rounded-2xl bg-[#141414] border border-[#2A2A2A] p-4">
+        <div className="mt-6 rounded-2xl bg-surface-elevated border border-border p-4">
           <h2 className="font-semibold mb-2">Tracking · {tracking.room}</h2>
-          <p className="text-[#A0A0A0] text-sm">
+          <p className="text-text-secondary text-sm">
             Mode: {tracking.deliveryMode || 'unset'} · Courier: {tracking.courierId || 'none'}
           </p>
         </div>

@@ -114,12 +114,12 @@ const OtpVerifyPage: React.FC = () => {
   return (
     <div className="w-full text-center">
       <div className="flex justify-center mb-4">
-        <Mail className="text-[#0055FF]" size={40} />
+        <Mail className="text-motion-blue" size={40} />
       </div>
       <h1 className="text-2xl font-bold">
         {mode === 'reset' ? 'Enter reset code' : 'Verify your number'}
       </h1>
-      <p className="text-[#888] mt-3 mb-8">Code sent to {identifier || 'your account'}</p>
+      <p className="text-text-secondary mt-3 mb-8">Code sent to {identifier || 'your account'}</p>
 
       <form onSubmit={verify} className="space-y-6">
         <div className="flex justify-center gap-2">
@@ -135,14 +135,14 @@ const OtpVerifyPage: React.FC = () => {
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={1}
-              className={`w-12 h-14 rounded-xl bg-[#1C1C1E] text-center text-xl font-bold border-2 ${
-                i === active ? 'border-[#007AFF]' : 'border-transparent'
+              className={`w-12 h-14 rounded-xl bg-surface-elevated text-center text-xl font-bold border-2 ${
+                i === active ? 'border-motion-blue' : 'border-transparent'
               }`}
             />
           ))}
         </div>
 
-        <button type="button" className="text-sm text-[#888]" onClick={resend}>
+        <button type="button" className="text-sm text-text-secondary" onClick={resend}>
           {seconds > 0
             ? `Resend code in 0:${String(seconds).padStart(2, '0')}`
             : 'Resend code'}
@@ -151,14 +151,14 @@ const OtpVerifyPage: React.FC = () => {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
         >
           {loading ? 'Verifying...' : 'Verify'}
         </button>
 
         <Link
           to={mode === 'reset' ? '/forgot-password' : '/login'}
-          className="block text-sm text-[#4A72FF]"
+          className="block text-sm text-motion-blue"
         >
           {mode === 'reset' ? 'Use a different email or phone' : 'Back to sign in'}
         </Link>

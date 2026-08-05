@@ -1,119 +1,147 @@
+@import '../../design-system/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* MOVR Color System */
-:root {
-  /* Phase 0B brand tokens */
-  --jet-black: #000000;
-  --pure-white: #FFFFFF;
-  --electric-violet: #6A00FF;
-  --motion-blue: #0055FF;
-  --movr-green: #3F7048;
-  --surface: #0A0A0A;
-  --surface-elevated: #1A1A1A;
-  --success: #00D97A;
-  --error: #FF3B5C;
-  --warning: #FFB800;
-  --text-primary: #FFFFFF;
-  --text-secondary: #A0A0A0;
-  --border: #2A2A2A;
-  --movr-gradient: linear-gradient(135deg, #3F7048 0%, #6A00FF 50%, #0055FF 100%);
-
-  /* Legacy aliases (migrate off these) */
-  --primary: #6A00FF;
-  --primary-dark: #0055FF;
-  --primary-light: #6A00FF;
-  --secondary: #0055FF;
-  --secondary-light: #6A00FF;
-  --accent: #3F7048;
-  --accent-light: #00D97A;
-  --white: #FFFFFF;
-}
 
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
 }
 
-/* Custom fonts */
 body {
-  @apply font-sans antialiased;
+  @apply font-sans antialiased bg-jet-black text-text-primary;
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-/* Remove default input styling */
 input,
 textarea,
 select {
   @apply appearance-none;
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-surface;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-400 rounded;
+  @apply bg-border rounded-pill;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500;
+  @apply bg-text-secondary;
 }
 
-/* Custom utility classes */
+/* Brand utility classes (token-backed) */
 .btn-primary {
-  @apply px-6 py-2 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply px-6 py-2.5 text-pure-white font-semibold rounded-pill bg-movr-gradient shadow-active-glow disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-secondary {
-  @apply px-6 py-2 bg-white text-gray-900 font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors duration-200;
+  @apply px-6 py-2.5 text-pure-white font-semibold rounded-pill border border-pure-white/70 bg-transparent hover:bg-pure-white/5;
 }
 
 .input-base {
-  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors;
+  @apply w-full px-4 py-3 border border-border rounded-md bg-surface-elevated text-text-primary placeholder:text-text-secondary focus:outline-none focus:shadow-focus-glow;
 }
 
 .card {
-  @apply bg-white rounded-lg shadow-sm border border-gray-200;
+  @apply bg-surface-elevated rounded-lg border border-border;
 }
 
 .badge {
-  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+  @apply inline-flex items-center px-3 py-1 rounded-pill text-xs font-semibold;
 }
 
 .badge-success {
-  @apply bg-green-100 text-green-800;
+  @apply bg-success/20 text-success;
 }
 
 .badge-warning {
-  @apply bg-yellow-100 text-yellow-800;
+  @apply bg-warning/20 text-warning;
 }
 
 .badge-error {
-  @apply bg-red-100 text-red-800;
+  @apply bg-error/20 text-error;
 }
 
-/* Loading animation */
-@keyframes pulse-animation {
-  0%, 100% {
-    opacity: 1;
+.gradient-text {
+  @apply bg-movr-gradient bg-clip-text text-transparent;
+}
+
+/* Marketing hero only (Phase 0B) — not for in-app surfaces */
+.movr-hero {
+  @apply relative overflow-hidden bg-jet-black;
+}
+
+.movr-hero-shimmer {
+  height: 4px;
+  width: 100%;
+  background-image: linear-gradient(
+    90deg,
+    var(--movr-green) 0%,
+    var(--electric-violet) 35%,
+    var(--motion-blue) 50%,
+    var(--electric-violet) 65%,
+    var(--movr-green) 100%
+  );
+  background-size: 200% 100%;
+  animation: movr-shimmer 3s linear infinite;
+}
+
+.movr-hero-glow {
+  @apply pointer-events-none absolute rounded-full blur-3xl;
+  background: radial-gradient(circle, rgba(224, 196, 126, 0.35), transparent 70%);
+}
+
+.movr-hero-glow-a {
+  width: 42%;
+  height: 42%;
+  left: 8%;
+  top: 18%;
+  animation: movr-glow-pulse 5.5s ease-in-out infinite;
+}
+
+.movr-hero-glow-b {
+  width: 36%;
+  height: 36%;
+  right: 10%;
+  top: 28%;
+  animation: movr-glow-pulse 6.2s ease-in-out 0.8s infinite;
+}
+
+@keyframes movr-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes movr-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.55;
+    transform: scale(1.08);
   }
 }
 
-.animate-pulse-custom {
-  animation: pulse-animation 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Gradient text */
-.gradient-text {
-  @apply bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent;
+@media (prefers-reduced-motion: reduce) {
+  .movr-hero-shimmer,
+  .movr-hero-glow-a,
+  .movr-hero-glow-b,
+  .animate-movr-shimmer,
+  .animate-movr-glow-a,
+  .animate-movr-glow-b {
+    animation: none !important;
+  }
 }

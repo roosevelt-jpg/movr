@@ -106,7 +106,7 @@ export default function WithdrawEarningsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: '#fff', fontSize: 28, fontWeight: '700', marginBottom: spacing[5] },
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[5] },
   balanceCard: {
     borderRadius: radius.lg,
     padding: spacing[5],
@@ -122,19 +122,19 @@ const styles = StyleSheet.create({
   },
   balanceLabel: { color: 'rgba(255,255,255,0.75)', zIndex: 1, fontSize: 13 },
   balanceValue: {
-    color: '#fff',
+    color: colors.pureWhite,
     fontSize: 36,
     fontWeight: '800',
     marginTop: 8,
     zIndex: 1,
   },
-  label: { color: '#fff', marginBottom: 8, fontSize: 14 },
+  label: { color: colors.pureWhite, marginBottom: 8, fontSize: 14 },
   inputFocus: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.motionBlue,
-    color: '#fff',
+    color: colors.pureWhite,
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: spacing[4],
@@ -144,15 +144,15 @@ const styles = StyleSheet.create({
   method: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 16,
     marginBottom: spacing[5],
   },
-  methodText: { flex: 1, color: '#fff', fontWeight: '600' },
+  methodText: { flex: 1, color: colors.pureWhite, fontWeight: '600' },
   change: { color: colors.motionBlue, fontWeight: '700' },
-  msg: { color: '#A0A0A0', marginBottom: spacing[3] },
+  msg: { color: colors.textSecondary, marginBottom: spacing[3] },
   cta: {
     marginTop: 'auto' as any,
     marginBottom: spacing[4],
@@ -161,12 +161,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#3F7048',
+    backgroundColor: colors.movrGreen,
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
     opacity: 0.5,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

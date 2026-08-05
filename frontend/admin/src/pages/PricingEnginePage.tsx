@@ -73,8 +73,8 @@ export default function PricingEnginePage() {
 
   const combinedTone = (n: number) =>
     n >= 1.4
-      ? { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8' }
-      : { background: 'rgba(255,184,0,0.2)', color: '#FFB800' };
+      ? { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' }
+      : { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' };
 
   return (
     <AdminShell activeLabel="Pricing engine">
@@ -181,16 +181,16 @@ export default function PricingEnginePage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100vh',
-    background: '#000',
-    color: '#fff',
+    background: 'var(--jet-black)',
+    color: 'var(--pure-white)',
     padding: 32,
     fontFamily: 'Poppins, Montserrat, sans-serif',
   },
   nav: { display: 'flex', gap: 28, marginBottom: 28, flexWrap: 'wrap' },
-  navItem: { color: '#A0A0A0', fontSize: 14, fontWeight: 500, paddingBottom: 8 },
+  navItem: { color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, paddingBottom: 8 },
   navActive: {
-    color: '#fff',
-    borderBottom: '3px solid #0055FF',
+    color: 'var(--pure-white)',
+    borderBottom: '3px solid var(--motion-blue)',
   },
   headerRow: {
     display: 'flex',
@@ -205,40 +205,40 @@ const styles: Record<string, React.CSSProperties> = {
   headerActions: { display: 'flex', gap: 10 },
   region: {
     background: 'transparent',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 999,
     padding: '8px 14px',
     cursor: 'pointer',
   },
   newZone: {
-    background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
-    color: '#fff',
+    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 999,
     padding: '8px 16px',
     fontWeight: 700,
     cursor: 'pointer',
   },
-  live: { color: '#A0A0A0', marginBottom: 16, fontSize: 13 },
+  live: { color: 'var(--text-secondary)', marginBottom: 16, fontSize: 13 },
   tableWrap: {
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     overflow: 'hidden',
-    background: '#0A0A0A',
+    background: 'var(--surface)',
   },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: {
     textAlign: 'left',
-    color: '#A0A0A0',
+    color: 'var(--text-secondary)',
     fontWeight: 500,
     fontSize: 13,
     padding: '14px 16px',
-    borderBottom: '1px solid #2A2A2A',
+    borderBottom: '1px solid var(--border)',
   },
   td: {
     padding: '16px',
-    borderBottom: '1px solid #1A1A1A',
+    borderBottom: '1px solid var(--surface-elevated)',
     fontSize: 14,
   },
   pill: {
@@ -253,20 +253,20 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '10px 0',
-    borderBottom: '1px solid #1A1A1A',
+    borderBottom: '1px solid var(--surface-elevated)',
   },
   form: { display: 'flex', flexWrap: 'wrap', gap: 8 },
   input: {
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     padding: '8px 12px',
     borderRadius: 8,
   },
   btn: {
-    background: '#1A1A1A',
-    color: '#fff',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    color: 'var(--pure-white)',
+    border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '8px 14px',
     cursor: 'pointer',

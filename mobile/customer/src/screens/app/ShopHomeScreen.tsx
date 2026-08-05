@@ -135,10 +135,10 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radius.sm,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
   },
   cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
   cardCat: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
-  cardMeta: { color: '#D4AF37', marginTop: 6, fontSize: 13, fontWeight: '600' },
+  cardMeta: { color: colors.warning, marginTop: 6, fontSize: 13, fontWeight: '600' },
   empty: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[6] },
 });

@@ -6,6 +6,8 @@ export const spacing = tokens.spacing;
 export const radius = tokens.radius;
 export const elevation = tokens.elevation;
 export const typography = tokens.typography;
+export const adminDensity = (tokens as any).adminDensity;
+export const marketing = (tokens as any).marketing;
 
 export const theme = {
   colors,
@@ -14,6 +16,8 @@ export const theme = {
   radius,
   elevation,
   typography,
+  adminDensity,
+  marketing,
 } as const;
 
 export type MovrTheme = typeof theme;

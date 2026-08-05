@@ -7,18 +7,18 @@ export default function OnboardingIntroPage() {
   const { page, loading, error } = useCmsPage('onboarding');
 
   if (loading) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading…</div>;
+    return <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">Loading…</div>;
   }
   if (error || !page) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">
         Onboarding content not published in CMS
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
       <CmsSections sections={page.sections} />
     </div>
   );

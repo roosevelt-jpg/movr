@@ -153,7 +153,7 @@ export default function IdentityOnboardingScreen() {
         style={styles.input}
         value={idNumber}
         onChangeText={setIdNumber}
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.textSecondary}
         placeholder={fields?.regex || 'Enter ID number'}
       />
       <TextInput
@@ -161,7 +161,7 @@ export default function IdentityOnboardingScreen() {
         value={fullName}
         onChangeText={setFullName}
         placeholder="Full name as on ID"
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.textSecondary}
       />
 
       <Pressable style={styles.cta} onPress={submit}>
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
   },
-  countryOn: { borderColor: colors.electricViolet, backgroundColor: '#120024' },
+  countryOn: { borderColor: colors.electricViolet, backgroundColor: colors.surface },
   countryText: { color: colors.pureWhite, fontWeight: '600' },
   docRow: {
     flexDirection: 'row',
@@ -202,14 +202,14 @@ const styles = StyleSheet.create({
   badgeOk: { backgroundColor: 'rgba(63,112,72,0.35)' },
   badgeReq: { backgroundColor: 'rgba(255,184,0,0.2)' },
   badgeText: { fontSize: 12, fontWeight: '700' },
-  badgeOkText: { color: '#9BE0A8' },
-  badgeReqText: { color: '#FFB800' },
+  badgeOkText: { color: colors.success },
+  badgeReqText: { color: colors.warning },
   upload: {
     marginTop: spacing[3],
     marginBottom: spacing[4],
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#555',
+    borderColor: colors.border,
     borderRadius: radius.md,
     paddingVertical: spacing[6],
     alignItems: 'center',
@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
   uploadMeta: { color: colors.textSecondary, marginTop: 6, fontSize: 12 },
   label: { color: colors.pureWhite, marginBottom: spacing[1] },
   input: {
-    backgroundColor: '#0A0A0A',
-    borderColor: '#2A2A2A',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.md,
     color: colors.pureWhite,

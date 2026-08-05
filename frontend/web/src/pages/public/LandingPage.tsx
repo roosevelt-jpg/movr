@@ -11,7 +11,7 @@ const LandingPage: React.FC = () => {
 
   if (loading || global.loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">
         Loading…
       </div>
     );
@@ -19,18 +19,18 @@ const LandingPage: React.FC = () => {
 
   if (error || !page) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="text-xl font-bold">Homepage content not published</p>
-        <p className="text-[#A0A0A0] text-sm max-w-md">
+        <p className="text-text-secondary text-sm max-w-md">
           Seed the CMS from Admin → Site content, or run{' '}
-          <code className="text-white">pnpm --filter @movr/backend run db:seed-cms</code>
+          <code className="text-pure-white">pnpm --filter @movr/backend run db:seed-cms</code>
         </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
       {nav ? <CmsNav payload={nav.payload} /> : null}
       <CmsSections sections={page.sections} />
       <SiteFooter />

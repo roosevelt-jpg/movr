@@ -56,28 +56,28 @@ const ResetPasswordPage: React.FC = () => {
   return (
     <div className="w-full text-center">
       <div className="flex justify-center mb-4">
-        <Lock className="text-[#0055FF]" size={40} />
+        <Lock className="text-motion-blue" size={40} />
       </div>
       <h1 className="text-2xl font-bold">Create a new password</h1>
-      <p className="text-[#888] mt-3 mb-8">
+      <p className="text-text-secondary mt-3 mb-8">
         Choose a strong password for {identifier || 'your account'}
       </p>
 
       <form onSubmit={submit} className="space-y-5 text-left">
         <div>
-          <label className="block text-sm text-[#888] mb-2">New password</label>
+          <label className="block text-sm text-text-secondary mb-2">New password</label>
           <div className="relative">
             <input
               type={show ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 pr-12"
+              className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 pr-12"
               minLength={8}
               required
             />
             <button
               type="button"
-              className="absolute right-3 top-3.5 text-[#888]"
+              className="absolute right-3 top-3.5 text-text-secondary"
               onClick={() => setShow((v) => !v)}
             >
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -85,12 +85,12 @@ const ResetPasswordPage: React.FC = () => {
           </div>
         </div>
         <div>
-          <label className="block text-sm text-[#888] mb-2">Confirm password</label>
+          <label className="block text-sm text-text-secondary mb-2">Confirm password</label>
           <input
             type={show ? 'text' : 'password'}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            className="w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3"
+            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
             minLength={8}
             required
           />
@@ -99,12 +99,12 @@ const ResetPasswordPage: React.FC = () => {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#3F7048] via-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Update password'}
         </button>
 
-        <Link to="/login" className="block text-center text-sm text-[#4A72FF]">
+        <Link to="/login" className="block text-center text-sm text-motion-blue">
           Back to sign in
         </Link>
       </form>

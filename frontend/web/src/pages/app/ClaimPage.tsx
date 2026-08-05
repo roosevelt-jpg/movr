@@ -46,9 +46,9 @@ const ClaimPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl p-8 text-white bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
+      <div className="rounded-xl p-8 text-pure-white bg-movr-gradient">
         <h1 className="text-3xl font-bold">Claim DVT</h1>
-        <p className="text-white/80 mt-2">Merkle airdrop eligibility from the latest snapshot</p>
+        <p className="text-pure-white/80 mt-2">Merkle airdrop eligibility from the latest snapshot</p>
       </div>
 
       <div className="bg-white rounded-xl border p-6 space-y-4">
@@ -63,14 +63,14 @@ const ClaimPage: React.FC = () => {
               {eligibility.claimMode === 'custodial' ? (
                 <button
                   onClick={claimCustodial}
-                  className="bg-[#6A00FF] text-white px-5 py-2 rounded-lg font-semibold"
+                  className="bg-electric-violet text-pure-white px-5 py-2 rounded-lg font-semibold"
                 >
                   Claim (custodial)
                 </button>
               ) : (
                 <button
                   onClick={openExternal}
-                  className="bg-[#0055FF] text-white px-5 py-2 rounded-lg font-semibold"
+                  className="bg-motion-blue text-pure-white px-5 py-2 rounded-lg font-semibold"
                 >
                   Open claim DApp
                 </button>

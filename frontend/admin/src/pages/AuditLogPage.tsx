@@ -56,7 +56,7 @@ export default function AuditLogPage() {
   return (
     <AdminShell activeLabel="Audit">
       <h1 style={styles.h1}>Audit log</h1>
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
       <div style={styles.table}>
         <div style={styles.header}>
           <span>Admin</span>
@@ -72,7 +72,7 @@ export default function AuditLogPage() {
               <span>{r.admin}</span>
               <span>{r.action}</span>
               <span>{r.entity}</span>
-              <span style={{ color: '#A0A0A0' }}>{r.time}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{r.time}</span>
             </div>
           ))
         )}
@@ -83,13 +83,13 @@ export default function AuditLogPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, marginBottom: 20 },
-  table: { borderTop: '1px solid #1A1A1A' },
+  table: { borderTop: '1px solid var(--surface-elevated)' },
   header: {
     display: 'grid',
     gridTemplateColumns: '1fr 1.4fr 1.2fr 0.8fr',
     gap: 8,
     padding: '12px 4px',
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: 13,
   },
   row: {
@@ -97,8 +97,8 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: '1fr 1.4fr 1.2fr 0.8fr',
     gap: 8,
     padding: '16px 4px',
-    borderTop: '1px solid #1A1A1A',
+    borderTop: '1px solid var(--surface-elevated)',
     alignItems: 'center',
   },
-  empty: { padding: '24px 4px', color: '#888' },
+  empty: { padding: '24px 4px', color: 'var(--text-secondary)' },
 };

@@ -80,7 +80,7 @@ export default function MerchantOrderDetailPage() {
   if (loading) {
     return (
       <MerchantShell activePath="/merchant/dashboard">
-        <p className="text-[#A0A0A0]">Loading order…</p>
+        <p className="text-text-secondary">Loading order…</p>
       </MerchantShell>
     );
   }
@@ -91,13 +91,13 @@ export default function MerchantOrderDetailPage() {
         <button
           type="button"
           onClick={() => navigate('/merchant/dashboard')}
-          className="text-sm text-[#A0A0A0] mb-4 hover:text-white"
+          className="text-sm text-text-secondary mb-4 hover:text-pure-white"
         >
           ← Orders
         </button>
         <h1 className="text-3xl font-bold">Order not found</h1>
-        <p className="text-[#A0A0A0] mt-2">This order does not exist or is no longer available.</p>
-        <Link to="/merchant/dashboard" className="inline-block mt-6 text-[#8FB3FF] text-sm">
+        <p className="text-text-secondary mt-2">This order does not exist or is no longer available.</p>
+        <Link to="/merchant/dashboard" className="inline-block mt-6 text-motion-blue text-sm">
           Back to list
         </Link>
       </MerchantShell>
@@ -106,17 +106,17 @@ export default function MerchantOrderDetailPage() {
 
   const statusClass =
     String(order.status).toLowerCase().includes('prepar')
-      ? 'bg-[#0055FF]/25 text-[#8FB3FF]'
+      ? 'bg-motion-blue/25 text-motion-blue'
       : String(order.status).toLowerCase().includes('ready')
-        ? 'bg-[#3F7048]/30 text-[#8FCF9A]'
-        : 'bg-[#2A2A2A] text-[#A0A0A0]';
+        ? 'bg-movr-green/30 text-success'
+        : 'bg-border text-text-secondary';
 
   return (
     <MerchantShell activePath="/merchant/dashboard">
       <button
         type="button"
         onClick={() => navigate('/merchant/dashboard')}
-        className="text-sm text-[#A0A0A0] mb-4 hover:text-white"
+        className="text-sm text-text-secondary mb-4 hover:text-pure-white"
       >
         ← Orders
       </button>
@@ -124,7 +124,7 @@ export default function MerchantOrderDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold">Order #{order.id}</h1>
-          {order.placedLabel ? <p className="text-[#A0A0A0] mt-1">{order.placedLabel}</p> : null}
+          {order.placedLabel ? <p className="text-text-secondary mt-1">{order.placedLabel}</p> : null}
         </div>
         <span className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize ${statusClass}`}>
           {String(order.status).replace(/_/g, ' ')}
@@ -133,13 +133,13 @@ export default function MerchantOrderDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
         <div>
-          <p className="text-sm text-[#A0A0A0] mb-3">Items</p>
+          <p className="text-sm text-text-secondary mb-3">Items</p>
           {order.items.length === 0 ? (
-            <p className="text-[#A0A0A0]">No items on this order.</p>
+            <p className="text-text-secondary">No items on this order.</p>
           ) : (
             <ul className="space-y-3">
               {order.items.map((item: any, i: number) => (
-                <li key={i} className="flex justify-between gap-4 text-white">
+                <li key={i} className="flex justify-between gap-4 text-pure-white">
                   <span>
                     {item.product_name}
                     {item.quantity ? ` ×${item.quantity}` : ''}
@@ -151,15 +151,15 @@ export default function MerchantOrderDetailPage() {
               ))}
             </ul>
           )}
-          <div className="border-t border-[#2A2A2A] mt-4 pt-4 flex justify-between font-bold text-lg">
+          <div className="border-t border-border mt-4 pt-4 flex justify-between font-bold text-lg">
             <span>Total</span>
             <span>{formatMoney(Number(order.total))}</span>
           </div>
         </div>
 
         <div>
-          <p className="text-sm text-[#A0A0A0] mb-3">Delivery</p>
-          <div className="rounded-2xl bg-[#141414] border border-[#2A2A2A] p-5 space-y-1 text-[#C8C8C8]">
+          <p className="text-sm text-text-secondary mb-3">Delivery</p>
+          <div className="rounded-2xl bg-surface-elevated border border-border p-5 space-y-1 text-text-secondary">
             <p>{order.delivery.line1}</p>
             {order.delivery.line2 ? <p>{order.delivery.line2}</p> : null}
             <p>{order.delivery.line3}</p>
@@ -171,18 +171,18 @@ export default function MerchantOrderDetailPage() {
         <button
           type="button"
           onClick={markReady}
-          className="rounded-full px-6 py-3 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+          className="rounded-full px-6 py-3 font-semibold bg-movr-gradient"
         >
           Mark ready for pickup
         </button>
         <button
           type="button"
           onClick={printReceipt}
-          className="rounded-full px-6 py-3 font-semibold border border-[#3A3A3A] bg-[#141414]"
+          className="rounded-full px-6 py-3 font-semibold border border-border bg-surface-elevated"
         >
           Print receipt
         </button>
-        <Link to="/merchant/dashboard" className="rounded-full px-6 py-3 text-[#A0A0A0] text-sm self-center">
+        <Link to="/merchant/dashboard" className="rounded-full px-6 py-3 text-text-secondary text-sm self-center">
           Back to list
         </Link>
       </div>

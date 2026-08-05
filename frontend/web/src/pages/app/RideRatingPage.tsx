@@ -35,8 +35,8 @@ const RideRatingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]">
-      <div className="w-22 h-22 w-24 h-24 rounded-full bg-[#2A2A2A] mb-6" />
+    <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]">
+      <div className="w-22 h-22 w-24 h-24 rounded-full bg-border mb-6" />
       <h1 className="text-2xl font-bold text-center mb-6">How was your ride with Kwesi?</h1>
       <div className="flex gap-2 mb-8">
         {[1, 2, 3, 4, 5].map((n) => (
@@ -44,14 +44,14 @@ const RideRatingPage: React.FC = () => {
             key={n}
             type="button"
             onClick={() => setRating(n)}
-            className={`text-4xl ${n <= rating ? 'text-[#D4AF37]' : 'text-[#333]'}`}
+            className={`text-4xl ${n <= rating ? 'text-warning' : 'text-[var(--border)]'}`}
           >
             ★
           </button>
         ))}
       </div>
       <textarea
-        className="w-full max-w-md min-h-[100px] rounded-2xl bg-[#1A1A1A] p-4 placeholder:text-[#666] mb-4"
+        className="w-full max-w-md min-h-[100px] rounded-2xl bg-surface-elevated p-4 placeholder:text-text-secondary mb-4"
         placeholder="Add a comment (optional)"
         value={comment}
         onChange={(e) => setComment(e.target.value)}
@@ -63,7 +63,7 @@ const RideRatingPage: React.FC = () => {
             type="button"
             onClick={() => toggle(t)}
             className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-              selected.includes(t) ? 'border-[#0055FF]' : 'border-[#2A2A2A]'
+              selected.includes(t) ? 'border-motion-blue' : 'border-border'
             }`}
           >
             {t}
@@ -74,7 +74,7 @@ const RideRatingPage: React.FC = () => {
         type="button"
         disabled={loading}
         onClick={submit}
-        className="w-full max-w-md rounded-full py-3.5 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF] disabled:opacity-50"
+        className="w-full max-w-md rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
       >
         {loading ? 'Submitting...' : 'Submit rating'}
       </button>

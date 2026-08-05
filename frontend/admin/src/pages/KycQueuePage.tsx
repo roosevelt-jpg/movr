@@ -51,7 +51,7 @@ export default function KycQueuePage() {
       <p style={styles.sub}>
         {rows.length} application{rows.length === 1 ? '' : 's'} waiting for review
       </p>
-      {error ? <p style={{ color: '#FF8FA0' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.table}>
         <div style={styles.header}>
@@ -72,8 +72,8 @@ export default function KycQueuePage() {
                 {r.name}
               </span>
               <span>{r.role}</span>
-              <span style={{ color: '#A0A0A0' }}>{r.submitted}</span>
-              <span style={{ color: '#A0A0A0' }}>{r.docs}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{r.submitted}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{r.docs}</span>
               <span>
                 <span style={styles.badge}>{r.status}</span>
               </span>
@@ -90,14 +90,14 @@ export default function KycQueuePage() {
 
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, margin: 0 },
-  sub: { color: '#A0A0A0', marginTop: 8, marginBottom: 20 },
-  table: { borderTop: '1px solid #1A1A1A' },
+  sub: { color: 'var(--text-secondary)', marginTop: 8, marginBottom: 20 },
+  table: { borderTop: '1px solid var(--surface-elevated)' },
   header: {
     display: 'grid',
     gridTemplateColumns: '1.6fr 0.8fr 1fr 0.9fr 0.8fr 0.6fr',
     gap: 8,
     padding: '12px 4px',
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: 13,
   },
   row: {
@@ -105,28 +105,28 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: '1.6fr 0.8fr 1fr 0.9fr 0.8fr 0.6fr',
     gap: 8,
     padding: '16px 4px',
-    borderTop: '1px solid #1A1A1A',
+    borderTop: '1px solid var(--surface-elevated)',
     alignItems: 'center',
   },
-  empty: { padding: '24px 4px', color: '#888' },
+  empty: { padding: '24px 4px', color: 'var(--text-secondary)' },
   name: { display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600 },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: '50%',
-    background: '#2A2A2A',
+    background: 'var(--border)',
     display: 'inline-block',
   },
   badge: {
     background: 'rgba(255,184,0,0.2)',
-    color: '#FFB800',
+    color: 'var(--warning)',
     borderRadius: 999,
     padding: '4px 10px',
     fontSize: 12,
     fontWeight: 700,
   },
   review: {
-    color: '#4A86E8',
+    color: 'var(--motion-blue)',
     fontWeight: 600,
     textDecoration: 'none',
     justifySelf: 'end',

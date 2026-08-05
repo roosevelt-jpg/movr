@@ -122,10 +122,10 @@ const MerchantVerificationPage: React.FC = () => {
               style={{
                 ...styles.progressCircle,
                 backgroundColor:
-                  ['business', 'owner', 'license'].indexOf(step) >= idx ? '#000' : '#f0f0f0',
+                  ['business', 'owner', 'license'].indexOf(step) >= idx ? 'var(--jet-black)' : 'var(--border)',
               } as any}
             >
-              <span style={{ color: ['business', 'owner', 'license'].indexOf(step) >= idx ? '#fff' : '#999' }}>
+              <span style={{ color: ['business', 'owner', 'license'].indexOf(step) >= idx ? 'var(--pure-white)' : 'var(--text-secondary)' }}>
                 {idx + 1}
               </span>
             </div>
@@ -437,7 +437,7 @@ const styles = {
     maxWidth: '800px',
     margin: '0 auto',
     padding: '2rem',
-    backgroundColor: '#f9fafb',
+    backgroundColor: 'var(--surface-elevated)',
     minHeight: '100vh',
   },
   header: {
@@ -447,12 +447,12 @@ const styles = {
   title: {
     fontSize: '28px',
     fontWeight: 'bold',
-    color: '#000',
+    color: 'var(--jet-black)',
     margin: 0,
   },
   subtitle: {
     fontSize: '14px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     margin: '0.5rem 0 0',
   },
   progressContainer: {
@@ -480,20 +480,20 @@ const styles = {
   },
   progressLabel: {
     fontSize: '12px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     margin: 0,
   },
   formCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--pure-white)',
     padding: '2rem',
     borderRadius: '12px',
-    borderLeft: '4px solid #000',
+    borderLeft: '4px solid var(--jet-black)',
     marginBottom: '2rem',
   },
   formTitle: {
     fontSize: '20px',
     fontWeight: 'bold',
-    color: '#000',
+    color: 'var(--jet-black)',
     marginBottom: '1.5rem',
   },
   formGroup: {
@@ -508,13 +508,13 @@ const styles = {
     display: 'block',
     fontSize: '14px',
     fontWeight: '500',
-    color: '#000',
+    color: 'var(--jet-black)',
     marginBottom: '6px',
   },
   input: {
     width: '100%',
     padding: '10px',
-    border: '1px solid #ddd',
+    border: '1px solid var(--border)',
     borderRadius: '6px',
     fontSize: '14px',
     fontFamily: 'inherit',
@@ -522,12 +522,12 @@ const styles = {
   uploadSection: {
     marginTop: '2rem',
     paddingTop: '2rem',
-    borderTop: '1px solid #f0f0f0',
+    borderTop: '1px solid var(--border)',
   },
   uploadTitle: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#000',
+    color: 'var(--jet-black)',
     marginBottom: '1rem',
   },
   uploadGroup: {
@@ -537,11 +537,11 @@ const styles = {
     display: 'block',
     fontSize: '14px',
     fontWeight: '500',
-    color: '#000',
+    color: 'var(--jet-black)',
     marginBottom: '8px',
   },
   uploadBox: {
-    border: '2px dashed #ddd',
+    border: '2px dashed var(--border)',
     borderRadius: '8px',
     padding: '2rem',
     textAlign: 'center',
@@ -553,11 +553,11 @@ const styles = {
   },
   uploadText: {
     fontSize: '14px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     margin: 0,
   },
   infoBox: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'var(--surface-elevated)',
     padding: '1rem',
     borderRadius: '8px',
     marginTop: '1.5rem',
@@ -565,13 +565,13 @@ const styles = {
   infoTitle: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#000',
+    color: 'var(--jet-black)',
     margin: 0,
     marginBottom: '0.5rem',
   },
   infoList: {
     fontSize: '13px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     margin: 0,
     paddingLeft: '1.5rem',
   },
@@ -583,18 +583,18 @@ const styles = {
   backButton: {
     flex: 1,
     padding: '12px',
-    border: '1px solid #ddd',
+    border: '1px solid var(--border)',
     borderRadius: '6px',
-    backgroundColor: '#fff',
-    color: '#000',
+    backgroundColor: 'var(--pure-white)',
+    color: 'var(--jet-black)',
     fontWeight: '500',
     cursor: 'pointer',
   },
   nextButton: {
     flex: 1,
     padding: '12px',
-    backgroundColor: '#000',
-    color: '#fff',
+    backgroundColor: 'var(--jet-black)',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: '6px',
     fontWeight: '500',
@@ -603,15 +603,15 @@ const styles = {
   submitButton: {
     flex: 1,
     padding: '12px',
-    backgroundColor: '#4caf50',
-    color: '#fff',
+    backgroundColor: 'var(--success)',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: '6px',
     fontWeight: '500',
     cursor: 'pointer',
   },
   successCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--pure-white)',
     padding: '2rem',
     borderRadius: '12px',
     textAlign: 'center',
@@ -628,18 +628,18 @@ const styles = {
   successTitle: {
     fontSize: '24px',
     fontWeight: 'bold',
-    color: '#000',
+    color: 'var(--jet-black)',
     marginBottom: '0.5rem',
   },
   successText: {
     fontSize: '14px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     marginBottom: '1.5rem',
   },
   successButton: {
     padding: '12px 24px',
-    backgroundColor: '#4caf50',
-    color: '#fff',
+    backgroundColor: 'var(--success)',
+    color: 'var(--pure-white)',
     border: 'none',
     borderRadius: '6px',
     fontWeight: '500',
@@ -657,22 +657,22 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '1rem',
-    backgroundColor: '#f9fafb',
+    backgroundColor: 'var(--surface-elevated)',
     borderRadius: '8px',
   },
   statLabel: {
     fontSize: '12px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     marginBottom: '0.5rem',
   },
   statValue: {
     fontSize: '20px',
     fontWeight: 'bold',
-    color: '#000',
+    color: 'var(--jet-black)',
   },
   timelineText: {
     fontSize: '13px',
-    color: '#666',
+    color: 'var(--text-secondary)',
     marginTop: '1rem',
   },
 };

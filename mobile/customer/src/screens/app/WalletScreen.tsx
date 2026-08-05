@@ -89,7 +89,7 @@ export default function WalletScreen({
 
       {onRedeem ? (
         <Pressable onPress={onRedeem} style={{ marginBottom: spacing[4] }}>
-          <Text style={{ color: '#8FB3FF', textAlign: 'center' }}>Redeem points →</Text>
+          <Text style={{ color: colors.motionBlue, textAlign: 'center' }}>Redeem points →</Text>
         </Pressable>
       ) : null}
 
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   balanceCard: {
     borderRadius: radius.lg,
     padding: spacing[5],
-    backgroundColor: '#1a1040',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
     marginBottom: spacing[4],
   },

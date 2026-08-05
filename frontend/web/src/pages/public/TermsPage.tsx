@@ -12,19 +12,19 @@ export default function TermsPage() {
   const { page, loading, error } = useCmsPage(slug);
 
   if (loading) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading…</div>;
+    return <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">Loading…</div>;
   }
   if (error || !page) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">
         Legal page not published in CMS
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="border-b border-[#2A2A2A]">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
+      <header className="border-b border-border">
         <div className="max-w-3xl mx-auto px-6 py-5">
           <button type="button" onClick={() => navigate('/')} className="text-xl font-bold">
             Movr

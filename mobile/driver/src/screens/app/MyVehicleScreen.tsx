@@ -84,7 +84,7 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
             if (label === 'Plate number') setVehicle((v) => ({ ...v, plate: t }));
           }}
           placeholder="—"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSecondary}
         />
       ) : (
         <Text style={styles.rowValue}>{display(value)}</Text>
@@ -139,44 +139,44 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   back: { color: colors.textSecondary, marginBottom: spacing[3] },
-  title: { color: '#fff', fontSize: 28, fontWeight: '700', marginBottom: spacing[5] },
+  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[5] },
   hint: { color: colors.textSecondary },
   photo: {
     height: 160,
     borderRadius: radius.lg,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     marginBottom: spacing[4],
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoHint: { color: '#666' },
+  photoHint: { color: colors.textSecondary },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
     paddingHorizontal: spacing[4],
     paddingVertical: 16,
     marginBottom: spacing[3],
   },
   rowLabel: { color: colors.textSecondary },
-  rowValue: { color: '#fff', fontWeight: '600' },
-  input: { color: '#fff', fontWeight: '600', textAlign: 'right', minWidth: 120 },
+  rowValue: { color: colors.pureWhite, fontWeight: '600' },
+  input: { color: colors.pureWhite, fontWeight: '600', textAlign: 'right', minWidth: 120 },
   badge: {
-    backgroundColor: '#1A3A2A',
+    backgroundColor: colors.movrGreen,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 999,
   },
-  badgeText: { color: '#7CFC9A', fontWeight: '600', fontSize: 13 },
+  badgeText: { color: colors.success, fontWeight: '600', fontSize: 13 },
   editBtn: {
     marginTop: spacing[4],
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: colors.pureWhite,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  editText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  editText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
 });

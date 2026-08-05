@@ -48,23 +48,23 @@ export default function SupportChatPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-black text-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2A2A2A]">
-        <button type="button" onClick={() => navigate('/help')} className="text-[#888]">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+        <button type="button" onClick={() => navigate('/help')} className="text-text-secondary">
           ←
         </button>
-        <div className="w-10 h-10 rounded-full bg-[#2A6B45] flex items-center justify-center font-bold">
+        <div className="w-10 h-10 rounded-full bg-movr-green/40 flex items-center justify-center font-bold">
           ?
         </div>
         <div>
           <p className="font-semibold">Movr Support</p>
-          <p className="text-xs text-[#7CFC9A]">Typically replies in 2 min</p>
+          <p className="text-xs text-success">Typically replies in 2 min</p>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto p-4 space-y-3">
         {messages.length === 0 ? (
-          <p className="text-[#A0A0A0] text-sm text-center py-8">
+          <p className="text-text-secondary text-sm text-center py-8">
             Send a message to start a conversation with support.
           </p>
         ) : (
@@ -73,8 +73,8 @@ export default function SupportChatPage() {
               key={m.id}
               className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 m.from === 'user'
-                  ? 'ml-auto bg-gradient-to-r from-[#6A00FF] to-[#0055FF]'
-                  : 'bg-[#1A1A1A]'
+                  ? 'ml-auto bg-movr-gradient'
+                  : 'bg-surface-elevated'
               }`}
             >
               {m.text}
@@ -84,13 +84,13 @@ export default function SupportChatPage() {
         <div ref={endRef} />
       </div>
 
-      <div className="p-3 border-t border-[#2A2A2A]">
+      <div className="p-3 border-t border-border">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Type a message..."
-          className="w-full rounded-full bg-[#1A1A1A] px-5 py-3 text-white outline-none placeholder:text-[#666]"
+          className="w-full rounded-full bg-surface-elevated px-5 py-3 text-pure-white outline-none placeholder:text-text-secondary"
         />
       </div>
     </div>

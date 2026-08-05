@@ -28,6 +28,15 @@ storesRouter.get('/', async (req: any, res: Response) => {
   }
 });
 
+storesRouter.get('/categories/list', async (_req: any, res: Response) => {
+  try {
+    const result = await marketplace.listCategories(true);
+    res.json({ status: 'success', data: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 storesRouter.get('/:id', async (req: any, res: Response) => {
   try {
     const result = await marketplace.getStore(req.params.id);
@@ -42,8 +51,12 @@ storesRouter.get('/:id', async (req: any, res: Response) => {
 
 storesRouter.get('/:id/products', async (req: any, res: Response) => {
   try {
-    const products = await marketplace.getStoreProducts(req.params.id);
-    res.json({ status: 'success', data: products });
+    const data = await marketplace.getStoreProducts(
+      req.params.id,
+      typeof req.query.category === 'string' ? req.query.category : undefined
+    );
+    // Backward compatible: data is products array; categories included alongside
+    res.json({ status: 'success', data: data.products, categories: data.categories });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }

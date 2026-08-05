@@ -240,12 +240,22 @@ merchantRouter.get('/stores', authenticateToken, requireMerchant, async (req: Au
 merchantRouter.post('/stores', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { name, description, category, lat, lng, hoursJson } = req.body;
+    const { name, description, category, lat, lng, hoursJson, bannerUrl, defaultDeliveryMode } = req.body;
     const store = await db.query(
-      `INSERT INTO stores (merchant_id, name, description, category, lat, lng, latitude, longitude, hours_json, status, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$5,$6,$7,'active',TRUE)
+      `INSERT INTO stores (merchant_id, name, description, category, lat, lng, latitude, longitude, hours_json, status, is_active, banner_url, default_delivery_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$5,$6,$7,'active',TRUE,$8,$9)
        RETURNING *`,
-      [merchant.id, name, description || null, category || null, lat || null, lng || null, JSON.stringify(hoursJson || {})]
+      [
+        merchant.id,
+        name,
+        description || null,
+        category || null,
+        lat || null,
+        lng || null,
+        JSON.stringify(hoursJson || {}),
+        bannerUrl || null,
+        defaultDeliveryMode || null,
+      ]
     );
     res.status(201).json({ status: 'success', data: store.rows[0] });
   } catch (error: any) {
@@ -256,15 +266,17 @@ merchantRouter.post('/stores', authenticateToken, requireMerchant, async (req: A
 merchantRouter.patch('/stores/:id', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { name, description, category, hoursJson, status } = req.body;
+    const { name, description, category, hoursJson, status, bannerUrl, defaultDeliveryMode } = req.body;
     const store = await db.query(
       `UPDATE stores SET
          name = COALESCE($1, name),
          description = COALESCE($2, description),
          category = COALESCE($3, category),
          hours_json = COALESCE($4::jsonb, hours_json),
-         status = COALESCE($5, status)
-       WHERE id = $6 AND merchant_id = $7
+         status = COALESCE($5, status),
+         banner_url = COALESCE($6, banner_url),
+         default_delivery_mode = COALESCE($7, default_delivery_mode)
+       WHERE id = $8 AND merchant_id = $9
        RETURNING *`,
       [
         name || null,
@@ -272,10 +284,15 @@ merchantRouter.patch('/stores/:id', authenticateToken, requireMerchant, async (r
         category || null,
         hoursJson ? JSON.stringify(hoursJson) : null,
         status || null,
+        bannerUrl || null,
+        defaultDeliveryMode || null,
         req.params.id,
         merchant.id,
       ]
     );
+    if (!store.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Store not found' });
+    }
     res.json({ status: 'success', data: store.rows[0] });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
@@ -286,8 +303,10 @@ merchantRouter.get('/products', authenticateToken, requireMerchant, async (req: 
   try {
     const merchant = await getMerchantForUser(req.user!.id);
     const products = await db.query(
-      `SELECT p.* FROM products p
+      `SELECT p.*, c.name AS category_name, c.slug AS category_slug
+       FROM products p
        JOIN stores s ON s.id = p.store_id
+       LEFT JOIN product_categories c ON c.id = p.category_id
        WHERE s.merchant_id = $1
        ORDER BY p.created_at DESC`,
       [merchant.id]
@@ -298,10 +317,21 @@ merchantRouter.get('/products', authenticateToken, requireMerchant, async (req: 
   }
 });
 
+merchantRouter.get('/categories', authenticateToken, requireMerchant, async (_req: AuthRequest, res: Response) => {
+  try {
+    const cats = await db.query(
+      `SELECT * FROM product_categories WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
+    );
+    res.json({ status: 'success', data: cats.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 merchantRouter.post('/products', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { storeId, name, description, price, currency, imageUrl } = req.body;
+    const { storeId, name, description, price, currency, imageUrl, categoryId } = req.body;
     const store = await db.query(
       `SELECT id FROM stores WHERE id = $1 AND merchant_id = $2`,
       [storeId, merchant.id]
@@ -310,15 +340,200 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
       return res.status(404).json({ status: 'error', message: 'Store not found' });
     }
     const product = await db.query(
-      `INSERT INTO products (store_id, name, description, price, currency, image_url)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [storeId, name, description || null, price, currency || 'GHS', imageUrl || null]
+      `INSERT INTO products (store_id, name, description, price, currency, image_url, category_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [storeId, name, description || null, price, currency || 'GHS', imageUrl || null, categoryId || null]
     );
     res.status(201).json({ status: 'success', data: product.rows[0] });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }
 });
+
+merchantRouter.patch('/products/:id', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await getMerchantForUser(req.user!.id);
+    const { name, description, price, currency, imageUrl, categoryId, inStock } = req.body;
+    const product = await db.query(
+      `UPDATE products p SET
+         name = COALESCE($1, p.name),
+         description = COALESCE($2, p.description),
+         price = COALESCE($3, p.price),
+         currency = COALESCE($4, p.currency),
+         image_url = COALESCE($5, p.image_url),
+         category_id = COALESCE($6, p.category_id),
+         in_stock = COALESCE($7, p.in_stock),
+         updated_at = NOW()
+       FROM stores s
+       WHERE p.id = $8 AND p.store_id = s.id AND s.merchant_id = $9
+       RETURNING p.*`,
+      [
+        name || null,
+        description || null,
+        price != null ? Number(price) : null,
+        currency || null,
+        imageUrl || null,
+        categoryId || null,
+        typeof inStock === 'boolean' ? inStock : null,
+        req.params.id,
+        merchant.id,
+      ]
+    );
+    if (!product.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Product not found' });
+    }
+    res.json({ status: 'success', data: product.rows[0] });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+merchantRouter.delete('/products/:id', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await getMerchantForUser(req.user!.id);
+    const deleted = await db.query(
+      `DELETE FROM products p
+       USING stores s
+       WHERE p.id = $1 AND p.store_id = s.id AND s.merchant_id = $2
+       RETURNING p.id`,
+      [req.params.id, merchant.id]
+    );
+    if (!deleted.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Product not found' });
+    }
+    res.json({ status: 'success' });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+async function assertMerchantStore(merchantId: string, storeId: string) {
+  const store = await db.query(
+    `SELECT id FROM stores WHERE id = $1 AND merchant_id = $2`,
+    [storeId, merchantId]
+  );
+  return store.rows[0] || null;
+}
+
+merchantRouter.get(
+  '/stores/:id/banners',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      if (!(await assertMerchantStore(merchant.id, req.params.id))) {
+        return res.status(404).json({ status: 'error', message: 'Store not found' });
+      }
+      const banners = await db.query(
+        `SELECT * FROM store_banners WHERE store_id = $1 ORDER BY sort_order ASC, created_at ASC`,
+        [req.params.id]
+      );
+      res.json({ status: 'success', data: banners.rows });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.post(
+  '/stores/:id/banners',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      if (!(await assertMerchantStore(merchant.id, req.params.id))) {
+        return res.status(404).json({ status: 'error', message: 'Store not found' });
+      }
+      const { title, imageUrl, linkUrl, sortOrder, isActive } = req.body;
+      if (!imageUrl) {
+        return res.status(400).json({ status: 'error', message: 'imageUrl is required' });
+      }
+      const banner = await db.query(
+        `INSERT INTO store_banners (store_id, title, image_url, link_url, sort_order, is_active, created_by)
+         VALUES ($1,$2,$3,$4,$5,COALESCE($6,TRUE),$7) RETURNING *`,
+        [
+          req.params.id,
+          title || null,
+          imageUrl,
+          linkUrl || null,
+          sortOrder != null ? Number(sortOrder) : 0,
+          typeof isActive === 'boolean' ? isActive : true,
+          req.user!.id,
+        ]
+      );
+      res.status(201).json({ status: 'success', data: banner.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.patch(
+  '/stores/:storeId/banners/:bannerId',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      if (!(await assertMerchantStore(merchant.id, req.params.storeId))) {
+        return res.status(404).json({ status: 'error', message: 'Store not found' });
+      }
+      const { title, imageUrl, linkUrl, sortOrder, isActive } = req.body;
+      const banner = await db.query(
+        `UPDATE store_banners SET
+           title = COALESCE($1, title),
+           image_url = COALESCE($2, image_url),
+           link_url = COALESCE($3, link_url),
+           sort_order = COALESCE($4, sort_order),
+           is_active = COALESCE($5, is_active),
+           updated_at = NOW()
+         WHERE id = $6 AND store_id = $7
+         RETURNING *`,
+        [
+          title || null,
+          imageUrl || null,
+          linkUrl || null,
+          sortOrder != null ? Number(sortOrder) : null,
+          typeof isActive === 'boolean' ? isActive : null,
+          req.params.bannerId,
+          req.params.storeId,
+        ]
+      );
+      if (!banner.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Banner not found' });
+      }
+      res.json({ status: 'success', data: banner.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.delete(
+  '/stores/:storeId/banners/:bannerId',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      if (!(await assertMerchantStore(merchant.id, req.params.storeId))) {
+        return res.status(404).json({ status: 'error', message: 'Store not found' });
+      }
+      const deleted = await db.query(
+        `DELETE FROM store_banners WHERE id = $1 AND store_id = $2 RETURNING id`,
+        [req.params.bannerId, req.params.storeId]
+      );
+      if (!deleted.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Banner not found' });
+      }
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
 
 merchantRouter.post(
   '/products/:id/variants',

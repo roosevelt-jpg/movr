@@ -73,7 +73,7 @@ export default function SmsChannelPage() {
         <h1 style={styles.h1}>SMS channel tester</h1>
         <p style={styles.sub}>
           Posts to webhook <code>/webhooks/sms</code> · replies come from the API only ·{' '}
-          <Link to="/channels" style={{ color: '#4A86E8' }}>
+          <Link to="/channels" style={{ color: 'var(--motion-blue)' }}>
             Funnel
           </Link>
         </p>
@@ -114,12 +114,12 @@ export default function SmsChannelPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { maxWidth: 480, margin: '0 auto' },
-  h1: { fontSize: 18, textAlign: 'center', color: '#888', fontWeight: 500 },
-  sub: { textAlign: 'center', color: '#666', fontSize: 13, marginBottom: 16 },
-  hint: { color: '#666', textAlign: 'center', margin: 'auto 0' },
+  h1: { fontSize: 18, textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 500 },
+  sub: { textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 },
+  hint: { color: 'var(--text-secondary)', textAlign: 'center', margin: 'auto 0' },
   thread: {
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     padding: 16,
     minHeight: 360,
@@ -136,27 +136,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   user: {
     alignSelf: 'flex-end',
-    background: '#0A84FF',
-    color: '#fff',
+    background: 'var(--motion-blue)',
+    color: 'var(--pure-white)',
   },
   bot: {
     alignSelf: 'flex-start',
-    background: '#2C2C2E',
-    color: '#fff',
+    background: 'var(--border)',
+    color: 'var(--pure-white)',
   },
   composer: { display: 'flex', gap: 8, marginTop: 12 },
   input: {
     flex: 1,
-    background: '#121212',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '12px 16px',
   },
   send: {
-    background: '#0A84FF',
+    background: 'var(--motion-blue)',
     border: 'none',
-    color: '#fff',
+    color: 'var(--pure-white)',
     borderRadius: 999,
     padding: '0 18px',
     fontWeight: 700,

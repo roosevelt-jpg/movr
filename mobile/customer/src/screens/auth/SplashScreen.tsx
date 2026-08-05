@@ -24,6 +24,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { color: '#fff', fontSize: 42, fontWeight: '800', letterSpacing: -0.5 },
-  tag: { color: '#888', fontSize: 16, marginTop: 10, fontWeight: '400' },
+  brand: { color: colors.pureWhite, fontSize: 42, fontWeight: '800', letterSpacing: -0.5 },
+  tag: { color: colors.textSecondary, fontSize: 16, marginTop: 10, fontWeight: '400' },
 });

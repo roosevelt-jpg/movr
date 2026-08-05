@@ -62,7 +62,7 @@ export default function RideRatingScreen({
       <TextInput
         style={styles.comment}
         placeholder="Add a comment (optional)"
-        placeholderTextColor="#666"
+        placeholderTextColor={colors.textSecondary}
         multiline
         value={comment}
         onChangeText={setComment}
@@ -104,27 +104,27 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: colors.border,
     marginTop: spacing[8],
     marginBottom: spacing[4],
   },
   title: {
-    color: '#fff',
+    color: colors.pureWhite,
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: spacing[4],
   },
   stars: { flexDirection: 'row', gap: 8, marginBottom: spacing[5] },
-  star: { fontSize: 36, color: '#333' },
-  starOn: { color: '#D4AF37' },
+  star: { fontSize: 36, color: colors.border },
+  starOn: { color: colors.warning },
   comment: {
     width: '100%',
     minHeight: 100,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: 16,
     padding: 16,
-    color: '#fff',
+    color: colors.pureWhite,
     textAlignVertical: 'top',
     marginBottom: spacing[4],
   },
@@ -132,13 +132,13 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   chipOn: { borderColor: colors.motionBlue, backgroundColor: 'rgba(0,85,255,0.12)' },
-  chipText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  msg: { color: '#A0A0A0', marginBottom: 12 },
+  chipText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
+  msg: { color: colors.textSecondary, marginBottom: 12 },
   cta: {
     width: '100%',
     marginTop: 'auto' as any,
@@ -155,5 +155,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.motionBlue,
     opacity: 0.45,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

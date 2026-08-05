@@ -58,14 +58,14 @@ export default function WalletTopUpPage() {
   };
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 max-w-lg">
-      <button type="button" onClick={() => navigate('/wallet')} className="text-[#A0A0A0] text-sm mb-4">
+    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white p-6 md:p-8 max-w-lg">
+      <button type="button" onClick={() => navigate('/wallet')} className="text-text-secondary text-sm mb-4">
         ← Wallet
       </button>
       <h1 className="text-3xl font-bold mb-8">Top up wallet</h1>
 
-      <p className="text-sm text-[#A0A0A0] mb-2">Amount ({currency})</p>
-      <div className="rounded-xl border-2 border-[#0055FF] bg-[#141414] py-6 mb-4">
+      <p className="text-sm text-text-secondary mb-2">Amount ({currency})</p>
+      <div className="rounded-xl border-2 border-motion-blue bg-surface-elevated py-6 mb-4">
         <p className="text-3xl font-bold text-center">
           {formatMoney(amount)}
         </p>
@@ -78,8 +78,8 @@ export default function WalletTopUpPage() {
             onClick={() => setAmount(p)}
             className={`flex-1 rounded-xl py-3 font-semibold ${
               amount === p
-                ? 'bg-gradient-to-r from-[#6A00FF] to-[#0055FF]'
-                : 'bg-[#1A1A1A] border border-[#2A2A2A]'
+                ? 'bg-movr-gradient'
+                : 'bg-surface-elevated border border-border'
             }`}
           >
             {formatMoney(p)}
@@ -87,7 +87,7 @@ export default function WalletTopUpPage() {
         ))}
       </div>
 
-      <p className="text-sm text-[#A0A0A0] mb-2">Pay with</p>
+      <p className="text-sm text-text-secondary mb-2">Pay with</p>
       <div className="space-y-3 mb-10">
         {[
           { id: 'momo' as const, label: 'MTN MoMo · ****4471' },
@@ -99,15 +99,15 @@ export default function WalletTopUpPage() {
             onClick={() => setMethod(m.id)}
             className={`w-full flex items-center justify-between rounded-xl px-4 py-4 ${
               method === m.id
-                ? 'border border-[#0055FF] bg-[#0A1224]'
-                : 'bg-[#1A1A1A] border border-transparent'
+                ? 'border border-motion-blue bg-surface'
+                : 'bg-surface-elevated border border-transparent'
             }`}
           >
             <span className="flex items-center gap-3">
               <span className="text-lg">👛</span> {m.label}
             </span>
             {method === m.id ? (
-              <span className="w-5 h-5 rounded-full bg-[#0055FF] text-xs flex items-center justify-center">
+              <span className="w-5 h-5 rounded-full bg-motion-blue text-xs flex items-center justify-center">
                 ✓
               </span>
             ) : null}
@@ -119,7 +119,7 @@ export default function WalletTopUpPage() {
         type="button"
         disabled={loading}
         onClick={topUp}
-        className="w-full rounded-full py-4 font-semibold bg-gradient-to-r from-[#6A00FF] to-[#0055FF]"
+        className="w-full rounded-full py-4 font-semibold bg-movr-gradient"
       >
         {loading ? 'Processing…' : `Top up ${formatMoney(amount)}`}
       </button>

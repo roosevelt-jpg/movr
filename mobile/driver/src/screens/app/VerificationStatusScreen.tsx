@@ -48,9 +48,9 @@ export default function VerificationStatusScreen({
   const rejected = docs.find((d) => d.status === 'rejected');
 
   const badge = (s: Doc['status']) => {
-    if (s === 'verified') return { bg: 'rgba(63,112,72,0.35)', color: '#9BE0A8', label: 'Verified' };
-    if (s === 'rejected') return { bg: 'rgba(255,59,92,0.2)', color: '#FF8FA0', label: 'Rejected' };
-    return { bg: 'rgba(255,184,0,0.2)', color: '#FFB800', label: 'In review' };
+    if (s === 'verified') return { bg: 'rgba(63,112,72,0.35)', color: colors.success, label: 'Verified' };
+    if (s === 'rejected') return { bg: 'rgba(255,59,92,0.2)', color: colors.error, label: 'Rejected' };
+    return { bg: 'rgba(255,184,0,0.2)', color: colors.warning, label: 'In review' };
   };
 
   return (
@@ -106,9 +106,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing[4],
   },
-  title: { color: '#fff', fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', textAlign: 'center' },
   sub: {
-    color: '#A0A0A0',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 10,
     lineHeight: 20,
@@ -118,24 +118,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
     padding: spacing[4],
     marginBottom: spacing[3],
   },
-  docLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  docLabel: { color: colors.pureWhite, fontWeight: '600', fontSize: 15 },
   pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   pillText: { fontSize: 12, fontWeight: '700' },
   errorBox: {
     borderWidth: 1,
-    borderColor: '#FF3B5C',
+    borderColor: colors.error,
     backgroundColor: 'rgba(255,59,92,0.08)',
     borderRadius: radius.md,
     padding: spacing[4],
     marginTop: spacing[2],
     marginBottom: spacing[5],
   },
-  errorText: { color: '#FF8FA0', lineHeight: 20 },
+  errorText: { color: colors.error, lineHeight: 20 },
   cta: {
     marginTop: 'auto' as any,
     borderRadius: radius.pill,
@@ -143,12 +143,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#3F7048',
+    backgroundColor: colors.movrGreen,
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
     opacity: 0.55,
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

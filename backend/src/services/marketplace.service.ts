@@ -26,7 +26,10 @@ export class MarketplaceService {
 
     if (filters.category) {
       values.push(filters.category);
-      query += ` AND s.category = $${values.length}`;
+      query += ` AND (
+        s.category ILIKE $${values.length}
+        OR lower(replace(COALESCE(s.category,''), ' ', '-')) = lower($${values.length})
+      )`;
     }
 
     if (filters.search) {
@@ -87,13 +90,45 @@ export class MarketplaceService {
   }
 
   async getStore(storeId: string) {
-    return this.db.query(`SELECT * FROM stores WHERE id = $1`, [storeId]);
+    const result = await this.db.query(`SELECT * FROM stores WHERE id = $1`, [storeId]);
+    if (!result.rows[0]) return result;
+    const banners = await this.db.query(
+      `SELECT id, store_id, title, image_url, link_url, sort_order, is_active
+       FROM store_banners
+       WHERE store_id = $1 AND is_active = TRUE
+       ORDER BY sort_order ASC, created_at ASC`,
+      [storeId]
+    );
+    return {
+      ...result,
+      rows: [{ ...result.rows[0], banners: banners.rows }],
+    };
   }
 
-  async getStoreProducts(storeId: string) {
+  async listCategories(activeOnly = true) {
+    const q = activeOnly
+      ? `SELECT * FROM product_categories WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
+      : `SELECT * FROM product_categories ORDER BY sort_order ASC, name ASC`;
+    return this.db.query(q);
+  }
+
+  async getStoreProducts(storeId: string, category?: string) {
+    const values: any[] = [storeId];
+    let filter = '';
+    if (category && category !== 'all') {
+      values.push(category);
+      filter = ` AND (c.slug = $${values.length} OR c.id::text = $${values.length})`;
+    }
     const products = await this.db.query(
-      `SELECT * FROM products WHERE store_id = $1 AND in_stock = TRUE ORDER BY name`,
-      [storeId]
+      `SELECT p.*,
+              c.id AS category_id,
+              c.name AS category_name,
+              c.slug AS category_slug
+       FROM products p
+       LEFT JOIN product_categories c ON c.id = p.category_id
+       WHERE p.store_id = $1 AND p.in_stock = TRUE${filter}
+       ORDER BY c.sort_order NULLS LAST, p.name`,
+      values
     );
     const variants = await this.db.query(
       `SELECT pv.* FROM product_variants pv
@@ -106,7 +141,18 @@ export class MarketplaceService {
       byProduct[v.product_id] = byProduct[v.product_id] || [];
       byProduct[v.product_id].push(v);
     }
-    return products.rows.map((p) => ({ ...p, variants: byProduct[p.id] || [] }));
+    const categories = await this.db.query(
+      `SELECT DISTINCT c.id, c.name, c.slug, c.icon_url, c.sort_order
+       FROM products p
+       JOIN product_categories c ON c.id = p.category_id
+       WHERE p.store_id = $1 AND p.in_stock = TRUE AND c.is_active = TRUE
+       ORDER BY c.sort_order ASC, c.name ASC`,
+      [storeId]
+    );
+    return {
+      products: products.rows.map((p) => ({ ...p, variants: byProduct[p.id] || [] })),
+      categories: categories.rows,
+    };
   }
 
   async getOrCreateCart(userId: string, storeId: string) {

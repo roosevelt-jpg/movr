@@ -15,9 +15,9 @@ const SettingsPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
       <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <div className="rounded-2xl bg-[#121212] border border-[#2A2A2A] divide-y divide-[#2A2A2A]">
+      <div className="rounded-2xl bg-surface-elevated border border-border divide-y divide-border">
         {items.map((item) => (
           <button
             key={item.label}
@@ -27,7 +27,7 @@ const SettingsPage: React.FC = () => {
           >
             <item.icon size={20} />
             <span className="flex-1 font-medium">{item.label}</span>
-            <ChevronRight size={18} className="text-[#888]" />
+            <ChevronRight size={18} className="text-text-secondary" />
           </button>
         ))}
         <button
@@ -36,13 +36,13 @@ const SettingsPage: React.FC = () => {
             logout();
             navigate('/login');
           }}
-          className="w-full flex items-center gap-3 p-4 text-[#E57373]"
+          className="w-full flex items-center gap-3 p-4 text-error"
         >
           <LogOut size={20} />
           <span className="font-semibold">Sign out</span>
         </button>
       </div>
-      <p className="text-center text-sm text-[#666] mt-8">Movr v1.0.0</p>
+      <p className="text-center text-sm text-text-secondary mt-8">Movr v1.0.0</p>
     </div>
   );
 };

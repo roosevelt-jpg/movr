@@ -97,7 +97,7 @@ export default function SendMoneyScreen() {
         <TextInput
           style={styles.cardInput}
           placeholder="+234 · Name · Country"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSecondary}
           value={to}
           onChangeText={setTo}
         />
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing[3] },
   totalLabel: { color: colors.pureWhite, fontWeight: '700' },
   totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
-  warn: { color: '#FF6B6B', marginBottom: spacing[3] },
+  warn: { color: colors.error, marginBottom: spacing[3] },
   cta: {
     borderRadius: radius.pill,
     minHeight: 52,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
+    borderBottomColor: colors.surfaceElevated,
   },
   histLabel: { color: colors.pureWhite, flex: 1, marginRight: 8 },
 });

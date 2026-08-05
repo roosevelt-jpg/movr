@@ -58,7 +58,7 @@ export default function SupportChatScreen({ onBack }: { onBack?: () => void }) {
       <View style={styles.header}>
         {onBack ? (
           <Pressable onPress={onBack} style={{ marginRight: 8 }}>
-            <Text style={{ color: '#888', fontSize: 18 }}>←</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 18 }}>←</Text>
           </Pressable>
         ) : null}
         <View style={styles.avatar}>
@@ -95,7 +95,7 @@ export default function SupportChatScreen({ onBack }: { onBack?: () => void }) {
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textSecondary}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={() => send()}
@@ -114,21 +114,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
+    borderBottomColor: colors.border,
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2A6B45',
+    backgroundColor: colors.movrGreen,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 18 },
-  title: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  eta: { color: '#7CFC9A', fontSize: 12, marginTop: 2 },
+  avatarText: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
+  title: { color: colors.pureWhite, fontWeight: '600', fontSize: 16 },
+  eta: { color: colors.success, fontSize: 12, marginTop: 2 },
   list: { padding: spacing[4], paddingBottom: spacing[6], flexGrow: 1 },
-  empty: { color: '#A0A0A0', textAlign: 'center', marginTop: 32, fontSize: 14 },
+  empty: { color: colors.textSecondary, textAlign: 'center', marginTop: 32, fontSize: 14 },
   bubble: {
     maxWidth: '82%',
     borderRadius: 18,
@@ -138,18 +138,18 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#6A00FF',
+    backgroundColor: colors.electricViolet,
   },
   supportBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
   },
-  msg: { color: '#fff', fontSize: 15, lineHeight: 21 },
-  composer: { padding: 12, borderTopWidth: 1, borderTopColor: '#2A2A2A' },
+  msg: { color: colors.pureWhite, fontSize: 15, lineHeight: 21 },
+  composer: { padding: 12, borderTopWidth: 1, borderTopColor: colors.border },
   input: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radius.pill,
-    color: '#fff',
+    color: colors.pureWhite,
     paddingHorizontal: 18,
     paddingVertical: 14,
   },

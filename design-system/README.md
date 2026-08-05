@@ -4,8 +4,10 @@ Single source of truth for brand tokens across web, admin, and mobile.
 
 ## Tokens
 
-- `tokens.json` — colors, gradient, type, spacing, radius, elevation
+- `tokens.json` — colors, gradient, type, spacing, radius, elevation, admin density, marketing motion
 - `theme.ts` — same tokens as JS objects for React Native
+- `tokens.css` — CSS custom properties
+- `tailwind.preset.js` — Tailwind preset that **imports** `tokens.json` (do not hardcode hex in app configs)
 
 ### Brand colors
 
@@ -23,29 +25,65 @@ Primary gradient (CTAs / active indicators / hero bands only):
 
 ## Web (Tailwind)
 
-Import via `frontend/web/tailwind.config.js` and `frontend/admin/tailwind.config.js`.
+`frontend/web` and `frontend/admin` use:
 
-Use classes like `bg-jet-black`, `text-electric-violet`, `rounded-pill` — never hardcode hex in components.
+```js
+presets: [require('../../design-system/tailwind.preset.js')]
+```
 
-Fonts: **Poppins** (primary), **Montserrat** (secondary).
+Classes: `bg-jet-black`, `text-electric-violet`, `bg-movr-gradient`, `rounded-pill`, `shadow-focus-glow`.
+
+Fonts: **Poppins** (primary), **Montserrat** (secondary) via Google Fonts in each app's `index.html`.
+
+### Marketing hero (homepage / merchant / driver landings only)
+
+```html
+<section class="movr-hero">
+  <div class="movr-hero-glow movr-hero-glow-a"></div>
+  <div class="movr-hero-glow movr-hero-glow-b"></div>
+  <div class="movr-hero-shimmer"></div>
+  …
+</section>
+```
+
+Respects `prefers-reduced-motion: reduce`. Do **not** use these classes inside product UI.
+
+## Admin density
+
+Admin Tailwind adds tighter `admin-*` spacing and `text-admin-*` sizes. Prefer:
+
+- `frontend/admin/src/components/DataTable.tsx`
+- `FilterBar.tsx`
+- `DetailPanel.tsx`
+
+for ops/finance/identity review — not consumer Card layouts.
 
 ## Mobile
 
 ```tsx
 import theme from '@movr/design-system/theme';
 import { Button } from '@movr/design-system/components/Button';
+import { Tab } from '@movr/design-system/components/Tab';
 ```
 
-Both `mobile/customer` and `mobile/driver` must import from this package — do not duplicate components.
+Shared components: Button, Input, Card, Badge, Tab, StatusPill, EmptyState, LoadingSpinner, VerifiedBadge.
 
 ## Logo
 
 Official assets in `assets/logo/`:
+
 - `movr-mark.svg` — square mark
 - `movr-wordmark.svg` — mark + wordmark
 
-Always use these (or `MovrLogoMark` on web) — never recreate "MOVR" / "M" as styled text. Minimum height 24px; respect 0.5× cap-height safe area.
+Web: `MovrWordmark` / `MovrLogoMark`. Minimum height **24px**. Never recreate "MOVR" as styled text.
+
+## Content
+
+See `CONTENT_GUIDE.md` for tone-of-voice rules.
 
 ## Lint
 
-Run `node scripts/check-raw-hex.js` to catch hardcoded hex outside this folder.
+```bash
+pnpm lint:tokens          # report raw hex outside design-system
+pnpm lint:tokens:strict   # fail CI if any remain
+```

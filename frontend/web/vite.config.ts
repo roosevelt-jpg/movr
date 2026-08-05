@@ -23,6 +23,7 @@ export default defineConfig({
     alias: {
       '@movr/format': path.resolve(__dirname, '../../design-system/format.ts'),
       '@movr/design-system/theme': path.resolve(__dirname, '../../design-system/theme.ts'),
+      '@movr/design-system/assets': path.resolve(__dirname, '../../design-system/assets'),
       '@movr/design-system': path.resolve(__dirname, '../../design-system/theme.ts'),
     },
   },
@@ -44,6 +45,10 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+      '/uploads': {
         target: 'http://127.0.0.1:3000',
         changeOrigin: true,
       },

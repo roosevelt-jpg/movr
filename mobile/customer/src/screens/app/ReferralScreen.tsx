@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#555',
+    borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
     padding: spacing[5],
     alignItems: 'center',
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   barTrack: {
     marginTop: spacing[3],
     height: 4,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: colors.surface,
     borderRadius: radius.pill,
     overflow: 'hidden',
   },

@@ -182,7 +182,7 @@ export default function RideOpsPage() {
               placeholder="New fare"
             />
           </div>
-          {message ? <p style={{ color: '#9BE0A8' }}>{message}</p> : null}
+          {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
 
           <div style={styles.grid}>
             <div style={styles.map}>
@@ -191,7 +191,7 @@ export default function RideOpsPage() {
             <aside style={styles.notes}>
               <p style={styles.notesTitle}>Internal notes</p>
               {notes.length === 0 ? (
-                <p style={{ color: '#666', margin: 0, fontSize: 13 }}>No notes yet</p>
+                <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 13 }}>No notes yet</p>
               ) : (
                 notes.map((n) => (
                   <div key={n.id} style={styles.noteCard}>
@@ -219,14 +219,14 @@ export default function RideOpsPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   lookupBar: { display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
-  empty: { color: '#888', marginTop: 24 },
+  empty: { color: 'var(--text-secondary)', marginTop: 24 },
   top: { display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
   h1: { fontSize: 28, fontWeight: 700, margin: 0 },
-  meta: { color: '#A0A0A0', marginTop: 6 },
+  meta: { color: 'var(--text-secondary)', marginTop: 6 },
   badge: {
     alignSelf: 'flex-start',
     background: 'rgba(255,59,92,0.2)',
-    color: '#FF8FA0',
+    color: 'var(--error)',
     borderRadius: 999,
     padding: '6px 12px',
     fontWeight: 700,
@@ -235,16 +235,16 @@ const styles: Record<string, React.CSSProperties> = {
   actions: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
   ghost: {
     background: 'transparent',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 10,
     padding: '10px 14px',
     cursor: 'pointer',
   },
   amount: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 10,
     padding: '10px 12px',
     minWidth: 160,
@@ -253,8 +253,8 @@ const styles: Record<string, React.CSSProperties> = {
   map: {
     minHeight: 360,
     borderRadius: 16,
-    border: '1px solid #2A2A2A',
-    background: '#0A0A0A',
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -263,31 +263,31 @@ const styles: Record<string, React.CSSProperties> = {
     inset: 0,
     opacity: 0.35,
     backgroundImage:
-      'linear-gradient(#222 1px, transparent 1px), linear-gradient(90deg, #222 1px, transparent 1px)',
+      'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
     backgroundSize: '32px 32px',
   },
   notes: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 16,
     padding: 16,
     display: 'flex',
     flexDirection: 'column',
     gap: 12,
   },
-  notesTitle: { color: '#A0A0A0', margin: 0, fontSize: 13 },
+  notesTitle: { color: 'var(--text-secondary)', margin: 0, fontSize: 13 },
   noteCard: {
-    background: '#0A0A0A',
+    background: 'var(--surface)',
     borderRadius: 12,
     padding: 12,
-    border: '1px solid #2A2A2A',
+    border: '1px solid var(--border)',
   },
-  noteMeta: { color: '#666', fontSize: 12, margin: '8px 0 0' },
+  noteMeta: { color: 'var(--text-secondary)', fontSize: 12, margin: '8px 0 0' },
   noteInput: {
     marginTop: 'auto',
-    background: '#0A0A0A',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 10,
     padding: '12px 14px',
   },

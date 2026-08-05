@@ -92,7 +92,7 @@ const DriverVerificationDashboard: React.FC = () => {
   ) || [];
 
   return (
-    <div style={{ padding: '2rem', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+    <div style={{ padding: '2rem', backgroundColor: 'var(--surface-elevated)', minHeight: '100vh' }}>
       <h1 style={{ fontSize: '28px', fontWeight: 500, marginBottom: '1.5rem' }}>
         Driver Verification Dashboard
       </h1>
@@ -105,9 +105,9 @@ const DriverVerificationDashboard: React.FC = () => {
             onClick={() => setFilterStatus(status)}
             style={{
               padding: '8px 16px',
-              backgroundColor: filterStatus === status ? '#000' : '#fff',
-              color: filterStatus === status ? '#fff' : '#000',
-              border: '0.5px solid #ccc',
+              backgroundColor: filterStatus === status ? 'var(--jet-black)' : 'var(--pure-white)',
+              color: filterStatus === status ? 'var(--pure-white)' : 'var(--jet-black)',
+              border: '0.5px solid var(--border)',
               borderRadius: '8px',
               cursor: 'pointer',
               fontWeight: 500,
@@ -125,30 +125,30 @@ const DriverVerificationDashboard: React.FC = () => {
             key={driver.id}
             onClick={() => setSelectedDriver(driver)}
             style={{
-              backgroundColor: '#fff',
-              border: '0.5px solid #e0e0e0',
+              backgroundColor: 'var(--pure-white)',
+              border: '0.5px solid var(--text-primary)',
               borderRadius: '12px',
               padding: '1.5rem',
               cursor: 'pointer',
-              boxShadow: selectedDriver?.id === driver.id ? '0 0 0 2px #000' : 'none',
+              boxShadow: selectedDriver?.id === driver.id ? '0 0 0 2px var(--jet-black)' : 'none',
             }}
           >
             <div style={{ marginBottom: '1rem' }}>
               <p style={{ fontSize: '16px', fontWeight: 500, margin: 0 }}>{driver.name}</p>
-              <p style={{ fontSize: '13px', color: '#666', margin: '0.25rem 0' }}>{driver.email}</p>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>{driver.email}</p>
             </div>
 
             {/* Verification Score */}
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '13px', color: '#666' }}>Verification Score</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Verification Score</span>
                 <span style={{ fontSize: '14px', fontWeight: 500 }}>{driver.verificationScore}%</span>
               </div>
-              <div style={{ height: '6px', backgroundColor: '#e0e0e0', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ height: '6px', backgroundColor: 'var(--text-primary)', borderRadius: '3px', overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
-                    backgroundColor: driver.verificationScore >= 80 ? '#4caf50' : driver.verificationScore >= 60 ? '#ff9800' : '#f44336',
+                    backgroundColor: driver.verificationScore >= 80 ? 'var(--success)' : driver.verificationScore >= 60 ? 'var(--warning)' : 'var(--error)',
                     width: `${driver.verificationScore}%`,
                     transition: 'width 0.3s',
                   }}
@@ -160,16 +160,16 @@ const DriverVerificationDashboard: React.FC = () => {
             <div style={{ marginBottom: '1rem' }}>
               <p style={{ fontSize: '13px', fontWeight: 500, margin: '0 0 0.5rem' }}>Documents</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.nationalId ? '#e8f5e9' : '#ffebee', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.nationalId ? 'color-mix(in srgb, var(--success) 22%, transparent)' : 'color-mix(in srgb, var(--error) 18%, transparent)', borderRadius: '4px' }}>
                   ✓ National ID
                 </div>
-                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.drivingLicense ? '#e8f5e9' : '#ffebee', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.drivingLicense ? 'color-mix(in srgb, var(--success) 22%, transparent)' : 'color-mix(in srgb, var(--error) 18%, transparent)', borderRadius: '4px' }}>
                   ✓ Driving License
                 </div>
-                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.faceVerification ? '#e8f5e9' : '#ffebee', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.faceVerification ? 'color-mix(in srgb, var(--success) 22%, transparent)' : 'color-mix(in srgb, var(--error) 18%, transparent)', borderRadius: '4px' }}>
                   ✓ Face Verification
                 </div>
-                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.backgroundCheck ? '#e8f5e9' : '#ffebee', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', padding: '0.5rem', backgroundColor: driver.verifications.backgroundCheck ? 'color-mix(in srgb, var(--success) 22%, transparent)' : 'color-mix(in srgb, var(--error) 18%, transparent)', borderRadius: '4px' }}>
                   ✓ Background Check
                 </div>
               </div>
@@ -184,13 +184,14 @@ const DriverVerificationDashboard: React.FC = () => {
                 fontSize: '12px',
                 fontWeight: 500,
                 backgroundColor:
-                  driver.status === 'verified' ? '#e8f5e9' :
-                  driver.status === 'pending' ? '#fff3e0' :
-                  driver.status === 'rejected' ? '#ffebee' : '#f3e5f5',
+                  driver.status === 'verified' ? 'color-mix(in srgb, var(--success) 22%, transparent)' :
+                  driver.status === 'pending' ? 'color-mix(in srgb, var(--warning) 22%, transparent)' :
+                  driver.status === 'rejected' ? 'color-mix(in srgb, var(--error) 22%, transparent)' :
+                  'color-mix(in srgb, var(--electric-violet) 22%, transparent)',
                 color:
-                  driver.status === 'verified' ? '#2e7d32' :
-                  driver.status === 'pending' ? '#e65100' :
-                  driver.status === 'rejected' ? '#c62828' : '#6a1b9a',
+                  driver.status === 'verified' ? 'var(--success)' :
+                  driver.status === 'pending' ? 'var(--warning)' :
+                  driver.status === 'rejected' ? 'var(--error)' : 'var(--electric-violet)',
               }}
             >
               {driver.status.toUpperCase()}
@@ -201,7 +202,7 @@ const DriverVerificationDashboard: React.FC = () => {
 
       {/* Detailed View */}
       {selectedDriver && (
-        <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '2rem', borderLeft: '4px solid #000' }}>
+        <div style={{ backgroundColor: 'var(--pure-white)', borderRadius: '12px', padding: '2rem', borderLeft: '4px solid var(--jet-black)' }}>
           <h2 style={{ fontSize: '20px', fontWeight: 500, marginBottom: '1.5rem' }}>
             {selectedDriver.name} - Detailed Verification
           </h2>
@@ -211,7 +212,7 @@ const DriverVerificationDashboard: React.FC = () => {
             <h3 style={{ fontSize: '16px', fontWeight: 500, marginBottom: '1rem' }}>Documents</h3>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #e0e0e0' }}>
+                <tr style={{ borderBottom: '1px solid var(--text-primary)' }}>
                   <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '13px', fontWeight: 500 }}>Type</th>
                   <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '13px', fontWeight: 500 }}>Status</th>
                   <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '13px', fontWeight: 500 }}>Uploaded</th>
@@ -221,15 +222,15 @@ const DriverVerificationDashboard: React.FC = () => {
               </thead>
               <tbody>
                 {selectedDriver.documents.map((doc, idx) => (
-                  <tr key={idx} style={{ borderBottom: '0.5px solid #f0f0f0' }}>
+                  <tr key={idx} style={{ borderBottom: '0.5px solid var(--border)' }}>
                     <td style={{ padding: '0.75rem', fontSize: '14px' }}>{doc.type}</td>
                     <td style={{ padding: '0.75rem' }}>
                       <span
                         style={{
                           display: 'inline-block',
                           padding: '4px 8px',
-                          backgroundColor: doc.verified ? '#e8f5e9' : '#fff3e0',
-                          color: doc.verified ? '#2e7d32' : '#e65100',
+                          backgroundColor: doc.verified ? 'var(--surface-elevated)' : 'var(--surface-elevated)',
+                          color: doc.verified ? 'var(--success)' : 'var(--warning)',
                           borderRadius: '4px',
                           fontSize: '12px',
                           fontWeight: 500,
@@ -238,10 +239,10 @@ const DriverVerificationDashboard: React.FC = () => {
                         {doc.verified ? '✓ Verified' : 'Pending'}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem', fontSize: '13px', color: '#666' }}>
+                    <td style={{ padding: '0.75rem', fontSize: '13px', color: 'var(--text-secondary)' }}>
                       {new Date(doc.uploadedAt).toLocaleDateString()}
                     </td>
-                    <td style={{ padding: '0.75rem', fontSize: '13px', color: '#666' }}>
+                    <td style={{ padding: '0.75rem', fontSize: '13px', color: 'var(--text-secondary)' }}>
                       {new Date(doc.expiryDate).toLocaleDateString()}
                     </td>
                     <td style={{ padding: '0.75rem' }}>
@@ -250,7 +251,7 @@ const DriverVerificationDashboard: React.FC = () => {
                         style={{
                           padding: '4px 12px',
                           fontSize: '12px',
-                          backgroundColor: '#f0f0f0',
+                          backgroundColor: 'var(--border)',
                           border: 'none',
                           borderRadius: '4px',
                           cursor: 'pointer',
@@ -266,16 +267,16 @@ const DriverVerificationDashboard: React.FC = () => {
           </div>
 
           {/* Video Recording Stats */}
-          <div style={{ marginBottom: '2rem', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+          <div style={{ marginBottom: '2rem', padding: '1rem', backgroundColor: 'var(--surface-elevated)', borderRadius: '8px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 500, marginBottom: '1rem' }}>Recording & Safety</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div>
-                <p style={{ color: '#666', fontSize: '13px', margin: 0 }}>Video Recordings</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>Video Recordings</p>
                 <p style={{ fontSize: '24px', fontWeight: 500, margin: '0.5rem 0' }}>{selectedDriver.videoRecordings}</p>
               </div>
               <div>
-                <p style={{ color: '#666', fontSize: '13px', margin: 0 }}>SOS Incidents</p>
-                <p style={{ fontSize: '24px', fontWeight: 500, margin: '0.5rem 0', color: selectedDriver.sosIncidents > 0 ? '#f44336' : '#4caf50' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>SOS Incidents</p>
+                <p style={{ fontSize: '24px', fontWeight: 500, margin: '0.5rem 0', color: selectedDriver.sosIncidents > 0 ? 'var(--error)' : 'var(--success)' }}>
                   {selectedDriver.sosIncidents}
                 </p>
               </div>
@@ -290,8 +291,8 @@ const DriverVerificationDashboard: React.FC = () => {
                   onClick={() => approveDriver.mutate(selectedDriver.id)}
                   style={{
                     padding: '12px 24px',
-                    backgroundColor: '#4caf50',
-                    color: '#fff',
+                    backgroundColor: 'var(--success)',
+                    color: 'var(--pure-white)',
                     border: 'none',
                     borderRadius: '8px',
                     fontWeight: 500,
@@ -307,8 +308,8 @@ const DriverVerificationDashboard: React.FC = () => {
                   }}
                   style={{
                     padding: '12px 24px',
-                    backgroundColor: '#f44336',
-                    color: '#fff',
+                    backgroundColor: 'var(--error)',
+                    color: 'var(--pure-white)',
                     border: 'none',
                     borderRadius: '8px',
                     fontWeight: 500,
@@ -327,8 +328,8 @@ const DriverVerificationDashboard: React.FC = () => {
                 }}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: '#ff9800',
-                  color: '#fff',
+                  backgroundColor: 'var(--warning)',
+                  color: 'var(--pure-white)',
                   border: 'none',
                   borderRadius: '8px',
                   fontWeight: 500,

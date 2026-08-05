@@ -34,39 +34,39 @@ const ProfilePage: React.FC = () => {
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 py-4 border-b border-[#2A2A2A] text-left"
+      className="w-full flex items-center gap-3 py-4 border-b border-border text-left"
     >
-      <Icon size={18} className="text-white" />
+      <Icon size={18} className="text-pure-white" />
       <span className="flex-1 font-medium">{label}</span>
       {value ? (
-        <span className="text-[#8E8E93] text-sm">{value}</span>
+        <span className="text-text-secondary text-sm">{value}</span>
       ) : (
-        <ChevronRight size={18} className="text-[#8E8E93]" />
+        <ChevronRight size={18} className="text-text-secondary" />
       )}
     </button>
   );
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
+    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
       <div className="flex items-center gap-4 mb-8">
         {user?.avatarUrl ? (
           <img
             src={user.avatarUrl}
             alt=""
-            className="w-16 h-16 rounded-full object-cover border border-[#2A2A2A]"
+            className="w-16 h-16 rounded-full object-cover border border-border"
           />
         ) : (
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#6A00FF] to-[#0055FF] flex items-center justify-center text-2xl font-bold">
+          <div className="w-16 h-16 rounded-full bg-movr-gradient flex items-center justify-center text-2xl font-bold">
             {(user?.firstName?.[0] || 'U').toUpperCase()}
           </div>
         )}
         <div>
           <h1 className="text-2xl font-bold">{name}</h1>
-          <p className="text-[#888] mt-1">{phone}</p>
+          <p className="text-text-secondary mt-1">{phone}</p>
         </div>
       </div>
 
-      <p className="text-xs tracking-wider text-[#8E8E93] mb-2">ACCOUNT</p>
+      <p className="text-xs tracking-wider text-text-secondary mb-2">ACCOUNT</p>
       <div className="mb-8">
         <Row icon={Pencil} label="Edit profile" onClick={() => navigate('/settings')} />
         <Row
@@ -78,7 +78,7 @@ const ProfilePage: React.FC = () => {
         <Row icon={Globe} label="Language & region" value="English, Ghana" />
       </div>
 
-      <p className="text-xs tracking-wider text-[#8E8E93] mb-2">SUPPORT</p>
+      <p className="text-xs tracking-wider text-text-secondary mb-2">SUPPORT</p>
       <div className="mb-10">
         <Row icon={HelpCircle} label="Help centre" onClick={() => navigate('/help')} />
         <Row icon={Shield} label="Chat with support" onClick={() => navigate('/support')} />
@@ -90,7 +90,7 @@ const ProfilePage: React.FC = () => {
           logout();
           navigate('/login');
         }}
-        className="w-full text-center text-[#E57373] font-semibold"
+        className="w-full text-center text-error font-semibold"
       >
         Sign out
       </button>

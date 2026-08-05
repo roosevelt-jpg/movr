@@ -41,8 +41,8 @@ export default function AdminLoginPage() {
     <div
       style={{
         minHeight: '100vh',
-        background: '#000',
-        color: '#fff',
+        background: 'var(--jet-black)',
+        color: 'var(--pure-white)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -55,18 +55,18 @@ export default function AdminLoginPage() {
         style={{
           width: '100%',
           maxWidth: 400,
-          background: '#111',
-          border: '1px solid #2A2A2A',
+          background: 'var(--surface-elevated)',
+          border: '1px solid var(--border)',
           borderRadius: 16,
           padding: 32,
         }}
       >
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Movr Admin</h1>
-        <p style={{ color: '#8E8E93', marginBottom: 28, fontSize: 14 }}>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 28, fontSize: 14 }}>
           Sign in with your admin account
         </p>
 
-        <label style={{ display: 'block', fontSize: 13, color: '#A0A0A0', marginBottom: 6 }}>
+        <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
           Email
         </label>
         <input
@@ -78,7 +78,7 @@ export default function AdminLoginPage() {
         />
 
         <label
-          style={{ display: 'block', fontSize: 13, color: '#A0A0A0', marginBottom: 6, marginTop: 16 }}
+          style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, marginTop: 16 }}
         >
           Password
         </label>
@@ -100,15 +100,15 @@ export default function AdminLoginPage() {
             borderRadius: 999,
             padding: '14px 0',
             fontWeight: 700,
-            color: '#fff',
+            color: 'var(--pure-white)',
             cursor: 'pointer',
-            background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
+            background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
           }}
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <p style={{ marginTop: 20, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+        <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           Use seeded admin credentials from db:seed
         </p>
       </form>
@@ -119,11 +119,11 @@ export default function AdminLoginPage() {
 const inputStyle: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  background: '#1A1A1A',
-  border: '1px solid #2A2A2A',
+  background: 'var(--surface-elevated)',
+  border: '1px solid var(--border)',
   borderRadius: 10,
   padding: '12px 14px',
-  color: '#fff',
+  color: 'var(--pure-white)',
   fontSize: 15,
   outline: 'none',
 };

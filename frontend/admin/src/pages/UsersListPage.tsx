@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import DataTable, { DataTableColumn } from '../components/DataTable';
+import FilterBar from '../components/FilterBar';
+import DetailPanel from '../components/DetailPanel';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -102,186 +105,129 @@ export default function UsersListPage() {
 
   const openIdentity = (r: UserRow) => {
     setSelected(r);
-    navigate(`/identity?userId=${encodeURIComponent(r.id)}`);
   };
 
   const tabCount = (key: TabKey) => counts[key] ?? 0;
 
+  const columns: DataTableColumn<UserRow>[] = [
+    {
+      key: 'name',
+      header: 'Name',
+      render: (r) => (
+        <span className="inline-flex items-center gap-admin-2 font-semibold">
+          <span className="inline-block w-8 h-8 rounded-full bg-border" />
+          {r.name}
+        </span>
+      ),
+    },
+    { key: 'role', header: 'Role' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (r) => (
+        <span
+          className={`rounded-pill px-admin-2 py-admin-1 text-admin-xs font-bold ${
+            r.status === 'Active'
+              ? 'bg-movr-green/35 text-success'
+              : 'bg-error/20 text-error'
+          }`}
+        >
+          {r.status}
+        </span>
+      ),
+    },
+    {
+      key: 'joined',
+      header: 'Joined',
+      render: (r) => <span className="text-text-secondary">{r.joined}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (r) => (
+        <button
+          type="button"
+          className="text-motion-blue font-semibold"
+          onClick={(e) => {
+            e.stopPropagation();
+            openIdentity(r);
+          }}
+        >
+          Review
+        </button>
+      ),
+    },
+  ];
+
   return (
     <AdminShell activeLabel="Users">
-      <div style={styles.header}>
-        <h1 style={styles.h1}>Users</h1>
-        <div style={styles.tools}>
-          <input
-            style={styles.search}
-            placeholder="Search users..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && load()}
-          />
-          <button style={styles.filter} type="button" onClick={() => load()}>
-            Search
-          </button>
-        </div>
-      </div>
-
-      <div style={styles.tabs}>
-        {TAB_DEFS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            style={{
-              ...styles.tab,
-              ...(tab === t.key ? styles.tabActive : {}),
-            }}
-          >
-            {t.label} ({tabCount(t.key).toLocaleString()})
-          </button>
-        ))}
-      </div>
-
-      {error ? <p style={{ color: '#FF8FA0', marginBottom: 12 }}>{error}</p> : null}
-
-      <div style={styles.table}>
-        <div style={styles.thead}>
-          <span>Name</span>
-          <span>Role</span>
-          <span>Status</span>
-          <span>Joined</span>
-          <span />
-        </div>
-        {rows.length === 0 ? (
-          <div style={styles.empty}>No users found</div>
-        ) : (
-          rows.map((r) => (
-            <div
-              key={r.id}
-              style={{ ...styles.row, cursor: 'pointer' }}
-              onClick={() => openIdentity(r)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && openIdentity(r)}
-            >
-              <span style={styles.nameCell}>
-                <span style={styles.avatar} />
-                {r.name}
-              </span>
-              <span>{r.role}</span>
-              <span>
-                <span
-                  style={{
-                    ...styles.badge,
-                    ...(r.status === 'Active' ? styles.active : styles.suspended),
-                  }}
-                >
-                  {r.status}
-                </span>
-              </span>
-              <span style={{ color: '#A0A0A0' }}>{r.joined}</span>
-              <button
-                style={styles.view}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openIdentity(r);
-                }}
-              >
-                Review
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      {selected ? (
-        <div style={styles.panel}>
-          <strong>{selected.name}</strong>
-          <div>
-            {selected.role} · {selected.status}
+      <div className="flex gap-admin-4 items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between gap-admin-4 flex-wrap mb-admin-4">
+            <h1 className="text-2xl font-bold m-0">Users</h1>
           </div>
-          <button style={styles.view} type="button" onClick={() => setSelected(null)}>
-            Close
-          </button>
+
+          <FilterBar
+            search={q}
+            onSearchChange={setQ}
+            searchPlaceholder="Search users..."
+            filters={[
+              {
+                key: 'role',
+                label: 'Role',
+                value: tab,
+                options: TAB_DEFS.map((t) => ({
+                  value: t.key,
+                  label: `${t.label} (${tabCount(t.key).toLocaleString()})`,
+                })),
+                onChange: (v) => setTab(v as TabKey),
+              },
+            ]}
+            actions={
+              <button
+                type="button"
+                onClick={() => load()}
+                className="rounded-md bg-surface-elevated border border-border px-admin-3 py-admin-2 text-admin-sm text-text-primary"
+              >
+                Search
+              </button>
+            }
+          />
+
+          {error ? <p className="text-error mb-admin-3">{error}</p> : null}
+
+          <DataTable
+            columns={columns}
+            rows={rows}
+            onRowClick={openIdentity}
+            emptyMessage="No users found"
+          />
         </div>
-      ) : null}
+
+        <DetailPanel
+          title={selected?.name || 'User'}
+          open={!!selected}
+          onClose={() => setSelected(null)}
+        >
+          {selected ? (
+            <>
+              <p className="text-text-secondary m-0">
+                {selected.role} · {selected.status}
+              </p>
+              <p className="text-text-secondary m-0">Joined {selected.joined}</p>
+              <button
+                type="button"
+                className="rounded-md bg-motion-blue text-pure-white px-admin-3 py-admin-2 font-semibold"
+                onClick={() =>
+                  navigate(`/identity?userId=${encodeURIComponent(selected.id)}`)
+                }
+              >
+                Open identity review
+              </button>
+            </>
+          ) : null}
+        </DetailPanel>
+      </div>
     </AdminShell>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  header: { display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 },
-  h1: { fontSize: 28, fontWeight: 700, margin: 0 },
-  tools: { display: 'flex', gap: 10 },
-  search: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
-    borderRadius: 10,
-    padding: '10px 14px',
-    minWidth: 200,
-  },
-  filter: {
-    background: '#121212',
-    border: '1px solid #2A2A2A',
-    color: '#fff',
-    borderRadius: 10,
-    padding: '10px 14px',
-    cursor: 'pointer',
-  },
-  tabs: { display: 'flex', gap: 24, marginBottom: 20, flexWrap: 'wrap' },
-  tab: {
-    background: 'transparent',
-    border: 'none',
-    color: '#A0A0A0',
-    paddingBottom: 8,
-    cursor: 'pointer',
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  tabActive: { color: '#fff', borderBottom: '3px solid #0055FF' },
-  table: { borderTop: '1px solid #1A1A1A' },
-  thead: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 1fr 1fr 1fr 0.6fr',
-    gap: 8,
-    padding: '12px 4px',
-    color: '#888',
-    fontSize: 13,
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 1fr 1fr 1fr 0.6fr',
-    gap: 8,
-    padding: '16px 4px',
-    borderTop: '1px solid #1A1A1A',
-    alignItems: 'center',
-  },
-  empty: { padding: '24px 4px', color: '#888' },
-  nameCell: { display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600 },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: '50%',
-    background: '#2A2A2A',
-    display: 'inline-block',
-  },
-  badge: { borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 },
-  active: { background: 'rgba(63,112,72,0.35)', color: '#9BE0A8' },
-  suspended: { background: 'rgba(255,59,92,0.2)', color: '#FF8FA0' },
-  view: {
-    background: 'transparent',
-    border: 'none',
-    color: '#4A86E8',
-    cursor: 'pointer',
-    fontWeight: 600,
-    justifySelf: 'end',
-  },
-  panel: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    background: '#121212',
-    border: '1px solid #2A2A2A',
-  },
-};
