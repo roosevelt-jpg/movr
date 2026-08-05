@@ -33,11 +33,11 @@ const upload = multer({
 
 export const uploadsRouter = Router();
 
-/** POST /api/v1/uploads — merchant or admin image upload */
+/** POST /api/v1/uploads — authenticated image upload (merchant, admin, driver, customer) */
 uploadsRouter.post(
   '/',
   authenticateToken,
-  requireRole('merchant', 'admin'),
+  requireRole('merchant', 'admin', 'driver', 'customer', 'rider'),
   upload.single('file'),
   async (req: AuthRequest, res: Response) => {
     try {

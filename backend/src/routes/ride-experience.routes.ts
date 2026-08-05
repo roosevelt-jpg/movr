@@ -121,7 +121,7 @@ rideExperienceRouter.get(
         `INSERT INTO ride_share_links (ride_id, token, expires_at) VALUES ($1,$2,$3)`,
         [req.params.id, token, expires]
       );
-      const url = `${process.env.PUBLIC_WEB_URL || 'http://localhost:3003'}/trip/${token}`;
+      const url = `${process.env.PUBLIC_WEB_URL || process.env.WEB_APP_URL || 'http://localhost:5180'}/trip/${token}`;
       res.json({ status: 'success', data: { url, token, expiresAt: expires } });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -129,7 +129,7 @@ rideExperienceRouter.get(
   }
 );
 
-rideExperienceRouter.get(
+rideExperienceRouter.post(
   '/:id/masked-session',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
@@ -171,39 +171,90 @@ rideExperienceRouter.post(
 sosRouter.post('/trigger', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { rideId, lat, lng, triggeredBy } = req.body;
-    const role = triggeredBy || req.user!.userType || 'rider';
+    const role = triggeredBy || (req.user!.userType === 'driver' ? 'driver' : 'rider');
 
     const ride = await db.query(`SELECT * FROM rides WHERE id = $1`, [rideId]);
+    let emergencyNumber = process.env.DEFAULT_EMERGENCY_NUMBER || '191';
+    try {
+      const country = await db.query(
+        `SELECT emergency_number FROM countries WHERE code = $1 LIMIT 1`,
+        [req.body.countryCode || process.env.DEFAULT_COUNTRY || 'GH']
+      );
+      if (country.rows[0]?.emergency_number) emergencyNumber = country.rows[0].emergency_number;
+    } catch {
+      /* countries table optional */
+    }
+
     const snapshot: any = {
-      ride: ride.rows[0] || null,
+      ride: ride.rows[0]
+        ? {
+            id: ride.rows[0].id,
+            status: ride.rows[0].status,
+            pickup: {
+              lat: ride.rows[0].pickup_lat,
+              lng: ride.rows[0].pickup_lng,
+              address: ride.rows[0].pickup_address,
+            },
+            dropoff: {
+              lat: ride.rows[0].dropoff_lat,
+              lng: ride.rows[0].dropoff_lng,
+              address: ride.rows[0].dropoff_address,
+            },
+            startedAt: ride.rows[0].started_at || ride.rows[0].created_at,
+          }
+        : null,
       location: { lat, lng },
       triggeredBy: role,
-      emergencyNumber: process.env.DEFAULT_EMERGENCY_NUMBER || '191',
+      emergencyNumber,
       vehicle: null,
+      driver: null,
+      generatedAt: new Date().toISOString(),
     };
 
     if (ride.rows[0]?.driver_id) {
-      const vehicle = await db.query(
-        `SELECT document_type, document_number, verified, details
-         FROM identity_verifications WHERE driver_id = $1
-         ORDER BY created_at DESC LIMIT 1`,
-        [ride.rows[0].driver_id]
-      );
-      snapshot.vehicle = vehicle.rows[0] || null;
+      const vehicle = await db
+        .query(
+          `SELECT document_type, document_number, verified, details, created_at
+           FROM identity_verifications WHERE driver_id = $1
+           ORDER BY created_at DESC LIMIT 5`,
+          [ride.rows[0].driver_id]
+        )
+        .catch(() => ({ rows: [] }));
+
+      const driver = await db
+        .query(
+          `SELECT id, first_name, last_name, phone, email FROM users WHERE id = $1`,
+          [ride.rows[0].driver_id]
+        )
+        .catch(() => ({ rows: [] }));
+
+      const plate =
+        vehicle.rows.find((r: any) => /plate|vehicle/i.test(String(r.document_type || ''))) ||
+        vehicle.rows[0];
+
+      snapshot.vehicle = plate
+        ? {
+            document_type: plate.document_type,
+            document_number: plate.document_number,
+            plate: plate.document_number,
+            verified: plate.verified,
+            details: plate.details,
+          }
+        : null;
+      snapshot.driver = driver.rows[0]
+        ? {
+            id: driver.rows[0].id,
+            name: `${driver.rows[0].first_name || ''} ${driver.rows[0].last_name || ''}`.trim(),
+            phone: driver.rows[0].phone,
+          }
+        : null;
     }
 
     const sos = await db.query(
       `INSERT INTO sos_emergencies (
          ride_id, driver_id, customer_id, sos_type, location, status, triggered_by, incident_snapshot
        ) VALUES (
-         $1,
-         $2,
-         $3,
-         $4,
-         $5::jsonb,
-         'active',
-         $6,
-         $7::jsonb
+         $1, $2, $3, $4, $5::jsonb, 'active', $6, $7::jsonb
        ) RETURNING *`,
       [
         rideId,
@@ -216,11 +267,29 @@ sosRouter.post('/trigger', authenticateToken, async (req: AuthRequest, res: Resp
       ]
     );
 
+    // Best-effort alert dispatch via existing SOS service (non-blocking)
+    try {
+      const { default: sosService } = await import('../services/sos-emergency.service');
+      if (typeof (sosService as any).triggerSOS === 'function') {
+        await (sosService as any)
+          .triggerSOS(
+            rideId,
+            ride.rows[0]?.driver_id || req.user!.id,
+            ride.rows[0]?.customer_id || req.user!.id,
+            role === 'driver' ? 'driver' : 'customer',
+            { lat: lat || 0, lng: lng || 0 }
+          )
+          .catch(() => undefined);
+      }
+    } catch {
+      /* service may reference missing tables — snapshot already persisted */
+    }
+
     res.status(201).json({
       status: 'success',
       data: {
         sos: sos.rows[0],
-        quickDial: `tel:${snapshot.emergencyNumber}`,
+        quickDial: `tel:${emergencyNumber}`,
         snapshot,
       },
     });
@@ -239,11 +308,53 @@ sosRouter.get(
       if (!sos.rows[0]) {
         return res.status(404).json({ status: 'error', message: 'Not found' });
       }
+      const incident = sos.rows[0];
+      const snap = incident.incident_snapshot || {};
+      const format = String(req.query.format || 'json');
+
       const report = {
+        title: 'MOVR SOS Incident Report',
         generatedAt: new Date().toISOString(),
-        incident: sos.rows[0],
-        note: 'Export for law-enforcement handoff on formal request — not live dispatch.',
+        incidentId: incident.id,
+        rideId: incident.ride_id,
+        triggeredBy: incident.triggered_by || incident.sos_type,
+        status: incident.status,
+        createdAt: incident.created_at,
+        location: incident.location,
+        snapshot: snap,
+        note: 'For law-enforcement handoff on formal request — not live dispatch.',
       };
+
+      if (format === 'pdf' || format === 'text') {
+        const lines = [
+          'MOVR SOS INCIDENT REPORT',
+          '========================',
+          `Generated: ${report.generatedAt}`,
+          `Incident ID: ${report.incidentId}`,
+          `Ride ID: ${report.rideId}`,
+          `Triggered by: ${report.triggeredBy}`,
+          `Status: ${report.status}`,
+          `Created: ${report.createdAt}`,
+          `Location: ${JSON.stringify(report.location)}`,
+          '',
+          'DRIVER / VEHICLE SNAPSHOT',
+          `Driver: ${snap.driver?.name || '—'} (${snap.driver?.phone || '—'})`,
+          `Plate/Doc: ${snap.vehicle?.plate || snap.vehicle?.document_number || '—'}`,
+          `Verified: ${snap.vehicle?.verified ?? '—'}`,
+          `Trip pickup: ${JSON.stringify(snap.ride?.pickup || {})}`,
+          `Trip dropoff: ${JSON.stringify(snap.ride?.dropoff || {})}`,
+          '',
+          report.note,
+        ];
+        const body = lines.join('\n');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="sos-${incident.id}.txt"`
+        );
+        res.type('text/plain').send(body);
+        return;
+      }
+
       res.json({ status: 'success', data: report });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message });

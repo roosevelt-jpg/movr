@@ -5,9 +5,18 @@ import ActiveRideRecordingPanel from './ActiveRideRecordingPanel';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 /**
  * Driver active ride — map, ETA badge, pickup banner, masked call/chat, Arrived CTA.
- * Keeps ride status APIs (+ optional trip recording panel).
  */
 export default function ActiveRideScreen({
   rideId,
@@ -17,15 +26,18 @@ export default function ActiveRideScreen({
   onArrived?: () => void;
 }) {
   const [ride, setRide] = useState<any>({
-    customerName: 'Ama Konadu',
-    pickupAddress: '12 Oxford St',
+    customerName: 'Rider',
+    pickupAddress: 'Pickup',
     etaMinutes: 3,
     rating: 4.7,
-    tripsToday: 2,
+    tripsToday: 0,
     status: 'accepted',
   });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [proxy, setProxy] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!rideId) return;
@@ -46,6 +58,17 @@ export default function ActiveRideScreen({
         }
       })
       .catch(() => undefined);
+
+    fetch(`${API}/rides/${rideId}/masked-session`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({}),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data?.driverProxyNumber) setProxy(j.data.driverProxyNumber);
+      })
+      .catch(() => undefined);
   }, [rideId]);
 
   const arrived = async () => {
@@ -55,10 +78,13 @@ export default function ActiveRideScreen({
       if (rideId) {
         const res = await fetch(`${API}/rides/${rideId}/arrived`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
         });
         if (!res.ok) {
-          await fetch(`${API}/rides/${rideId}/start`, { method: 'PUT' });
+          await fetch(`${API}/rides/${rideId}/start`, {
+            method: 'PUT',
+            headers: authHeaders(),
+          });
         }
       }
       setRide((r: any) => ({ ...r, status: 'arrived' }));
@@ -71,6 +97,17 @@ export default function ActiveRideScreen({
     } finally {
       setBusy(false);
     }
+  };
+
+  const sendChat = async () => {
+    const body = 'On my way';
+    setMessages((prev) => [...prev, `You: ${body}`]);
+    if (!rideId) return;
+    await fetch(`${API}/rides/${rideId}/chat`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ body }),
+    }).catch(() => undefined);
   };
 
   const name = ride.customerName || 'Rider';
@@ -102,20 +139,32 @@ export default function ActiveRideScreen({
           <View style={{ flex: 1 }}>
             <Text style={styles.cardName}>{name}</Text>
             <Text style={styles.cardMeta}>
-              ★ {Number(ride.rating || 4.7).toFixed(1)} · {ride.tripsToday ?? 2} trips today
+              ★ {Number(ride.rating || 4.7).toFixed(1)} · {ride.tripsToday ?? 0} trips today
             </Text>
           </View>
           <Pressable
             style={styles.iconBtn}
-            onPress={() => Linking.openURL('tel:+233240000000')}
+            onPress={() => Linking.openURL(`tel:${proxy || '+233000000000'}`)}
           >
             <Text style={styles.iconGlyph}>📞</Text>
           </Pressable>
-          <Pressable style={styles.iconBtn}>
+          <Pressable style={styles.iconBtn} onPress={() => setChatOpen((v) => !v)}>
             <Text style={styles.iconGlyph}>💬</Text>
           </Pressable>
         </View>
         <Text style={styles.privacy}>Calls and messages are number-masked for privacy</Text>
+        {chatOpen ? (
+          <View style={{ marginTop: spacing[3] }}>
+            {messages.map((m, i) => (
+              <Text key={i} style={{ color: colors.textSecondary, marginBottom: 4 }}>
+                {m}
+              </Text>
+            ))}
+            <Pressable style={[styles.iconBtn, { marginTop: 8, width: '100%' as any }]} onPress={sendChat}>
+              <Text style={{ color: colors.pureWhite, fontWeight: '600' }}>Send quick chat</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       {rideId ? <ActiveRideRecordingPanel rideId={rideId} driverId="" /> : null}

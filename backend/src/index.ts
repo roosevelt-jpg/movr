@@ -1087,13 +1087,28 @@ io.on('connection', (socket) => {
   socket.on('ride-chat:join', (rideId: string) => {
     if (rideId) socket.join(`ride-chat:${rideId}`);
   });
-  socket.on('ride-chat:message', (data: any) => {
-    if (data?.rideId) {
-      io.to(`ride-chat:${data.rideId}`).emit('ride-chat:message', {
-        ...data,
-        timestamp: Date.now(),
-      });
+  socket.on('ride-chat:message', async (data: any) => {
+    if (!data?.rideId || !data?.body) return;
+    try {
+      const { DatabaseService } = require('./services/database.service');
+      const chatDb = new DatabaseService();
+      if (data.senderId) {
+        await chatDb.query(
+          `INSERT INTO ride_messages (ride_id, sender_id, body) VALUES ($1, $2, $3)`,
+          [data.rideId, data.senderId, String(data.body).slice(0, 2000)]
+        );
+      }
+    } catch (err) {
+      logger.warn('ride-chat persist failed', err);
     }
+    io.to(`ride-chat:${data.rideId}`).emit('ride-chat:message', {
+      ...data,
+      timestamp: Date.now(),
+    });
+  });
+
+  socket.on('ride:join', (rideId: string) => {
+    if (rideId) socket.join(`ride:${rideId}`);
   });
 
   // Phase 4 — marketplace delivery tracking

@@ -1,21 +1,36 @@
-import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
 import { Router, Response } from 'express';
 import {
   AuthRequest,
   authenticateToken,
   requireCustomer,
   requireDriver,
-  requireAdmin,
 } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
-import { PaymentService } from '../services/payment.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 import { RewardsEngineService } from '../services/rewards-engine.service';
+import { UPLOAD_ROOT } from './uploads.routes';
 
 const db = new DatabaseService();
-const payments = new PaymentService(db);
 const matching = new MatchingEngineService(db, null, { broadcastToDrivers: () => undefined } as any);
 const rewards = new RewardsEngineService(db);
+
+if (!fs.existsSync(UPLOAD_ROOT)) {
+  fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_ROOT),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `pod-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 export const deliveriesRouter = Router();
 
@@ -23,8 +38,35 @@ async function deliveryFee(speedTier: 'standard' | 'express') {
   const cfg = await db.query(`SELECT * FROM delivery_pricing_config WHERE id = 1`);
   const base = Number(cfg.rows[0]?.standard_fee || 10);
   const mult = Number(cfg.rows[0]?.express_multiplier || 1.5);
-  return speedTier === 'express' ? base * mult : base;
+  return {
+    standard: base,
+    express: base * mult,
+    fee: speedTier === 'express' ? base * mult : base,
+    expressMultiplier: mult,
+  };
 }
+
+deliveriesRouter.get('/quote', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tier = (String(req.query.tier || 'standard') === 'express' ? 'express' : 'standard') as
+      | 'standard'
+      | 'express';
+    const pricing = await deliveryFee(tier);
+    res.json({
+      status: 'success',
+      data: {
+        tier,
+        standardFee: pricing.standard,
+        expressFee: pricing.express,
+        fee: pricing.fee,
+        expressMultiplier: pricing.expressMultiplier,
+        currency: 'GHS',
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
 
 deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthRequest, res: Response) => {
   try {
@@ -35,12 +77,14 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
       pickupLng,
       dropoffLat,
       dropoffLng,
-      speedTier = 'standard',
+      speedTier,
+      tier,
       receiverName,
       receiverPhone,
     } = req.body;
 
-    const fee = await deliveryFee(speedTier);
+    const speed = (speedTier || tier || 'standard') === 'express' ? 'express' : 'standard';
+    const pricing = await deliveryFee(speed);
     const otp = String(Math.floor(100000 + Math.random() * 900000));
 
     const row = await db.query(
@@ -59,16 +103,15 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
         pickupLng || null,
         dropoffLat || null,
         dropoffLng || null,
-        speedTier,
+        speed,
         otp,
-        fee,
+        pricing.fee,
       ]
     );
 
     if (pickupLat != null && pickupLng != null) {
-      await matching.assignNearestDriver('delivery', row.rows[0].id, pickupLat, pickupLng);
-      // assignNearestDriver currently updates marketplace_orders — also set courier on deliveries
-      const drivers = await matching.findBestDrivers(pickupLat, pickupLng);
+      await matching.assignNearestDriver('delivery', row.rows[0].id, pickupLat, pickupLng).catch(() => undefined);
+      const drivers = await matching.findBestDrivers(pickupLat, pickupLng).catch(() => []);
       if (drivers[0]?.id) {
         await db.query(
           `UPDATE deliveries SET courier_id = $1, status = 'assigned', updated_at = NOW() WHERE id = $2`,
@@ -87,21 +130,50 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
   }
 });
 
+/** Multipart or JSON body — stores proof_of_delivery_url + receiver_signature_url */
 deliveriesRouter.post(
   '/:id/proof',
   authenticateToken,
   requireDriver,
+  upload.fields([
+    { name: 'proof', maxCount: 1 },
+    { name: 'signature', maxCount: 1 },
+  ]),
   async (req: AuthRequest, res: Response) => {
     try {
-      const { proofOfDeliveryUrl, receiverSignatureUrl } = req.body;
+      const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
+      const proofFile = files?.proof?.[0];
+      const sigFile = files?.signature?.[0];
+
+      let proofOfDeliveryUrl = req.body.proofOfDeliveryUrl || req.body.proof_of_delivery_url || null;
+      let receiverSignatureUrl =
+        req.body.receiverSignatureUrl || req.body.receiver_signature_url || null;
+
+      if (proofFile) proofOfDeliveryUrl = `/uploads/${proofFile.filename}`;
+      if (sigFile) receiverSignatureUrl = `/uploads/${sigFile.filename}`;
+
+      // Accept base64 data URLs written to disk
+      if (typeof req.body.proofBase64 === 'string' && req.body.proofBase64.startsWith('data:')) {
+        const buf = Buffer.from(req.body.proofBase64.split(',')[1] || '', 'base64');
+        const name = `pod-${Date.now()}.jpg`;
+        fs.writeFileSync(path.join(UPLOAD_ROOT, name), buf);
+        proofOfDeliveryUrl = `/uploads/${name}`;
+      }
+      if (typeof req.body.signatureBase64 === 'string' && req.body.signatureBase64.startsWith('data:')) {
+        const buf = Buffer.from(req.body.signatureBase64.split(',')[1] || '', 'base64');
+        const name = `sig-${Date.now()}.png`;
+        fs.writeFileSync(path.join(UPLOAD_ROOT, name), buf);
+        receiverSignatureUrl = `/uploads/${name}`;
+      }
+
       const result = await db.query(
         `UPDATE deliveries SET
            proof_of_delivery_url = COALESCE($1, proof_of_delivery_url),
            receiver_signature_url = COALESCE($2, receiver_signature_url),
            updated_at = NOW()
-         WHERE id = $3 AND courier_id = $4
+         WHERE id = $3 AND (courier_id = $4 OR courier_id IS NULL)
          RETURNING id, proof_of_delivery_url, receiver_signature_url, status`,
-        [proofOfDeliveryUrl || null, receiverSignatureUrl || null, req.params.id, req.user!.id]
+        [proofOfDeliveryUrl, receiverSignatureUrl, req.params.id, req.user!.id]
       );
       if (!result.rows[0]) {
         return res.status(404).json({ status: 'error', message: 'Delivery not found' });
@@ -119,21 +191,22 @@ deliveriesRouter.post(
   requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
-      const delivery = await db.query(`SELECT * FROM deliveries WHERE id = $1 AND courier_id = $2`, [
-        req.params.id,
-        req.user!.id,
-      ]);
+      const delivery = await db.query(`SELECT * FROM deliveries WHERE id = $1`, [req.params.id]);
       const row = delivery.rows[0];
       if (!row) {
         return res.status(404).json({ status: 'error', message: 'Delivery not found' });
+      }
+      if (row.courier_id && row.courier_id !== req.user!.id) {
+        return res.status(403).json({ status: 'error', message: 'Not your delivery' });
       }
       if (String(req.body.otp) !== String(row.otp_code)) {
         return res.status(400).json({ status: 'error', message: 'Invalid OTP' });
       }
 
       const updated = await db.query(
-        `UPDATE deliveries SET status = 'delivered', updated_at = NOW() WHERE id = $1 RETURNING *`,
-        [row.id]
+        `UPDATE deliveries SET status = 'delivered', courier_id = COALESCE(courier_id, $2), updated_at = NOW()
+         WHERE id = $1 RETURNING *`,
+        [row.id, req.user!.id]
       );
 
       await rewards.emitActivityEvent(row.sender_id, 'delivery_completed', {
@@ -141,12 +214,26 @@ deliveriesRouter.post(
         deliveryId: row.id,
       });
 
-      res.json({ status: 'success', data: updated.rows[0] });
+      const { otp_code, ...safe } = updated.rows[0];
+      res.json({ status: 'success', data: safe });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
   }
 );
+
+deliveriesRouter.get('/mine', authenticateToken, requireDriver, async (req: AuthRequest, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT id, pickup_address, dropoff_address, speed_tier, status, delivery_fee, created_at
+       FROM deliveries WHERE courier_id = $1 ORDER BY created_at DESC LIMIT 20`,
+      [req.user!.id]
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
 
 deliveriesRouter.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

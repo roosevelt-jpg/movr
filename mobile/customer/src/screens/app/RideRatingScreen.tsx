@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
+import TipPromptScreen from './TipPromptScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const TAGS = ['Clean car', 'Great chat', 'Safe driving'] as const;
 
-/** Post-ride rating — stars, comment, quick tags. */
+/** Post-ride rating — stars, comment, quick tags, then tip prompt. */
 export default function RideRatingScreen({
   rideId,
   driverName = 'Kwesi',
@@ -15,6 +16,7 @@ export default function RideRatingScreen({
   driverName?: string;
   onDone?: () => void;
 }) {
+  const [step, setStep] = useState<'rate' | 'tip'>('rate');
   const [rating, setRating] = useState(4);
   const [comment, setComment] = useState('');
   const [selected, setSelected] = useState<string[]>(['Clean car']);
@@ -37,14 +39,25 @@ export default function RideRatingScreen({
         });
       }
       setMsg('Thanks for your feedback');
-      onDone?.();
+      setStep('tip');
     } catch {
-      setMsg('Rating saved locally');
-      onDone?.();
+      setMsg('Rating saved');
+      setStep('tip');
     } finally {
       setLoading(false);
     }
   };
+
+  if (step === 'tip') {
+    return (
+      <TipPromptScreen
+        rideId={rideId}
+        driverName={driverName}
+        onSkip={onDone}
+        onDone={() => onDone?.()}
+      />
+    );
+  }
 
   return (
     <View style={styles.root}>

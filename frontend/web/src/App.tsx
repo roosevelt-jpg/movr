@@ -55,6 +55,7 @@ import HelpArticlePage from './pages/public/HelpArticlePage';
 import NoConnectionPage from './pages/public/NoConnectionPage';
 import ClaimTransferPage from './pages/public/ClaimTransferPage';
 import OnboardingIntroPage from './pages/public/OnboardingIntroPage';
+import TripSharePage from './pages/public/TripSharePage';
 import MerchantOrderDetailPage from './pages/merchant/MerchantOrderDetailPage';
 import MerchantSettingsPage from './pages/merchant/MerchantSettingsPage';
 import WalletTopUpPage from './pages/app/WalletTopUpPage';
@@ -108,6 +109,7 @@ const App: React.FC = () => {
           <Route path="/claim-transfer" element={<ClaimTransferPage />} />
           <Route path="/claim-transfer/:code" element={<ClaimTransferPage />} />
           <Route path="/t/:code" element={<ClaimTransferPage />} />
+          <Route path="/trip/:token" element={<TripSharePage />} />
           <Route path="/about" element={<LandingPage />} />
           <Route path="/features" element={<LandingPage />} />
           <Route path="/contact" element={<LandingPage />} />

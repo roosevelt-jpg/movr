@@ -4,65 +4,71 @@ import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 const LABELS: Record<string, string> = {
+  ride_completed: 'Rides',
   ride: 'Rides',
   rides: 'Rides',
-  ride_completed: 'Rides',
+  order_completed: 'Orders',
   order: 'Orders',
   orders: 'Orders',
-  order_completed: 'Orders',
-  referral: 'Referrals',
-  referrals: 'Referrals',
+  delivery_completed: 'Orders',
   referral_qualified: 'Referrals',
-  staking: 'Staking pool',
-  staking_pool: 'Staking pool',
+  referral_confirmed: 'Referrals',
+  referral: 'Referrals',
+  staking_accrual: 'Staking',
+  staking: 'Staking',
+  stake_created: 'Staking',
 };
 
-/** Movr points — total card + activity breakdown (keeps points APIs). */
+const BREAKDOWN_ORDER = ['Rides', 'Orders', 'Referrals', 'Staking'];
+
+/** Pre-launch points — total, activity bars, estimated DVT at TGE. */
 export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
-  const [balance, setBalance] = useState(1280);
-  const [estimate, setEstimate] = useState<any>({ estimatedDvt: 128 });
+  const [balance, setBalance] = useState(0);
+  const [estimate, setEstimate] = useState<{ estimatedDvt?: number; conversionRate?: number }>({});
   const [byActivity, setByActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
+    const h = authHeaders();
     Promise.all([
-      fetch(`${API}/points/balance`).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/points/history`).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/points/estimated-dvt`).then((r) => r.json()).catch(() => null),
-    ]).then(([b, h, e]) => {
-      if (b?.data?.balance != null) setBalance(Number(b.data.balance));
-      if (h?.data?.byActivity) setByActivity(h.data.byActivity);
-      else if (Array.isArray(h?.data)) {
-        // group raw history if API returns ledger rows
-        const map: Record<string, number> = {};
-        for (const row of h.data) {
-          const key = row.activity_type || 'other';
-          map[key] = (map[key] || 0) + Number(row.points_earned || row.points || 0);
-        }
-        setByActivity(Object.entries(map).map(([activity_type, points]) => ({ activity_type, points })));
-      }
-      if (e?.data) setEstimate(e.data);
-    });
+      fetch(`${API}/points/balance`, { headers: h }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/points/history`, { headers: h }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/points/estimated-dvt`, { headers: h }).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([b, hist, e]) => {
+        if (b?.data?.balance != null) setBalance(Number(b.data.balance));
+        if (hist?.data?.byActivity) setByActivity(hist.data.byActivity);
+        if (e?.data) setEstimate(e.data);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const rows = useMemo(() => {
-    if (byActivity.length) {
-      return byActivity.map((r) => ({
-        label: LABELS[String(r.activity_type).toLowerCase()] || String(r.activity_type),
-        points: Number(r.points || r.points_earned || 0),
-      }));
+    const map: Record<string, number> = {
+      Rides: 0,
+      Orders: 0,
+      Referrals: 0,
+      Staking: 0,
+    };
+    for (const r of byActivity) {
+      const label = LABELS[String(r.activity_type || '').toLowerCase()] || null;
+      if (!label || !(label in map)) continue;
+      map[label] += Number(r.points || r.points_earned || 0);
     }
-    return [
-      { label: 'Rides', points: 640 },
-      { label: 'Orders', points: 310 },
-      { label: 'Referrals', points: 250 },
-      { label: 'Staking pool', points: 80 },
-    ];
+    return BREAKDOWN_ORDER.map((label) => ({ label, points: map[label] }));
   }, [byActivity]);
 
-  const dvt =
-    estimate?.estimatedDvt ??
-    (balance ? Math.round((balance / 10) * 100) / 100 : 0);
+  const maxPts = Math.max(1, ...rows.map((r) => r.points));
+  const dvt = estimate?.estimatedDvt ?? balance * Number(estimate?.conversionRate || 0.01);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
@@ -71,18 +77,36 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
       <View style={styles.hero}>
         <View style={styles.heroGlow} />
         <Text style={styles.heroLabel}>Total points</Text>
-        <Text style={styles.heroValue}>{Number(balance).toLocaleString()}</Text>
-        <Text style={styles.heroDvt}>≈ {Number(dvt).toLocaleString()} DVT estimated at TGE</Text>
+        <Text style={styles.heroValue}>
+          {loading ? '…' : Number(balance).toLocaleString()}
+        </Text>
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>
+            Estimated DVT at TGE: {Number(dvt).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+          </Text>
+          {estimate?.conversionRate != null ? (
+            <Text style={styles.bannerMeta}>
+              Rate · {Number(estimate.conversionRate)} pts→DVT
+            </Text>
+          ) : null}
+        </View>
       </View>
 
-      <Text style={styles.section}>Breakdown</Text>
+      <Text style={styles.section}>Breakdown by activity</Text>
       {rows.map((row) => (
         <View key={row.label} style={styles.row}>
-          <View>
+          <View style={styles.rowTop}>
             <Text style={styles.rowLabel}>{row.label}</Text>
-            <Text style={styles.rowMeta}>This month</Text>
+            <Text style={styles.rowPts}>+{Number(row.points).toLocaleString()} pts</Text>
           </View>
-          <Text style={styles.rowPts}>+{Number(row.points).toLocaleString()} pts</Text>
+          <View style={styles.barTrack}>
+            <View
+              style={[
+                styles.barFill,
+                { width: `${Math.max(4, (row.points / maxPts) * 100)}%` },
+              ]}
+            />
+          </View>
         </View>
       ))}
 
@@ -120,12 +144,19 @@ const styles = StyleSheet.create({
     marginVertical: spacing[2],
     zIndex: 1,
   },
-  heroDvt: { color: 'rgba(200,180,255,0.9)', zIndex: 1 },
+  banner: {
+    marginTop: spacing[3],
+    zIndex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    alignItems: 'center',
+  },
+  bannerText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
+  bannerMeta: { color: 'rgba(200,180,255,0.85)', fontSize: 11, marginTop: 2 },
   section: { color: colors.textSecondary, marginBottom: spacing[3] },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -133,9 +164,20 @@ const styles = StyleSheet.create({
     padding: spacing[4],
     marginBottom: spacing[3],
   },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing[2] },
   rowLabel: { color: colors.pureWhite, fontWeight: '700' },
-  rowMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   rowPts: { color: colors.motionBlue, fontWeight: '700' },
+  barTrack: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.motionBlue,
+  },
   redeemBtn: {
     marginTop: spacing[4],
     borderRadius: 999,

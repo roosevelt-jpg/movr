@@ -4,36 +4,35 @@ import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /** Invite friends — shareable code + milestone progress bars. */
 export default function ReferralScreen() {
-  const [code, setCode] = useState('KWESI240');
+  const [code, setCode] = useState('');
   const [shareLink, setShareLink] = useState('');
   const [referrals, setReferrals] = useState<any[]>([]);
   const [totalRewards, setTotalRewards] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/referrals/my-code`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.data?.code) setCode(j.data.code);
-        if (j?.data?.shareLink) setShareLink(j.data.shareLink);
+    const h = authHeaders();
+    setLoading(true);
+    Promise.all([
+      fetch(`${API}/referrals/my-code`, { headers: h }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/referrals/progress`, { headers: h }).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([c, p]) => {
+        if (c?.data?.code) setCode(c.data.code);
+        if (c?.data?.shareLink) setShareLink(c.data.shareLink);
+        setReferrals(p?.data?.referrals || []);
+        setTotalRewards(Number(p?.data?.totalRewards || 0));
       })
-      .catch(() => undefined);
-    fetch(`${API}/referrals/progress`)
-      .then((r) => r.json())
-      .then((j) => {
-        const rows = j?.data?.referrals || [];
-        if (rows.length) setReferrals(rows);
-        else {
-          setReferrals([
-            { id: '1', first_name: 'Ama K.', status: 'qualified', reward_points: 250 },
-            { id: '2', first_name: 'Kofi M.', status: 'first_ride_completed', reward_points: 0 },
-            { id: '3', first_name: 'Efua A.', status: 'signed_up', reward_points: 0 },
-          ]);
-        }
-        setTotalRewards(j?.data?.totalRewards || 0);
-      })
-      .catch(() => undefined);
+      .finally(() => setLoading(false));
   }, []);
 
   const share = async () => {
@@ -44,36 +43,41 @@ export default function ReferralScreen() {
 
   const milestoneProgress = (status: string) => {
     if (status === 'qualified') return 1;
-    if (status === 'first_ride_completed') return 0.5;
-    return 0.2;
+    if (status === 'first_ride_completed') return 0.66;
+    if (status === 'signed_up') return 0.33;
+    return 0.15;
   };
 
   const statusLabel = (item: any) => {
     if (item.status === 'qualified') {
-      return `Qualified · +${item.reward_points || 250} pts`;
+      return `Qualified · +${item.reward_points || 0} pts`;
     }
-    if (item.status === 'first_ride_completed') return 'First ride pending';
+    if (item.status === 'first_ride_completed') return 'First ride done';
     return 'Signed up';
   };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Invite friends</Text>
-      <Text style={styles.sub}>Earn points when they take their first ride</Text>
+      <Text style={styles.sub}>Earn points when they qualify (ride + activity)</Text>
 
       <View style={styles.codeCard}>
         <Text style={styles.codeLabel}>Your code</Text>
-        <Text style={styles.code}>{code || '—'}</Text>
-        <Pressable style={styles.shareBtn} onPress={share}>
+        <Text style={styles.code}>{code || (loading ? '…' : '—')}</Text>
+        <Pressable style={styles.shareBtn} onPress={share} disabled={!code}>
           <View style={styles.shareGlow} />
           <Text style={styles.shareText}>↗  Share invite link</Text>
         </Pressable>
       </View>
 
       <Text style={styles.section}>
-        👥  {referrals.length || 0} friends invited
+        {referrals.length} friends invited
         {totalRewards ? ` · ${totalRewards} pts earned` : ''}
       </Text>
+
+      {!loading && referrals.length === 0 ? (
+        <Text style={styles.empty}>No referrals yet — share your code to get started</Text>
+      ) : null}
 
       <FlatList
         data={referrals}
@@ -135,6 +139,7 @@ const styles = StyleSheet.create({
   },
   shareText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
   section: { color: colors.textSecondary, marginBottom: spacing[3] },
+  empty: { color: colors.textSecondary, marginBottom: spacing[4] },
   card: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,

@@ -2,10 +2,14 @@ import crypto from 'crypto';
 import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
+import { PointsService } from '../services/points.service';
+import { TokenService } from '../services/token.service';
 import { RewardsEngineService } from '../services/rewards-engine.service';
 
 const db = new DatabaseService();
 const rewards = new RewardsEngineService(db);
+const points = new PointsService(db);
+const tokens = new TokenService(db);
 
 export const referralsRouter = Router();
 
@@ -55,9 +59,14 @@ referralsRouter.post('/apply', async (req: AuthRequest, res: Response) => {
     }
 
     const row = await db.query(
-      `INSERT INTO referrals (referrer_id, referee_id, code, status)
-       VALUES ($1, $2, $3, 'signed_up') RETURNING *`,
-      [ref.rows[0].user_id, req.user!.id, code]
+      `INSERT INTO referrals (referrer_id, referee_id, code, status, milestone_json)
+       VALUES ($1, $2, $3, 'signed_up', $4::jsonb) RETURNING *`,
+      [
+        ref.rows[0].user_id,
+        req.user!.id,
+        code,
+        JSON.stringify({ stage: 'signed_up', events: ['signed_up'], at: new Date().toISOString() }),
+      ]
     );
 
     res.status(201).json({ status: 'success', data: row.rows[0] });
@@ -86,6 +95,10 @@ referralsRouter.get('/progress', async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * Advance referral milestones from ride/order completion handlers.
+ * signed_up → first_ride_completed → qualified
+ */
 export async function advanceReferralMilestone(
   refereeId: string,
   event: 'first_ride_completed' | 'order_completed' | 'qualified'
@@ -94,34 +107,77 @@ export async function advanceReferralMilestone(
   const row = ref.rows[0];
   if (!row) return null;
 
-  let next = row.status;
-  if (row.status === 'signed_up' && event === 'first_ride_completed') {
+  const status = row.status === 'pending' ? 'signed_up' : row.status;
+  let next = status;
+
+  if (status === 'signed_up' && event === 'first_ride_completed') {
     next = 'first_ride_completed';
-  } else if (
-    (row.status === 'first_ride_completed' || row.status === 'signed_up') &&
-    (event === 'order_completed' || event === 'qualified')
-  ) {
-    next = 'qualified';
-  } else if (row.status === 'first_ride_completed' && event === 'first_ride_completed') {
+  } else if (status === 'first_ride_completed') {
+    if (event === 'order_completed' || event === 'qualified' || event === 'first_ride_completed') {
+      next = 'qualified';
+    }
+  } else if (event === 'qualified') {
     next = 'qualified';
   }
 
-  if (next === row.status) return row;
+  if (next === status && status === row.status) return row;
+
+  const prevEvents = Array.isArray(row.milestone_json?.events)
+    ? row.milestone_json.events
+    : [status];
+  const milestone = {
+    stage: next,
+    events: [...prevEvents, event],
+    at: new Date().toISOString(),
+  };
 
   const updated = await db.query(
     `UPDATE referrals SET status = $1,
-       confirmed_at = CASE WHEN $1 = 'qualified' THEN NOW() ELSE confirmed_at END
-     WHERE id = $2 RETURNING *`,
-    [next, row.id]
+       milestone_json = $2::jsonb,
+       confirmed_at = CASE WHEN $1 = 'qualified' THEN NOW() ELSE confirmed_at END,
+       qualified_at = CASE WHEN $1 = 'qualified' THEN NOW() ELSE qualified_at END
+     WHERE id = $3 RETURNING *`,
+    [next, JSON.stringify(milestone), row.id]
   );
 
-  if (next === 'qualified' && row.status !== 'qualified') {
-    const result = await rewards.emitActivityEvent(row.referrer_id, 'referral_qualified', {
-      description: `Referral ${row.code} qualified`,
-      code: row.code,
-    });
+  if (next === 'qualified' && status !== 'qualified') {
+    const cfg = await db
+      .query(`SELECT * FROM referral_reward_config WHERE id = 1`)
+      .catch(() => ({ rows: [{ reward_type: 'points', points_amount: 100, dvt_amount: 0 }] }));
+    const conf = cfg.rows[0] || { reward_type: 'points', points_amount: 100, dvt_amount: 0 };
+    let awardedPoints = 0;
+
+    if (conf.reward_type === 'points' || conf.reward_type === 'both') {
+      const result = await rewards.emitActivityEvent(row.referrer_id, 'referral_qualified', {
+        description: `Referral ${row.code} qualified`,
+        code: row.code,
+      });
+      awardedPoints = Number(result.points || conf.points_amount || 0);
+      if (!result.awarded && Number(conf.points_amount) > 0) {
+        await points.award(
+          row.referrer_id,
+          'referral_qualified',
+          `Referral ${row.code} qualified`,
+          Number(conf.points_amount)
+        );
+        awardedPoints = Number(conf.points_amount);
+      }
+    }
+
+    if (
+      (conf.reward_type === 'dvt' || conf.reward_type === 'both') &&
+      Number(conf.dvt_amount) > 0
+    ) {
+      await tokens.distributeReward(
+        row.referrer_id,
+        Number(conf.dvt_amount),
+        'referral_qualified',
+        row.id
+      );
+    }
+
     await db.query(`UPDATE referrals SET reward_points = $1 WHERE id = $2`, [
-      Number(result.points || 0),
+      awardedPoints,
       row.id,
     ]);
   }

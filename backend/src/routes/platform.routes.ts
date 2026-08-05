@@ -912,6 +912,63 @@ adminOpsRouter.patch(
   }
 );
 
+/** Phase 12 — exportable SOS incident report for law-enforcement handoff */
+adminOpsRouter.get(
+  '/sos-incidents/:id/report',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const sos = await db.query(`SELECT * FROM sos_emergencies WHERE id = $1`, [req.params.id]);
+      if (!sos.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Not found' });
+      }
+      const incident = sos.rows[0];
+      const snap = incident.incident_snapshot || {};
+      const format = String(req.query.format || 'json');
+      const report = {
+        title: 'MOVR SOS Incident Report',
+        generatedAt: new Date().toISOString(),
+        incidentId: incident.id,
+        rideId: incident.ride_id,
+        triggeredBy: incident.triggered_by || incident.sos_type,
+        status: incident.status,
+        createdAt: incident.created_at,
+        location: incident.location,
+        snapshot: snap,
+        note: 'For law-enforcement handoff on formal request — not live dispatch.',
+      };
+      if (format === 'pdf' || format === 'text') {
+        const lines = [
+          'MOVR SOS INCIDENT REPORT',
+          '========================',
+          `Generated: ${report.generatedAt}`,
+          `Incident ID: ${report.incidentId}`,
+          `Ride ID: ${report.rideId}`,
+          `Triggered by: ${report.triggeredBy}`,
+          `Status: ${report.status}`,
+          `Created: ${report.createdAt}`,
+          `Location: ${JSON.stringify(report.location)}`,
+          '',
+          'DRIVER / VEHICLE SNAPSHOT',
+          `Driver: ${snap.driver?.name || '—'} (${snap.driver?.phone || '—'})`,
+          `Plate/Doc: ${snap.vehicle?.plate || snap.vehicle?.document_number || '—'}`,
+          `Verified: ${snap.vehicle?.verified ?? '—'}`,
+          `Trip pickup: ${JSON.stringify(snap.ride?.pickup || {})}`,
+          `Trip dropoff: ${JSON.stringify(snap.ride?.dropoff || {})}`,
+          '',
+          report.note,
+        ];
+        res.setHeader('Content-Disposition', `attachment; filename="sos-${incident.id}.txt"`);
+        return res.type('text/plain').send(lines.join('\n'));
+      }
+      res.json({ status: 'success', data: report });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 // --- Phase 18 finance ---
 adminFinanceRouter.get('/summary', authenticateToken, requireAdmin, async (_req: any, res: Response) => {
   const num = async (sql: string, field = 'c') => {

@@ -356,7 +356,24 @@ router.put('/:id/complete', authenticateToken, requireDriver, async (req, res) =
     await db.query(
       `UPDATE driver_performance SET total_earnings = total_earnings + $1 WHERE driver_id = $2`,
       [actualFare, driverId]
-    );
+    ).catch(() => undefined);
+
+    // Phase 6 + 10 — points ledger + referral milestones on ride completion
+    try {
+      const customerId = result.rows[0]?.customer_id;
+      if (customerId) {
+        const { RewardsEngineService } = require('../services/rewards-engine.service');
+        const { advanceReferralMilestone } = require('./referrals.routes');
+        const rewards = new RewardsEngineService(db);
+        await rewards.emitActivityEvent(customerId, 'ride_completed', {
+          description: `Ride ${id} completed`,
+          rideId: id,
+        });
+        await advanceReferralMilestone(customerId, 'first_ride_completed');
+      }
+    } catch (e) {
+      console.warn('points/referral hook failed', e);
+    }
 
     realtime.broadcastToRide(id, 'ride:completed', {
       rideId: id,

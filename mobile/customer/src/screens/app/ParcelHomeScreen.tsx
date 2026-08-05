@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
@@ -6,7 +6,17 @@ import { formatCurrency } from '@movr/design-system/format';
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const TABS = ['Ride', 'Shop', 'Parcel', 'Rentals'] as const;
 
-/** Send a parcel — Standard/Express cards + Find a courier. */
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** Send a parcel — Standard/Express with live fee quote. */
 export default function ParcelHomeScreen({
   activeTab = 'Parcel',
   onTabChange,
@@ -17,11 +27,25 @@ export default function ParcelHomeScreen({
   const [tier, setTier] = useState<'standard' | 'express'>('standard');
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
+  const [fees, setFees] = useState({ standard: 10, express: 15 });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const fees = { standard: 18, express: 32 };
   const etas = { standard: '45–60 min', express: '15–25 min' };
+
+  useEffect(() => {
+    fetch(`${API}/deliveries/quote?tier=standard`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data) {
+          setFees({
+            standard: Number(j.data.standardFee || 10),
+            express: Number(j.data.expressFee || 15),
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const findCourier = async () => {
     if (!pickup || !dropoff) {
@@ -31,23 +55,25 @@ export default function ParcelHomeScreen({
     setLoading(true);
     setMsg('');
     try {
-      const res = await fetch(`${API}/deliveries/request`, {
+      const res = await fetch(`${API}/deliveries`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           pickupAddress: pickup,
           dropoffAddress: dropoff,
-          tier,
-          estimatedFee: fees[tier],
+          speedTier: tier,
         }),
       });
-      if (res.ok) {
-        setMsg('Courier search started');
+      const json = await res.json();
+      if (res.ok && json.status === 'success') {
+        setMsg(
+          `Booked ${tier} · ${formatCurrency(Number(json.data?.delivery_fee || fees[tier]), 'GHS')} · #${String(json.data?.id || '').slice(0, 8)}`
+        );
       } else {
-        setMsg(`Looking for ${tier} courier · ${formatCurrency(fees[tier], 'GHS')}`);
+        setMsg(json.message || 'Could not book parcel');
       }
-    } catch {
-      setMsg(`Looking for ${tier} courier · ${formatCurrency(fees[tier], 'GHS')}`);
+    } catch (e: any) {
+      setMsg(e.message || 'Network error');
     } finally {
       setLoading(false);
     }
@@ -93,6 +119,7 @@ export default function ParcelHomeScreen({
       <View style={styles.cards}>
         {(['standard', 'express'] as const).map((t) => {
           const on = tier === t;
+          const delta = fees.express - fees.standard;
           return (
             <Pressable
               key={t}
@@ -102,6 +129,11 @@ export default function ParcelHomeScreen({
               <Text style={styles.cardTitle}>{t === 'standard' ? 'Standard' : 'Express'}</Text>
               <Text style={styles.cardEta}>{etas[t]}</Text>
               <Text style={styles.cardPrice}>{formatCurrency(fees[t], 'GHS')}</Text>
+              {t === 'express' ? (
+                <Text style={styles.cardDelta}>+{formatCurrency(delta, 'GHS')} vs standard</Text>
+              ) : (
+                <Text style={styles.cardDelta}>Best value</Text>
+              )}
             </Pressable>
           );
         })}
@@ -149,35 +181,36 @@ const styles = StyleSheet.create({
     borderColor: colors.pureWhite,
   },
   input: { flex: 1, color: colors.pureWhite, paddingVertical: 14, fontSize: 15 },
-  label: { color: colors.textSecondary, marginTop: spacing[3], marginBottom: spacing[2], fontSize: 13 },
-  cards: { flexDirection: 'row', gap: spacing[3] },
+  label: { color: colors.textSecondary, marginTop: spacing[3], marginBottom: spacing[2] },
+  cards: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[4] },
   card: {
     flex: 1,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
-    borderRadius: 14,
     padding: spacing[4],
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
-  cardOn: { borderColor: colors.motionBlue },
+  cardOn: { borderColor: colors.motionBlue, backgroundColor: colors.surface },
   cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  cardEta: { color: colors.textSecondary, marginTop: 6, fontSize: 13 },
-  cardPrice: { color: colors.pureWhite, fontWeight: '700', marginTop: 10, fontSize: 16 },
-  msg: { color: colors.textSecondary, marginTop: spacing[3] },
+  cardEta: { color: colors.textSecondary, marginTop: 4, fontSize: 12 },
+  cardPrice: { color: colors.pureWhite, fontWeight: '700', marginTop: spacing[3], fontSize: 18 },
+  cardDelta: { color: colors.motionBlue, fontSize: 11, marginTop: 4 },
+  msg: { color: colors.success, marginBottom: spacing[3] },
   cta: {
-    marginTop: 'auto',
+    marginTop: 'auto' as any,
     marginBottom: spacing[4],
     borderRadius: radius.pill,
-    minHeight: 54,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.electricViolet,
     overflow: 'hidden',
-    backgroundColor: colors.movrGreen,
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
-    opacity: 0.55,
+    opacity: 0.45,
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

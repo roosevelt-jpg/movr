@@ -29,7 +29,20 @@ export class RewardsEngineService {
     );
     const rule = rules.rows[0];
     if (!rule) {
-      return { awarded: false, reason: 'no_active_rule' };
+      // Fall back to points_conversion_config (Phase 6) when no rewards_rules row
+      const pointsRow = await this.points.award(
+        userId,
+        eventType,
+        String(metadata.description || eventType)
+      );
+      return {
+        awarded: !!pointsRow,
+        points: pointsRow?.points_earned || 0,
+        dvt: 0,
+        ledger: pointsRow,
+        metadata,
+        reason: pointsRow ? 'points_conversion_config' : 'no_active_rule',
+      };
     }
 
     const pointsRow = await this.points.award(
