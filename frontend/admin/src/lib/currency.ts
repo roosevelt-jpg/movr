@@ -1,5 +1,5 @@
 /**
- * Local currency helpers for admin (same shared formatters as web).
+ * Local currency / time helpers for admin (shared design-system formatters).
  */
 export {
   CURRENCY_BY_COUNTRY,
@@ -10,4 +10,4 @@ export {
   formatCurrency,
   formatMoneyForCountry,
   formatLocalTime,
-} from '@movr/format';
+} from '@movr/design-system/format';

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
+import { formatLocalTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -83,6 +84,7 @@ export default function InboxScreen() {
               {item.title}
             </Text>
             <Text style={styles.msgBody}>{item.body}</Text>
+            <Text style={styles.msgWhen}>{formatLocalTime(item.created_at)}</Text>
           </View>
         )}
         ListEmptyComponent={
@@ -111,6 +113,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  msgTitle: { color: colors.pureWhite, fontWeight: '600' },
+  msgTitle: { color: colors.pureWhite, fontWeight: '700' },
   msgBody: { color: colors.textSecondary, marginTop: 4 },
+  msgWhen: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
 });

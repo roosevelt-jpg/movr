@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { formatLocalTime } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -67,7 +68,7 @@ export default function OpsNotesPanel({
               notes.map((n) => (
                 <div key={n.id} style={styles.note}>
                   <div style={styles.meta}>
-                    {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                    {n.created_at ? formatLocalTime(n.created_at) : ''}
                   </div>
                   <div>{n.note}</div>
                 </div>

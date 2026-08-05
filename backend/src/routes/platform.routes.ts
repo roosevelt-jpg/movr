@@ -575,6 +575,19 @@ adminOpsRouter.post(
           JSON.stringify(after.rows[0] || {}),
         ]
       );
+      if (after.rows[0]?.user_id) {
+        try {
+          await inbox.sendInboxMessage(
+            after.rows[0].user_id,
+            'order_update',
+            'Order cancelled',
+            'Your order was cancelled by Movr support.',
+            `movr://orders/${req.params.id}`
+          );
+        } catch {
+          /* ignore */
+        }
+      }
       res.json({ status: 'success', data: after.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -641,6 +654,20 @@ adminOpsRouter.post(
           JSON.stringify(after.rows[0] || {}),
         ]
       );
+      if (after.rows[0]?.user_id) {
+        try {
+          const label = String(req.body.status).replace(/_/g, ' ');
+          await inbox.sendInboxMessage(
+            after.rows[0].user_id,
+            'order_update',
+            `Order ${label}`,
+            `Your order status was updated to ${label}.`,
+            `movr://orders/${req.params.id}`
+          );
+        } catch {
+          /* ignore */
+        }
+      }
       res.json({ status: 'success', data: after.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

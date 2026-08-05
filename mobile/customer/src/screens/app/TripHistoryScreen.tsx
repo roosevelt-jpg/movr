@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
-import { formatCurrency } from '@movr/design-system/format';
+import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -37,14 +37,14 @@ export default function TripHistoryScreen({
         title: `${r.pickup_address || r.pickupAddress || 'Pickup'} → ${
           r.dropoff_address || r.dropoffAddress || 'Dropoff'
         }`,
-        when: r.created_at ? new Date(r.created_at).toLocaleString() : 'Recently',
+        when: r.created_at ? formatLocalTime(r.created_at) : 'Recently',
         amount: Number(r.actual_fare || r.estimated_fare || r.actualFare || 0),
         kind: 'ride' as const,
       }));
       const orderRows = (orders?.data || []).map((o: any) => ({
         id: o.id,
         title: `${o.store_name || o.storeName || 'Store'} order`,
-        when: o.created_at ? new Date(o.created_at).toLocaleString() : 'Recently',
+        when: o.created_at ? formatLocalTime(o.created_at) : 'Recently',
         amount: Number(o.total || 0),
         kind: 'order' as const,
       }));

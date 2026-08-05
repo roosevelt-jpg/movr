@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
-import { formatCurrency } from '@movr/design-system/format';
+import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
 import { useWallet } from '../../context/WalletContext';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -32,7 +32,7 @@ export default function WalletScreen({
       transactions.slice(0, 10).map((t) => ({
         id: t.id,
         title: t.type || t.reference || 'Transaction',
-        when: t.created_at ? new Date(t.created_at).toLocaleString() : '',
+        when: t.created_at ? formatLocalTime(t.created_at) : '',
         amount: Number(t.amount),
         kind: 'fiat',
         status: 'Completed',

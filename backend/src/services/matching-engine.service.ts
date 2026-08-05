@@ -397,7 +397,7 @@ export class MatchingEngineService {
     const drivers = await this.findBestDrivers(pickupLat, pickupLng);
     const driverId = drivers[0]?.id || null;
 
-    if (driverId && taskType === 'delivery') {
+      if (driverId && taskType === 'delivery') {
       await this.db.query(
         `UPDATE marketplace_orders
          SET courier_id = $1,
@@ -408,6 +408,20 @@ export class MatchingEngineService {
          WHERE id = $2`,
         [driverId, taskId]
       );
+      try {
+        const order = await this.db.query(
+          `SELECT id, user_id, status FROM marketplace_orders WHERE id = $1`,
+          [taskId]
+        );
+        if (order.rows[0]) {
+          const { MarketplaceService } = require('./marketplace.service');
+          const { PaymentService } = require('./payment.service');
+          const ms = new MarketplaceService(this.db, new PaymentService(this.db));
+          await ms.notifyOrderStatus(order.rows[0]);
+        }
+      } catch {
+        /* inbox optional */
+      }
       this.realtime.broadcastToDrivers?.('delivery:assigned', {
         orderId: taskId,
         driverId,

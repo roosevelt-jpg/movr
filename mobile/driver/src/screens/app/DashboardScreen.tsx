@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 import PerformanceScreen from './PerformanceScreen';
+import { initMobileSentry } from '../../sentry';
+
+initMobileSentry('driver');
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 

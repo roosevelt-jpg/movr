@@ -12,10 +12,30 @@ import { PaymentService } from '../services/payment.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 import identityVerification from '../services/identity-verification.service';
 import { KycAttestationService } from '../services/kyc-attestation.service';
+import { InboxService } from '../services/inbox.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
 const kycAttestation = new KycAttestationService(db);
+const inbox = new InboxService(db);
+
+async function notifyCustomerOrderUpdate(order: any) {
+  if (!order?.user_id) return;
+  const label = String(order.status || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  try {
+    await inbox.sendInboxMessage(
+      order.user_id,
+      'order_update',
+      `Order ${label}`,
+      `Your order is now ${label.toLowerCase()}.`,
+      `movr://orders/${order.id}`
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 // Matching engine needs realtime — use a minimal stub when not bootstrapped via app.locals
 const matchingStub = {
@@ -673,6 +693,7 @@ merchantRouter.patch(
       if (!result.rows[0]) {
         return res.status(404).json({ status: 'error', message: 'Order not found' });
       }
+      await notifyCustomerOrderUpdate(result.rows[0]);
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -696,6 +717,7 @@ merchantRouter.patch(
          RETURNING o.*`,
         [req.params.id, req.user!.id]
       );
+      if (result.rows[0]) await notifyCustomerOrderUpdate(result.rows[0]);
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -718,6 +740,7 @@ merchantRouter.patch(
          RETURNING o.*`,
         [req.params.id, req.user!.id]
       );
+      if (result.rows[0]) await notifyCustomerOrderUpdate(result.rows[0]);
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -740,6 +763,7 @@ merchantRouter.patch(
          RETURNING o.*`,
         [req.params.id, req.user!.id]
       );
+      if (result.rows[0]) await notifyCustomerOrderUpdate(result.rows[0]);
       res.json({ status: 'success', data: result.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

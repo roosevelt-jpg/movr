@@ -1,11 +1,35 @@
 import { DatabaseService } from './database.service';
 import { PaymentService } from './payment.service';
+import { InboxService } from './inbox.service';
 
 export class MarketplaceService {
+  private inbox: InboxService;
+
   constructor(
     private db: DatabaseService,
     private payments: PaymentService
-  ) {}
+  ) {
+    this.inbox = new InboxService(db);
+  }
+
+  /** Notify customer of order status changes (Phase 19 inbox). */
+  async notifyOrderStatus(order: { id: string; user_id: string; status: string }) {
+    if (!order?.user_id) return;
+    const label = String(order.status || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    try {
+      await this.inbox.sendInboxMessage(
+        order.user_id,
+        'order_update',
+        `Order ${label}`,
+        `Your order is now ${label.toLowerCase()}.`,
+        `movr://orders/${order.id}`
+      );
+    } catch {
+      /* inbox optional if migration missing */
+    }
+  }
 
   async listStores(filters: {
     category?: string;
@@ -380,6 +404,10 @@ export class MarketplaceService {
        WHERE id = $2 RETURNING *`,
       [status, orderId]
     );
+
+    if (result.rows[0]) {
+      await this.notifyOrderStatus(result.rows[0]);
+    }
 
     if (result.rows[0] && status === 'completed') {
       const { RewardsEngineService } = await import('./rewards-engine.service');

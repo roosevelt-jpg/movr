@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
+import { formatLocalTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -158,6 +159,7 @@ export default function InboxScreen({
                 <Text style={styles.msgBody} numberOfLines={2}>
                   {item.body}
                 </Text>
+                <Text style={styles.msgWhen}>{formatLocalTime(item.created_at)}</Text>
               </View>
             </Pressable>
           );
@@ -224,4 +226,5 @@ const styles = StyleSheet.create({
   },
   msgTitle: { color: colors.pureWhite, fontWeight: '600' },
   msgBody: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
+  msgWhen: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
 });

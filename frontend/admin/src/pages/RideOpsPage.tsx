@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, formatLocalTime } from '../lib/currency';
 import OpsNotesPanel from '../components/OpsNotesPanel';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
@@ -38,7 +38,7 @@ export default function RideOpsPage() {
           id: n.id,
           note: n.note,
           author: n.author_name || 'Admin',
-          when: n.created_at ? new Date(n.created_at).toLocaleString() : '',
+          when: n.created_at ? formatLocalTime(n.created_at) : '',
         }))
       );
     } catch {

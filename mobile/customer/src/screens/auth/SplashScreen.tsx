@@ -1,6 +1,9 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '@movr/design-system/theme';
+import { initMobileSentry } from '../../sentry';
+
+initMobileSentry('customer');
 
 /** Brand splash — Movr / Move. Shop. Deliver. */
 export default function SplashScreen({ onDone }: { onDone?: () => void }) {

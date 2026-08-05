@@ -8,17 +8,28 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts';
 import AdminShell from '../layouts/AdminShell';
 import { formatCurrency } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
+const PIE_COLORS = [
+  'var(--electric-violet)',
+  'var(--motion-blue)',
+  'var(--movr-green)',
+  'var(--warning)',
+  'var(--error)',
+];
 
 function headers() {
   return { Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` };
 }
 
-/** Admin finance — GMV charts, payout review/approve, reconciliation (Phase 18). */
+/** Admin finance — GMV charts (day / service / country), payout review, reconciliation. */
 export default function FinanceDashboardPage() {
   const [gmv, setGmv] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
@@ -112,10 +123,34 @@ export default function FinanceDashboardPage() {
 
   const chartData = useMemo(() => {
     if (!gmv.length) return [];
-    return gmv.slice(-7).map((r) => ({
-      name: String(r.date || r.day || '').slice(5),
-      gmv: Number(r.gmv_amount),
-    }));
+    const byDay = new Map<string, number>();
+    for (const r of gmv) {
+      const day = String(r.date || r.day || '').slice(0, 10);
+      if (!day) continue;
+      byDay.set(day, (byDay.get(day) || 0) + Number(r.gmv_amount || 0));
+    }
+    return Array.from(byDay.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-14)
+      .map(([day, amount]) => ({ name: day.slice(5), gmv: amount }));
+  }, [gmv]);
+
+  const byService = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of gmv) {
+      const key = String(r.service_type || 'other');
+      map.set(key, (map.get(key) || 0) + Number(r.gmv_amount || 0));
+    }
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+  }, [gmv]);
+
+  const byCountry = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of gmv) {
+      const key = String(r.country || 'XX');
+      map.set(key, (map.get(key) || 0) + Number(r.gmv_amount || 0));
+    }
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   }, [gmv]);
 
   const fmt = (n: number, currency = metrics.gmvCurrency || 'GHS') =>
@@ -149,7 +184,10 @@ export default function FinanceDashboardPage() {
                 <XAxis dataKey="name" stroke="var(--text-secondary)" />
                 <YAxis stroke="var(--text-secondary)" hide />
                 <Tooltip
-                  contentStyle={{ background: 'var(--surface-elevated)', border: '1px solid var(--border)' }}
+                  contentStyle={{
+                    background: 'var(--surface-elevated)',
+                    border: '1px solid var(--border)',
+                  }}
                 />
                 <Bar dataKey="gmv" fill="url(#gmvGrad)" radius={[6, 6, 0, 0]} />
                 <defs>
@@ -161,6 +199,57 @@ export default function FinanceDashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
+        </div>
+      </div>
+
+      <div style={styles.chartRow}>
+        <div style={styles.chartCard}>
+          <div style={styles.label}>GMV by service</div>
+          <div style={{ height: 220, marginTop: 12 }}>
+            {byService.length === 0 ? (
+              <div style={styles.emptyChart}>No service breakdown</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={byService} dataKey="value" nameKey="name" innerRadius={48} outerRadius={78}>
+                    {byService.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--surface-elevated)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+        <div style={styles.chartCard}>
+          <div style={styles.label}>GMV by country</div>
+          <div style={{ height: 220, marginTop: 12 }}>
+            {byCountry.length === 0 ? (
+              <div style={styles.emptyChart}>No country breakdown</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byCountry}>
+                  <CartesianGrid stroke="var(--surface-elevated)" vertical={false} />
+                  <XAxis dataKey="name" stroke="var(--text-secondary)" />
+                  <YAxis stroke="var(--text-secondary)" hide />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--surface-elevated)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                  <Bar dataKey="value" fill="var(--motion-blue)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
 
@@ -314,6 +403,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   label: { color: 'var(--text-secondary)', fontSize: 13 },
   value: { fontSize: 28, fontWeight: 700, marginTop: 8 },
+  chartRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: 16,
+    marginBottom: 16,
+  },
   chartCard: {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
@@ -339,12 +434,11 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   btnGhost: {
+    background: 'transparent',
     border: '1px solid var(--border)',
+    color: 'var(--pure-white)',
     borderRadius: 10,
     padding: '10px 14px',
-    background: 'transparent',
-    color: 'var(--pure-white)',
-    fontWeight: 600,
     cursor: 'pointer',
   },
   batchList: {
@@ -357,8 +451,8 @@ const styles: Record<string, React.CSSProperties> = {
   batchRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
     gap: 12,
+    alignItems: 'center',
     padding: '10px 0',
     borderBottom: '1px solid var(--border)',
     flexWrap: 'wrap',
@@ -368,5 +462,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
+    marginBottom: 16,
   },
 };
