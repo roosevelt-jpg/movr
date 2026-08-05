@@ -114,6 +114,25 @@ export class RideBookingService {
       rideType
     );
 
+    // Phase 25 — bump zone demand snapshot (not global-only)
+    try {
+      const { PricingEngineService } = require('./pricing-engine.service');
+      const pe = new PricingEngineService(this.db);
+      const zone = await pe.findZone(input.pickupLat, input.pickupLng);
+      if (zone?.id) {
+        const snap = await this.db.query(
+          `SELECT active_rides, available_drivers FROM zone_demand_snapshots
+           WHERE zone_id = $1 ORDER BY recorded_at DESC LIMIT 1`,
+          [zone.id]
+        );
+        const active = Number(snap.rows[0]?.active_rides || 0) + 1;
+        const available = Math.max(0, Number(snap.rows[0]?.available_drivers || 10) - 1);
+        await pe.snapshotDemand(zone.id, active, available);
+      }
+    } catch {
+      /* optional */
+    }
+
     await this.inbox.sendInboxMessage(
       input.userId,
       'ride_update',
@@ -130,6 +149,8 @@ export class RideBookingService {
 
     return {
       ride,
+      rideId: ride.id,
+      id: ride.id,
       estimatedFare,
       currency: city.currency_code,
       timezone: city.timezone,
@@ -161,6 +182,8 @@ export class RideBookingService {
     const sharedBreakdown = await pricingEngine.calculateMultiplier({
       lat: pickupLat,
       lng: pickupLng,
+      destLat: dropoffLat,
+      destLng: dropoffLng,
     });
 
     for (const vt of types.rows) {

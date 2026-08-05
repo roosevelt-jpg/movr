@@ -268,22 +268,44 @@ export class MatchingEngineService {
     customerRating: number = 5.0
   ): Promise<any[]> {
     try {
+      const cacheKey = `nearby:drivers:${rideType}:${pickupLat.toFixed(3)}:${pickupLng.toFixed(3)}`;
+      try {
+        if (this.redis?.get) {
+          const cached = await this.redis.get(cacheKey);
+          if (cached && Array.isArray(cached) && cached.length) {
+            return cached;
+          }
+        }
+      } catch {
+        /* redis optional */
+      }
+
       // Prefer PostGIS + driver_performance when available; fall back to simple online drivers.
+      // Phase 24 — only offer drivers whose registered vehicle_type matches the ride type.
       try {
         const query = `
           SELECT 
             u.id, u.first_name, u.phone,
             dp.avg_rating, dp.acceptance_rate, dp.tier,
+            COALESCE(vt.code, d.vehicle_type) AS vehicle_code,
             ST_Distance(
               ST_MakePoint(u.longitude, u.latitude)::geography,
               ST_MakePoint($1, $2)::geography
             ) as distance_m
           FROM users u
+          JOIN drivers d ON d.user_id = u.id
           JOIN driver_performance dp ON u.id = dp.driver_id
+          LEFT JOIN vehicle_types vt ON vt.id = d.vehicle_type_id
+          LEFT JOIN driver_vehicles dv ON dv.driver_user_id = u.id AND dv.is_primary = TRUE
+          LEFT JOIN vehicle_types vt2 ON vt2.id = dv.vehicle_type_id
           WHERE u.user_type = 'driver'
             AND u.is_active = true
             AND dp.avg_rating >= 4.5
             AND dp.acceptance_rate >= 70
+            AND (
+              COALESCE(vt2.code, vt.code, d.vehicle_type, 'standard') = $3
+              OR COALESCE(vt2.code, vt.code, d.vehicle_type) IS NULL
+            )
             AND ST_DWithin(
               ST_MakePoint(u.longitude, u.latitude)::geography,
               ST_MakePoint($1, $2)::geography,
@@ -292,7 +314,7 @@ export class MatchingEngineService {
           ORDER BY dp.avg_rating DESC, distance_m ASC
           LIMIT 20
         `;
-        const result = await this.db.query(query, [pickupLng, pickupLat]);
+        const result = await this.db.query(query, [pickupLng, pickupLat, rideType]);
         if (result.rows.length) {
           // Phase 7 — boost by driver stake tier priorityWeight
           const scored = await Promise.all(
@@ -325,6 +347,11 @@ export class MatchingEngineService {
             })
           );
           scored.sort((a, b) => b.matchScore - a.matchScore);
+          try {
+            if (this.redis?.set) await this.redis.set(cacheKey, scored, 8);
+          } catch {
+            /* ignore */
+          }
           return scored;
         }
       } catch {
@@ -332,13 +359,25 @@ export class MatchingEngineService {
       }
 
       const fallback = await this.db.query(
-        `SELECT u.id, u.first_name, u.phone
+        `SELECT u.id, u.first_name, u.phone,
+                COALESCE(vt.code, d.vehicle_type, 'standard') AS vehicle_code
          FROM users u
          LEFT JOIN drivers d ON d.user_id = u.id
+         LEFT JOIN vehicle_types vt ON vt.id = d.vehicle_type_id
          WHERE u.user_type = 'driver' AND u.is_active = true
+           AND (
+             COALESCE(vt.code, d.vehicle_type, 'standard') = $1
+             OR d.vehicle_type_id IS NULL
+           )
          ORDER BY COALESCE(d.rating, 5) DESC
-         LIMIT 10`
+         LIMIT 10`,
+        [rideType]
       );
+      try {
+        if (this.redis?.set) await this.redis.set(cacheKey, fallback.rows, 8);
+      } catch {
+        /* ignore */
+      }
       return fallback.rows;
     } catch (error) {
       this.logger.error('Error finding best drivers:', error);

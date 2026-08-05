@@ -12,6 +12,7 @@ import PaymentProvidersPage from './pages/PaymentProvidersPage';
 import ChannelFunnelPage from './pages/ChannelFunnelPage';
 import UsersListPage from './pages/UsersListPage';
 import RideOpsPage from './pages/RideOpsPage';
+import OrderOpsPage from './pages/OrderOpsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import AdminOverviewPage from './pages/AdminOverviewPage';
 import KycQueuePage from './pages/KycQueuePage';
@@ -130,6 +131,22 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <RideOpsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <RequireAdmin>
+              <OrderOpsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <RequireAdmin>
+              <OrderOpsPage />
             </RequireAdmin>
           }
         />

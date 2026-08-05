@@ -10,6 +10,9 @@ import { MatchingEngineService } from '../services/matching-engine.service';
 import { RideBookingService } from '../services/ride-booking.service';
 import { VoiceIntentService } from '../services/voice-intent.service';
 import { LocalizationService } from '../services/localization.service';
+import { ChannelSessionService } from '../services/channel-session.service';
+import { IvrBookingService } from '../services/ivr-booking.service';
+import { RedisService } from '../services/redis.service';
 import getLogger from '../utils/logger';
 
 const db = new DatabaseService();
@@ -17,6 +20,13 @@ const matching = new MatchingEngineService(db, null, { broadcastToDrivers: () =>
 const booking = new RideBookingService(db, matching);
 const voice = new VoiceIntentService(db);
 const localization = new LocalizationService(db);
+let redis: RedisService | null = null;
+try {
+  redis = new RedisService();
+} catch {
+  redis = null;
+}
+const sessions = new ChannelSessionService(redis);
 const logger = getLogger('channels');
 
 export const rideBookingRouter = Router();
@@ -26,14 +36,7 @@ export const adminVehicleRouter = Router();
 export const adminChannelsRouter = Router();
 
 async function rateLimitPhone(phone: string, channel: string) {
-  // lightweight in-memory fallback when redis unavailable
-  const key = `${channel}:${phone}`;
-  (global as any).__movrRate = (global as any).__movrRate || new Map();
-  const map: Map<string, number> = (global as any).__movrRate;
-  const now = Date.now();
-  const last = map.get(key) || 0;
-  if (now - last < 3000) throw new Error('Too many requests — slow down');
-  map.set(key, now);
+  await sessions.rateLimitPhone(phone || 'unknown', channel);
 }
 
 async function findOrCreateUserByPhone(phone: string, name?: string) {
@@ -180,10 +183,84 @@ voiceRouter.post('/confirm', authenticateToken, requireCustomer, async (req: Aut
 });
 
 // --- Channel webhooks (Phase 22) ---
+async function downloadMedia(url: string, authHeader?: string): Promise<Buffer> {
+  const headers: any = {};
+  if (authHeader) headers.Authorization = authHeader;
+  else if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+    headers.Authorization =
+      'Basic ' +
+      Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString(
+        'base64'
+      );
+  }
+  const res = await fetch(url, { headers });
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function stageChannelBooking(opts: {
+  sessionKey: string;
+  userId: string;
+  utterance: string;
+  channel: string;
+  gps?: { lat: number; lng: number };
+}) {
+  const intent = await voice.extractTripIntent(opts.utterance, opts.userId);
+  if (!intent.destination || intent.confidence < 0.45) {
+    return {
+      ok: false as const,
+      message: 'Where are you going? Share location or say/type pickup and destination.',
+      intent,
+    };
+  }
+  const pickup = intent.origin
+    ? await voice.geocode(intent.origin, opts.gps)
+    : opts.gps || { lat: 5.6037, lng: -0.187 };
+  const dest = await voice.geocode(intent.destination, opts.gps);
+  const estimates = await booking.estimateFares(pickup.lat, pickup.lng, dest.lat, dest.lng);
+  const cheapest = estimates.options?.[0];
+  await sessions.setPending(opts.sessionKey, {
+    userId: opts.userId,
+    pickup,
+    dest,
+    origin: intent.origin || 'Current location',
+    destination: intent.destination,
+    rideType: cheapest?.code || intent.rideTypePreference || 'standard',
+    sourceChannel: opts.channel,
+  });
+  const surgeLine =
+    estimates.surgeReason && Number(estimates.surgeMultiplier) > 1
+      ? ` ${estimates.surgeReason}.`
+      : '';
+  return {
+    ok: true as const,
+    intent,
+    estimates,
+    message: `Confirm ride to ${intent.destination}? Cheapest ${cheapest?.name} ${estimates.currency} ${cheapest?.price}.${surgeLine} Reply YES.`,
+  };
+}
+
+async function confirmChannelBooking(sessionKey: string) {
+  const pending = await sessions.getPending(sessionKey);
+  if (!pending) throw new Error('No pending booking — send your trip details first');
+  const result = await booking.createRideRequest({
+    userId: pending.userId,
+    pickupLat: pending.pickup.lat,
+    pickupLng: pending.pickup.lng,
+    dropoffLat: pending.dest.lat,
+    dropoffLng: pending.dest.lng,
+    pickupAddress: pending.origin,
+    dropoffAddress: pending.destination,
+    rideType: pending.rideType,
+    sourceChannel: pending.sourceChannel,
+  });
+  await sessions.clearPending(sessionKey);
+  return result;
+}
+
 channelWebhooksRouter.post('/whatsapp', async (req: any, res: Response) => {
   try {
     const phone = req.body.From?.replace('whatsapp:', '') || req.body.phone;
-    const body = req.body.Body || req.body.text || '';
+    let body = req.body.Body || req.body.text || '';
     await rateLimitPhone(phone || 'unknown', 'whatsapp');
 
     const user = await findOrCreateUserByPhone(phone);
@@ -194,34 +271,46 @@ channelWebhooksRouter.post('/whatsapp', async (req: any, res: Response) => {
       [user.id, phone]
     );
 
-    // Voice note path
+    const sessionKey = `whatsapp:${phone}`;
+
+    // Voice note → shared voice-intent pipeline (Phase 23)
     if (req.body.NumMedia === '1' || req.body.MediaContentType0?.startsWith('audio')) {
-      // Download + voice-intent in production; acknowledge for now
-      logger.info('whatsapp voice note received', { phone });
+      const mediaUrl = req.body.MediaUrl0;
+      if (mediaUrl) {
+        try {
+          const buf = await downloadMedia(mediaUrl);
+          body = await voice.transcribeAudio(buf, req.body.MediaContentType0 || 'audio/ogg');
+        } catch (e: any) {
+          logger.warn('whatsapp voice download failed', { error: e.message });
+        }
+      }
     }
 
-    // Simple text: "RIDE from X to Y" or guided
-    const intent = await voice.extractTripIntent(body, user.id);
-    if (intent.destination) {
-      const pickup = intent.origin
-        ? await voice.geocode(intent.origin)
-        : { lat: 5.6037, lng: -0.187 };
-      const dest = await voice.geocode(intent.destination);
-      const estimates = await booking.estimateFares(pickup.lat, pickup.lng, dest.lat, dest.lng);
+    // Native location pin as pickup
+    const lat = req.body.Latitude || req.body.lat;
+    const lng = req.body.Longitude || req.body.lng;
+    const gps = lat != null && lng != null ? { lat: Number(lat), lng: Number(lng) } : undefined;
+
+    if (/^yes$/i.test(String(body).trim())) {
+      const result = await confirmChannelBooking(sessionKey);
       return res.json({
         status: 'success',
-        message: `Confirm ride to ${intent.destination}? Cheapest ${estimates.options[0]?.name} ${estimates.currency} ${estimates.options[0]?.price}. Reply YES.`,
-        data: { intent, estimates, pendingBooking: true },
+        message: `Booked. Ride ${result.rideId || result.id}. Driver matching now.`,
+        data: result,
       });
     }
 
-    if (/^yes$/i.test(body.trim()) && req.body.pending) {
-      // confirmation handled by client state / redis session in production
-    }
-
-    res.json({
+    const staged = await stageChannelBooking({
+      sessionKey,
+      userId: user.id,
+      utterance: body || (gps ? 'going to destination' : ''),
+      channel: 'whatsapp',
+      gps,
+    });
+    return res.json({
       status: 'success',
-      message: 'Where are you going? Share location or type: from PLACE to PLACE',
+      message: staged.message,
+      data: staged.ok ? { intent: staged.intent, estimates: staged.estimates, pendingBooking: true } : { intent: staged.intent },
     });
   } catch (error: any) {
     res.status(429).json({ status: 'error', message: error.message });
@@ -232,7 +321,7 @@ channelWebhooksRouter.post('/telegram', async (req: any, res: Response) => {
   try {
     const update = req.body;
     const chatId = String(update.message?.chat?.id || update.callback_query?.from?.id || '');
-    const text = update.message?.text || update.callback_query?.data || '';
+    let text = update.message?.text || update.callback_query?.data || '';
     await rateLimitPhone(chatId || 'unknown', 'telegram');
 
     const user = await findOrCreateUserByPhone(`tg:${chatId}`, update.message?.from?.first_name);
@@ -243,18 +332,56 @@ channelWebhooksRouter.post('/telegram', async (req: any, res: Response) => {
       [user.id, chatId]
     );
 
-    if (update.message?.voice) {
-      logger.info('telegram voice received', { chatId });
+    const sessionKey = `telegram:${chatId}`;
+
+    if (update.message?.voice?.file_id && process.env.TELEGRAM_BOT_TOKEN) {
+      try {
+        const fileRes = await fetch(
+          `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${update.message.voice.file_id}`
+        );
+        const fileJson: any = await fileRes.json();
+        const path = fileJson?.result?.file_path;
+        if (path) {
+          const audioRes = await fetch(
+            `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${path}`
+          );
+          const buf = Buffer.from(await audioRes.arrayBuffer());
+          text = await voice.transcribeAudio(buf, 'audio/ogg');
+        }
+      } catch (e: any) {
+        logger.warn('telegram voice failed', { error: e.message });
+      }
     }
 
-    const intent = await voice.extractTripIntent(text, user.id);
+    const loc = update.message?.location;
+    const gps = loc ? { lat: loc.latitude, lng: loc.longitude } : undefined;
+
+    if (text === 'confirm' || /^yes$/i.test(text) || update.callback_query?.data === 'confirm') {
+      const result = await confirmChannelBooking(sessionKey);
+      return res.json({
+        status: 'success',
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: `Booked. Ride ${result.rideId || result.id}.`,
+      });
+    }
+
+    const staged = await stageChannelBooking({
+      sessionKey,
+      userId: user.id,
+      utterance: text,
+      channel: 'telegram',
+      gps,
+    });
+
     res.json({
       status: 'success',
       method: 'sendMessage',
       chat_id: chatId,
-      text: intent.destination
-        ? `Got it — heading to ${intent.destination}. Confirm to book.`
-        : 'Send pickup and destination, or a voice note.',
+      text: staged.message,
+      reply_markup: staged.ok
+        ? { inline_keyboard: [[{ text: 'Confirm', callback_data: 'confirm' }]] }
+        : undefined,
     });
   } catch (error: any) {
     res.status(429).json({ status: 'error', message: error.message });
@@ -267,22 +394,34 @@ channelWebhooksRouter.post('/sms', async (req: any, res: Response) => {
     const body = (req.body.Body || '').trim();
     await rateLimitPhone(phone || 'unknown', 'sms');
     const user = await findOrCreateUserByPhone(phone);
+    const sessionKey = `sms:${phone}`;
+
+    if (/^YES$/i.test(body)) {
+      try {
+        const result = await confirmChannelBooking(sessionKey);
+        return res
+          .type('text/xml')
+          .send(
+            `<Response><Message>Booked. Ride ${result.rideId || result.id}. Driver matching now.</Message></Response>`
+          );
+      } catch (e: any) {
+        return res.type('text/xml').send(`<Response><Message>${e.message}</Message></Response>`);
+      }
+    }
 
     const match = body.match(/^RIDE\s+(.+?),\s*(.+)$/i);
-    if (match) {
-      const pickup = await voice.geocode(match[1]);
-      const dest = await voice.geocode(match[2]);
-      const estimates = await booking.estimateFares(pickup.lat, pickup.lng, dest.lat, dest.lng);
-      return res.type('text/xml').send(
-        `<Response><Message>Est ${estimates.currency} ${estimates.options[0]?.price}. Reply YES to confirm ${match[2]}.</Message></Response>`
-      );
-    }
-    if (/^YES$/i.test(body)) {
-      return res.type('text/xml').send('<Response><Message>Booking confirmed. Driver matching now.</Message></Response>');
-    }
+    const utterance = match ? `from ${match[1]} to ${match[2]}` : body;
+    const staged = await stageChannelBooking({
+      sessionKey,
+      userId: user.id,
+      utterance,
+      channel: 'sms',
+    });
     res
       .type('text/xml')
-      .send('<Response><Message>Text: RIDE pickup, destination</Message></Response>');
+      .send(
+        `<Response><Message>${staged.message}${staged.ok ? '' : ' Text: RIDE pickup, destination'}</Message></Response>`
+      );
   } catch (error: any) {
     res.status(429).send(error.message);
   }
@@ -325,15 +464,18 @@ channelWebhooksRouter.post('/ussd', async (req: any, res: Response) => {
   }
 });
 
+const ivr = new IvrBookingService(db, voice, booking, sessions, findOrCreateUserByPhone);
+
 channelWebhooksRouter.post('/ivr', async (req: any, res: Response) => {
   try {
-    // Twilio Voice webhook — record then process
     if (req.body.RecordingUrl) {
-      logger.info('ivr recording', { url: req.body.RecordingUrl, from: req.body.From });
-      // Download recording → voice-intent → TTS confirm in production
+      const result = await ivr.handleRecording({
+        from: req.body.From,
+        recordingUrl: req.body.RecordingUrl,
+      });
       return res.type('text/xml').send(`
         <Response>
-          <Say>We heard your trip request. Press 1 to confirm or hang up to cancel.</Say>
+          <Say>${result.say.replace(/[<>&]/g, '')}</Say>
           <Gather numDigits="1" action="/webhooks/ivr/confirm" method="POST"/>
         </Response>`);
     }
@@ -348,16 +490,49 @@ channelWebhooksRouter.post('/ivr', async (req: any, res: Response) => {
 });
 
 channelWebhooksRouter.post('/ivr/confirm', async (req: any, res: Response) => {
-  if (req.body.Digits === '1') {
-    return res
-      .type('text/xml')
-      .send('<Response><Say>Ride confirmed. A driver is on the way.</Say></Response>');
+  try {
+    if (req.body.Digits === '1') {
+      await ivr.confirm(req.body.From);
+      return res
+        .type('text/xml')
+        .send('<Response><Say>Ride confirmed. A driver is on the way.</Say></Response>');
+    }
+    res.type('text/xml').send('<Response><Say>Cancelled.</Say></Response>');
+  } catch (error: any) {
+    res.type('text/xml').send(`<Response><Say>${error.message}</Say></Response>`);
   }
-  res.type('text/xml').send('<Response><Say>Cancelled.</Say></Response>');
 });
 
 // --- Admin vehicle pricing (Phase 24) ---
 adminVehicleRouter.use(authenticateToken, requireAdmin);
+
+async function auditVehicle(
+  adminId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  before: any,
+  after: any,
+  reason?: string
+) {
+  try {
+    await db.query(
+      `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, before_state, after_state)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+      [
+        adminId,
+        action,
+        resourceType,
+        resourceId,
+        reason || action,
+        JSON.stringify(before || {}),
+        JSON.stringify(after || {}),
+      ]
+    );
+  } catch {
+    /* optional */
+  }
+}
 
 adminVehicleRouter.get('/vehicle-types', async (_req, res: Response) => {
   const rows = await db.query(`SELECT * FROM vehicle_types ORDER BY sort_order`);
@@ -371,16 +546,26 @@ adminVehicleRouter.post('/vehicle-types', async (req: AuthRequest, res: Response
     [
       req.body.name,
       req.body.code,
-      req.body.category,
+      req.body.category || 'sedan',
       req.body.passengerCapacity || 4,
       req.body.iconUrl || null,
       req.body.sortOrder || 0,
     ]
   );
+  await auditVehicle(
+    req.user!.id,
+    'create_vehicle_type',
+    'vehicle_type',
+    row.rows[0].id,
+    {},
+    row.rows[0],
+    req.body.reason
+  );
   res.status(201).json({ status: 'success', data: row.rows[0] });
 });
 
 adminVehicleRouter.patch('/vehicle-types/:id', async (req: AuthRequest, res: Response) => {
+  const before = await db.query(`SELECT * FROM vehicle_types WHERE id = $1`, [req.params.id]);
   const row = await db.query(
     `UPDATE vehicle_types SET
        name = COALESCE($1, name),
@@ -390,11 +575,20 @@ adminVehicleRouter.patch('/vehicle-types/:id', async (req: AuthRequest, res: Res
      WHERE id = $5 RETURNING *`,
     [
       req.body.name || null,
-      req.body.is_active ?? null,
+      req.body.is_active ?? req.body.isActive ?? null,
       req.body.sortOrder ?? null,
       req.body.iconUrl || null,
       req.params.id,
     ]
+  );
+  await auditVehicle(
+    req.user!.id,
+    'update_vehicle_type',
+    'vehicle_type',
+    req.params.id,
+    before.rows[0],
+    row.rows[0],
+    req.body.reason
   );
   res.json({ status: 'success', data: row.rows[0] });
 });
@@ -408,11 +602,17 @@ adminVehicleRouter.get('/vehicle-types/:id/pricing', async (req, res: Response) 
 });
 
 adminVehicleRouter.patch('/vehicle-types/:id/pricing', async (req: AuthRequest, res: Response) => {
+  const before = await db.query(
+    `SELECT * FROM vehicle_type_pricing WHERE vehicle_type_id = $1
+     AND country_code = $2 ORDER BY effective_from DESC LIMIT 1`,
+    [req.params.id, req.body.countryCode || 'GH']
+  );
+  // Insert new row (never overwrite historical pricing used by completed rides)
   const row = await db.query(
     `INSERT INTO vehicle_type_pricing (
        vehicle_type_id, country_code, city, base_fare, per_km_rate, per_minute_rate,
        minimum_fare, currency_code, cancellation_fee, effective_from
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,NOW()))
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::timestamptz,NOW()))
      RETURNING *`,
     [
       req.params.id,
@@ -426,6 +626,15 @@ adminVehicleRouter.patch('/vehicle-types/:id/pricing', async (req: AuthRequest, 
       req.body.cancellationFee || 0,
       req.body.effectiveFrom || null,
     ]
+  );
+  await auditVehicle(
+    req.user!.id,
+    'schedule_vehicle_pricing',
+    'vehicle_type_pricing',
+    row.rows[0].id,
+    before.rows[0],
+    row.rows[0],
+    req.body.reason || 'pricing schedule'
   );
   res.json({ status: 'success', data: row.rows[0] });
 });
@@ -491,6 +700,18 @@ adminChannelsRouter.get(
        GROUP BY 1
        ORDER BY rides DESC`
     );
-    res.json({ status: 'success', data: rows.rows });
+    let parseFailures: any[] = [];
+    try {
+      const vf = await db.query(
+        `SELECT COALESCE(channel, 'voice') AS channel, COUNT(*)::int AS failures
+         FROM voice_parse_failures
+         WHERE created_at > NOW() - INTERVAL '30 days'
+         GROUP BY 1`
+      );
+      parseFailures = vf.rows;
+    } catch {
+      parseFailures = [];
+    }
+    res.json({ status: 'success', data: { channels: rows.rows, parseFailures } });
   }
 );

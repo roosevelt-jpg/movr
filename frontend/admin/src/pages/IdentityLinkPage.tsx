@@ -18,6 +18,9 @@ export default function IdentityLinkPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [overrideType, setOverrideType] = useState('id_to_vehicle');
+  const [overrideReason, setOverrideReason] = useState('Fleet vehicle / manual review');
+
   const load = async (id = userId) => {
     if (!id) {
       setData(null);
@@ -102,17 +105,29 @@ export default function IdentityLinkPage() {
     await axios
       .post(
         `${API}/kyc/attestation/publish`,
-        { userId, status: 'Verified', documentType: 'identity_review', verificationMethod: 'manual' },
+        {
+          userId,
+          status: 'Verified',
+          documentType: 'identity_review',
+          verificationMethod: data?.identityLinked
+            ? 'full_identity_link_verified'
+            : 'manual',
+          identityLinked: Boolean(data?.identityLinked),
+        },
         { headers: headers() }
       )
       .catch(() => undefined);
     await load();
   };
 
-  const applyOverride = async () => {
+  const applyOverride = async (checkType = overrideType) => {
     await axios.post(
       `${API}/identity/${userId}/override`,
-      { checkType: 'id_to_phone', status: 'match', reason: 'manual review' },
+      {
+        checkType,
+        status: 'match',
+        reason: overrideReason || 'manual review',
+      },
       { headers: headers() }
     );
     await load();
@@ -124,7 +139,42 @@ export default function IdentityLinkPage() {
     { label: 'National ID ↔ Phone number', type: 'id_to_phone' },
   ];
 
-  const docs = data?.documents || [];
+  const attributes = [
+    {
+      key: 'national',
+      label: 'National ID',
+      value:
+        (data?.documents || []).find((d: any) => d.national_id_number)?.national_id_number ||
+        '—',
+      status: data?.identityLinked ? 'match' : latestByType('id_to_license')?.status,
+    },
+    {
+      key: 'license',
+      label: 'Driving License',
+      value:
+        (data?.documents || []).find((d: any) => d.driving_license_number)
+          ?.driving_license_number || '—',
+      status: latestByType('id_to_license')?.status,
+    },
+    {
+      key: 'vehicle',
+      label: 'Vehicle License',
+      value:
+        (data?.documents || []).find((d: any) => d.vehicle_registration_number)
+          ?.vehicle_registration_number || '—',
+      status: latestByType('id_to_vehicle')?.status,
+    },
+    {
+      key: 'phone',
+      label: 'Phone',
+      value:
+        (data?.documents || []).find((d: any) => d.linked_phone_number)?.linked_phone_number ||
+        '—',
+      status: latestByType('id_to_phone')?.status,
+    },
+  ];
+
+  const docsList = data?.documents || [];
 
   return (
     <AdminShell activeLabel="Identity review">
@@ -163,14 +213,35 @@ export default function IdentityLinkPage() {
         <p style={{ color: 'var(--text-secondary)' }}>No user selected. Open from Users/KYC or enter a user id.</p>
       ) : !loading && data ? (
         <>
+          <div style={styles.attrGrid}>
+            {attributes.map((a) => (
+              <div key={a.key} style={styles.attrCard}>
+                <p style={styles.panelLabel}>{a.label}</p>
+                <p style={{ margin: '4px 0 8px', fontWeight: 600 }}>{a.value}</p>
+                {statusBadge(a.status)}
+              </div>
+            ))}
+          </div>
+
           <div style={styles.grid}>
             <div style={styles.panel}>
-              <p style={styles.panelLabel}>Identity link status</p>
+              <p style={styles.panelLabel}>
+                Pairwise checks ·{' '}
+                {data.identityLinked ? 'Identity-Linked' : 'Not fully linked'}
+              </p>
               <ul style={styles.list}>
                 {links.map((l) => (
                   <li key={l.type} style={styles.listRow}>
                     <span>{l.label}</span>
-                    {statusBadge(latestByType(l.type)?.status)}
+                    <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {statusBadge(latestByType(l.type)?.status)}
+                      <button
+                        style={styles.tinyBtn}
+                        onClick={() => applyOverride(l.type).catch(() => undefined)}
+                      >
+                        Override
+                      </button>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -178,16 +249,19 @@ export default function IdentityLinkPage() {
 
             <div style={styles.docs}>
               <p style={styles.panelLabel}>Submitted documents</p>
-              {docs.length === 0 ? (
+              {docsList.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No documents submitted</p>
               ) : (
-                docs.map((d: any, i: number) => (
+                docsList.map((d: any, i: number) => (
                   <div key={d.id || d.type || i} style={styles.docCard}>
                     <span style={{ marginRight: 8 }}>
                       {d.status === 'verified' ? '📄✅' : '📄⏳'}
                     </span>
                     <span>
                       {d.type || d.document_type || 'Document'} · {d.status || 'pending'}
+                      {d.pending_automated_verification || d.status === 'pending'
+                        ? ' · pending automated verification'
+                        : ''}
                     </span>
                   </div>
                 ))
@@ -203,8 +277,25 @@ export default function IdentityLinkPage() {
                 approve().catch(() => undefined);
               }}
             >
-              Approve & attest on-chain
+              Re-run link & attest on-chain
             </button>
+            <select
+              style={styles.input}
+              value={overrideType}
+              onChange={(e) => setOverrideType(e.target.value)}
+            >
+              {links.map((l) => (
+                <option key={l.type} value={l.type}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <input
+              style={styles.input}
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder="Override reason (audit)"
+            />
             <button
               style={styles.secondaryBtnWide}
               onClick={() => applyOverride().catch(() => undefined)}
@@ -238,6 +329,27 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 12px',
   },
   grid: { display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 24 },
+  attrGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+    gap: 12,
+    marginBottom: 16,
+  },
+  attrCard: {
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    borderRadius: 14,
+    padding: 14,
+  },
+  tinyBtn: {
+    border: '1px solid var(--border)',
+    background: 'transparent',
+    color: 'var(--motion-blue)',
+    borderRadius: 6,
+    padding: '2px 8px',
+    fontSize: 11,
+    cursor: 'pointer',
+  },
   panel: {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',

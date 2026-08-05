@@ -3,11 +3,12 @@ import axios from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
 import { formatCurrency } from '../lib/currency';
+import OpsNotesPanel from '../components/OpsNotesPanel';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Admin ride ops — force cancel, adjust fare, internal notes. */
+/** Admin ride ops — force cancel, adjust fare, internal notes, recording playback (Phase 28). */
 export default function RideOpsPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -21,6 +22,9 @@ export default function RideOpsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recordingMeta, setRecordingMeta] = useState<any>(null);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [incidentRef, setIncidentRef] = useState('');
 
   const loadNotes = async (id: string) => {
     try {
@@ -42,14 +46,32 @@ export default function RideOpsPage() {
     }
   };
 
+  const loadRecordingMeta = async (id: string) => {
+    try {
+      const res = await axios.get(`${API}/admin/recordings/${id}/meta`, { headers: headers() });
+      const data = res.data.data;
+      setRecordingMeta(data);
+      const sosId = data?.incidents?.[0]?.id;
+      if (sosId) setIncidentRef(String(sosId));
+      else if (data?.recording?.flagged_for_dispute) {
+        setIncidentRef((r) => r || `DISPUTE-${id.slice(0, 8)}`);
+      }
+    } catch {
+      setRecordingMeta(null);
+    }
+  };
+
   const loadRide = async (id: string) => {
     if (!id) {
       setRide(null);
       setNotes([]);
+      setRecordingMeta(null);
+      setPlaybackUrl(null);
       return;
     }
     setLoading(true);
     setError('');
+    setPlaybackUrl(null);
     try {
       const res = await axios.get(`${API}/rides/${id}`, { headers: headers() });
       const r = res.data.data;
@@ -67,10 +89,12 @@ export default function RideOpsPage() {
           [r.pickup_address, r.dropoff_address].filter(Boolean).join(' → ') ||
           'Route unavailable',
         fare,
+        currency: r.currency || 'GHS',
         status: r.status || '—',
       });
       setAdjustAmount(String(fare || ''));
       await loadNotes(r.id || id);
+      await loadRecordingMeta(r.id || id);
     } catch (e: any) {
       setRide(null);
       setNotes([]);
@@ -115,6 +139,17 @@ export default function RideOpsPage() {
     );
   };
 
+  const statusOverride = async (status: string) => {
+    if (!ride?.id) return;
+    await axios.post(
+      `${API}/admin/rides/${ride.id}/status-override`,
+      { status, reason: `Admin override to ${status}` },
+      { headers: headers() }
+    );
+    setMessage(`Status overridden to ${status}`);
+    await loadRide(ride.id);
+  };
+
   const addNote = async () => {
     if (!draft.trim() || !ride?.id) return;
     await axios.post(
@@ -125,6 +160,37 @@ export default function RideOpsPage() {
     setDraft('');
     await loadNotes(ride.id);
   };
+
+  const flagRecording = async () => {
+    if (!ride?.id) return;
+    await axios.post(
+      `${API}/admin/rides/${ride.id}/recording/flag`,
+      { reason: incidentRef || 'Fare dispute / safety review' },
+      { headers: headers() }
+    );
+    setMessage('Recording flagged for dispute retention');
+    await loadRecordingMeta(ride.id);
+  };
+
+  const viewRecording = async () => {
+    if (!ride?.id || !incidentRef.trim()) {
+      setMessage('Incident reference required (SOS id or DISPUTE-…)');
+      return;
+    }
+    try {
+      const res = await axios.get(`${API}/admin/recordings/${ride.id}`, {
+        headers: headers(),
+        params: { incidentRef: incidentRef.trim() },
+      });
+      setPlaybackUrl(res.data.data?.playbackUrl || null);
+      setMessage('Secure playback URL issued (5 min, inline — not a download)');
+    } catch (e: any) {
+      setMessage(e?.response?.data?.message || e.message || 'Playback denied');
+      setPlaybackUrl(null);
+    }
+  };
+
+  const canViewRecording = Boolean(recordingMeta?.recording?.flagged_for_dispute);
 
   return (
     <AdminShell>
@@ -175,6 +241,13 @@ export default function RideOpsPage() {
             >
               Adjust fare
             </button>
+            <button
+              style={styles.ghost}
+              type="button"
+              onClick={() => statusOverride('completed').catch((e) => setMessage(e.message))}
+            >
+              Mark completed
+            </button>
             <input
               style={styles.amount}
               value={adjustAmount}
@@ -187,6 +260,15 @@ export default function RideOpsPage() {
           <div style={styles.grid}>
             <div style={styles.map}>
               <div style={styles.gridBg} />
+              {playbackUrl ? (
+                <video
+                  key={playbackUrl}
+                  controls
+                  controlsList="nodownload"
+                  style={styles.video}
+                  src={playbackUrl}
+                />
+              ) : null}
             </div>
             <aside style={styles.notes}>
               <p style={styles.notesTitle}>Internal notes</p>
@@ -209,6 +291,40 @@ export default function RideOpsPage() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addNote().catch((err) => setMessage(err.message))}
               />
+
+              <p style={{ ...styles.notesTitle, marginTop: 16 }}>Trip recording</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 12, margin: 0 }}>
+                {recordingMeta?.recording
+                  ? `Status: ${recordingMeta.recording.status}${
+                      recordingMeta.recording.flagged_for_dispute ? ' · flagged' : ''
+                    }`
+                  : 'No recording row yet'}
+              </p>
+              <input
+                style={styles.noteInput}
+                placeholder="Incident ref (SOS uuid or DISPUTE-…)"
+                value={incidentRef}
+                onChange={(e) => setIncidentRef(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  style={styles.ghost}
+                  type="button"
+                  onClick={() => flagRecording().catch((e) => setMessage(e.message))}
+                >
+                  Flag for dispute
+                </button>
+                {canViewRecording ? (
+                  <button
+                    style={styles.ghost}
+                    type="button"
+                    onClick={() => viewRecording().catch((e) => setMessage(e.message))}
+                  >
+                    View recording
+                  </button>
+                ) : null}
+              </div>
+              <OpsNotesPanel entityType="ride" entityId={ride.id} />
             </aside>
           </div>
         </>
@@ -265,6 +381,15 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundImage:
       'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
     backgroundSize: '32px 32px',
+  },
+  video: {
+    position: 'relative',
+    zIndex: 1,
+    width: '100%',
+    height: '100%',
+    minHeight: 360,
+    objectFit: 'contain',
+    background: 'var(--jet-black)',
   },
   notes: {
     background: 'var(--surface-elevated)',

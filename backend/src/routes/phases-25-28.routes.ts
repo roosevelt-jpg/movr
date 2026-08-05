@@ -3,6 +3,7 @@ import {
   AuthRequest,
   authenticateToken,
   requireAdmin,
+  requireTrustAndSafety,
 } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { PricingEngineService } from '../services/pricing-engine.service';
@@ -23,6 +24,34 @@ export const walletTransferRouter = Router();
 export const tripRecordingRouter = Router();
 
 // --- Phase 25 admin pricing ---
+async function auditPricing(
+  adminId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string,
+  before: any,
+  after: any,
+  reason?: string
+) {
+  try {
+    await db.query(
+      `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, before_state, after_state)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+      [
+        adminId,
+        action,
+        resourceType,
+        resourceId,
+        reason || action,
+        JSON.stringify(before || {}),
+        JSON.stringify(after || {}),
+      ]
+    );
+  } catch {
+    /* audit optional if table missing columns */
+  }
+}
+
 adminPricingRouter.get('/zones', authenticateToken, requireAdmin, async (_req, res: Response) => {
   try {
     res.json({ status: 'success', data: await pricing.listZones() });
@@ -30,6 +59,80 @@ adminPricingRouter.get('/zones', authenticateToken, requireAdmin, async (_req, r
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+adminPricingRouter.post('/zones', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const row = await pricing.createZone({
+      name: req.body.name,
+      countryCode: req.body.countryCode,
+      centerLat: Number(req.body.centerLat),
+      centerLng: Number(req.body.centerLng),
+      radiusKm: req.body.radiusKm != null ? Number(req.body.radiusKm) : undefined,
+      maxSurgeCap: req.body.maxSurgeCap != null ? Number(req.body.maxSurgeCap) : undefined,
+    });
+    await auditPricing(req.user!.id, 'create_pricing_zone', 'pricing_zone', row.id, {}, row, req.body.reason);
+    res.status(201).json({ status: 'success', data: row });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+adminPricingRouter.patch(
+  '/zones/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const before = (await pricing.listZones()).find((z: any) => z.id === req.params.id);
+      const row = await pricing.updateZone(req.params.id, {
+        name: req.body.name,
+        centerLat: req.body.centerLat != null ? Number(req.body.centerLat) : undefined,
+        centerLng: req.body.centerLng != null ? Number(req.body.centerLng) : undefined,
+        radiusKm: req.body.radiusKm != null ? Number(req.body.radiusKm) : undefined,
+        maxSurgeCap: req.body.maxSurgeCap != null ? Number(req.body.maxSurgeCap) : undefined,
+        isActive: req.body.isActive,
+      });
+      await auditPricing(
+        req.user!.id,
+        'update_pricing_zone',
+        'pricing_zone',
+        req.params.id,
+        before,
+        row,
+        req.body.reason
+      );
+      res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+adminPricingRouter.patch(
+  '/zones/:id/max-surge-cap',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const before = (await pricing.listZones()).find((z: any) => z.id === req.params.id);
+      const row = await pricing.updateZone(req.params.id, {
+        maxSurgeCap: Number(req.body.maxSurgeCap),
+      });
+      await auditPricing(
+        req.user!.id,
+        'update_max_surge_cap',
+        'pricing_zone',
+        req.params.id,
+        before,
+        row,
+        req.body.reason || 'max surge cap update'
+      );
+      res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
 
 adminPricingRouter.get('/factors', authenticateToken, requireAdmin, async (req: any, res: Response) => {
   try {
@@ -45,13 +148,39 @@ adminPricingRouter.patch(
   requireAdmin,
   async (req: AuthRequest, res: Response) => {
     try {
-      const row = await pricing.setFactorActive(req.params.id, Boolean(req.body.isActive));
+      const beforeList = await pricing.listFactors();
+      const before = beforeList.find((f: any) => f.id === req.params.id);
+      const row =
+        req.body.config != null
+          ? await pricing.updateFactorConfig(
+              req.params.id,
+              req.body.config,
+              req.body.isActive != null ? Boolean(req.body.isActive) : undefined
+            )
+          : await pricing.setFactorActive(req.params.id, Boolean(req.body.isActive));
+      await auditPricing(
+        req.user!.id,
+        'update_pricing_factor',
+        'pricing_factor',
+        req.params.id,
+        before,
+        row,
+        req.body.reason
+      );
       res.json({ status: 'success', data: row });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
   }
 );
+
+adminPricingRouter.get('/events', authenticateToken, requireAdmin, async (req: any, res: Response) => {
+  try {
+    res.json({ status: 'success', data: await pricing.listEvents(req.query.zoneId) });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
 
 adminPricingRouter.post('/events', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
@@ -62,6 +191,7 @@ adminPricingRouter.post('/events', authenticateToken, requireAdmin, async (req: 
       endsAt: req.body.endsAt,
       multiplier: Number(req.body.multiplier),
     });
+    await auditPricing(req.user!.id, 'create_pricing_event', 'pricing_event', row.id, {}, row, req.body.reason);
     res.status(201).json({ status: 'success', data: row });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
@@ -95,13 +225,120 @@ identityLinkRouter.post(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
+      const countryCode = req.body.countryCode || 'GH';
+      const pattern = nationalId.idFieldPattern(countryCode);
+      const check = nationalId.validateIdNumber(countryCode, req.body.idNumber);
+      if (!check.valid) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid ${pattern.label}`,
+          data: { field: pattern },
+        });
+      }
       const result = await nationalId.verifyNationalId(
-        req.body.countryCode || 'GH',
+        countryCode,
         req.body.idNumber,
         req.body.fullName,
         req.body.dateOfBirth
       );
-      res.json({ status: 'success', data: result });
+      res.json({ status: 'success', data: { ...result, field: pattern } });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+/** OCR preview for mobile confirm/correct step (Phase 26). */
+identityLinkRouter.post(
+  '/ocr-preview',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const countryCode = String(req.body.countryCode || 'GH').toUpperCase();
+      const documentType = req.body.documentType || 'national_id';
+      const pattern = nationalId.idFieldPattern(countryCode);
+      // Prefer Textract when fileUrl/base64 provided; otherwise return editable stubs from body
+      let extracted: any = {
+        fullName: req.body.fullName || null,
+        idNumber: req.body.idNumber || null,
+        dateOfBirth: req.body.dateOfBirth || null,
+        licenseNumber: req.body.licenseNumber || null,
+        vehicleRegistration: req.body.vehicleRegistration || null,
+      };
+      if (req.body.fileUrl || req.body.imageBase64) {
+        try {
+          const preview = await (identityVerification as any).ocrPreviewDocument?.({
+            fileUrl: req.body.fileUrl,
+            imageBase64: req.body.imageBase64,
+            documentType,
+            countryCode,
+          });
+          if (preview) extracted = { ...extracted, ...preview };
+        } catch {
+          /* fall through to body fields */
+        }
+      }
+      res.json({
+        status: 'success',
+        data: {
+          documentType,
+          countryCode,
+          field: pattern,
+          extracted,
+          confirmRequired: true,
+          message: 'Confirm or correct OCR fields before submission',
+        },
+      });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+identityLinkRouter.post(
+  '/documents',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const countryCode = req.body.countryCode || 'GH';
+      const userId = req.user!.id;
+      const driver = (
+        await db.query(`SELECT id FROM drivers WHERE user_id = $1 LIMIT 1`, [userId])
+      ).rows[0];
+      if (!driver) {
+        return res.status(400).json({ status: 'error', message: 'Driver profile required' });
+      }
+      const docs = Array.isArray(req.body.documents) ? req.body.documents : [];
+      const national = docs.find((d: any) =>
+        ['ghana_card', 'national_id'].includes(d.type)
+      );
+      const license = docs.find((d: any) => d.type === 'driving_license');
+      const vehicle = docs.find((d: any) =>
+        ['vehicle_registration', 'authorization_letter'].includes(d.type)
+      );
+      const row = await db.query(
+        `INSERT INTO identity_verifications (
+           driver_id, document_type, document_number, status,
+           national_id_number, national_id_country, driving_license_number,
+           vehicle_registration_number, linked_phone_number
+         ) VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8)
+         RETURNING *`,
+        [
+          driver.id,
+          national?.type || 'national_id',
+          req.body.idNumber || national?.number || null,
+          req.body.idNumber || national?.number || null,
+          countryCode,
+          req.body.licenseNumber || license?.number || null,
+          req.body.vehicleRegistration || vehicle?.number || null,
+          req.body.phone || null,
+        ]
+      );
+      res.status(201).json({
+        status: 'success',
+        data: row.rows[0],
+        pendingAutomatedVerification: true,
+      });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
@@ -213,6 +450,52 @@ walletTransferRouter.get('/transfers', authenticateToken, async (req: AuthReques
   }
 });
 
+walletTransferRouter.get('/transfer/limits', authenticateToken, async (_req, res: Response) => {
+  try {
+    res.json({ status: 'success', data: await transfers.getLimits() });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+walletTransferRouter.put(
+  '/transfer/limits',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const before = await transfers.getLimits();
+      const row = await transfers.updateLimits({
+        maxPerTx: req.body.maxPerTx != null ? Number(req.body.maxPerTx) : undefined,
+        maxPerDay: req.body.maxPerDay != null ? Number(req.body.maxPerDay) : undefined,
+        requiresIdentityLinkedAbove:
+          req.body.requiresIdentityLinkedAbove != null
+            ? Number(req.body.requiresIdentityLinkedAbove)
+            : undefined,
+        feePercent: req.body.feePercent != null ? Number(req.body.feePercent) : undefined,
+        feeFlat: req.body.feeFlat != null ? Number(req.body.feeFlat) : undefined,
+      });
+      try {
+        await db.query(
+          `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, before_state, after_state)
+           VALUES ($1,'update_transfer_limits','transfer_limits','1',$2,$3::jsonb,$4::jsonb)`,
+          [
+            req.user!.id,
+            req.body.reason || 'update transfer limits',
+            JSON.stringify(before),
+            JSON.stringify(row),
+          ]
+        );
+      } catch {
+        /* optional */
+      }
+      res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 walletTransferRouter.post('/transfer/claim', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const data = await transfers.claimTransfer(req.body.claimCode, req.user!.id);
@@ -264,6 +547,28 @@ tripRecordingRouter.post(
     try {
       const data = await recordings.logRiderNotice(req.params.id);
       res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+tripRecordingRouter.post(
+  '/drivers/recording-consent',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.userType !== 'driver') {
+        return res.status(403).json({ status: 'error', message: 'Drivers only' });
+      }
+      await db.query(
+        `UPDATE drivers SET trip_recording_consented_at = NOW() WHERE user_id = $1`,
+        [req.user!.id]
+      );
+      res.json({
+        status: 'success',
+        data: { consented: true, at: new Date().toISOString() },
+      });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
@@ -334,16 +639,30 @@ tripRecordingRouter.post(
 );
 
 tripRecordingRouter.get(
-  '/admin/recordings/:rideId',
+  '/admin/recordings/:rideId/meta',
   authenticateToken,
   requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = await recordings.getRecordingMeta(req.params.rideId);
+      res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+tripRecordingRouter.get(
+  '/admin/recordings/:rideId',
+  authenticateToken,
+  requireTrustAndSafety,
   async (req: AuthRequest, res: Response) => {
     try {
       const data = await recordings.getPlaybackUrl(
         req.params.rideId,
         req.user!.id,
-        String(req.query.incidentRef || req.body?.incidentRef || ''),
-        (req.user as any)?.role || 'admin'
+        String(req.query.incidentRef || ''),
+        req.user!.roles || []
       );
       res.json({ status: 'success', data });
     } catch (error: any) {

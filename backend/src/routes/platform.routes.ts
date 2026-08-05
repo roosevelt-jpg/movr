@@ -582,6 +582,89 @@ adminOpsRouter.post(
   }
 );
 
+adminOpsRouter.post(
+  '/rides/:id/status-override',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.body.reason || !req.body.status) {
+        return res.status(400).json({ status: 'error', message: 'status and reason required' });
+      }
+      const before = await db.query(`SELECT * FROM rides WHERE id = $1`, [req.params.id]);
+      const after = await db.query(
+        `UPDATE rides SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [req.body.status, req.params.id]
+      );
+      await db.query(
+        `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, before_state, after_state)
+         VALUES ($1,'status_override','ride',$2,$3,$4::jsonb,$5::jsonb)`,
+        [
+          req.user!.id,
+          req.params.id,
+          req.body.reason,
+          JSON.stringify(before.rows[0] || {}),
+          JSON.stringify(after.rows[0] || {}),
+        ]
+      );
+      res.json({ status: 'success', data: after.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+adminOpsRouter.post(
+  '/orders/:id/status-override',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.body.reason || !req.body.status) {
+        return res.status(400).json({ status: 'error', message: 'status and reason required' });
+      }
+      const before = await db.query(`SELECT * FROM marketplace_orders WHERE id = $1`, [
+        req.params.id,
+      ]);
+      const after = await db.query(
+        `UPDATE marketplace_orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [req.body.status, req.params.id]
+      );
+      await db.query(
+        `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, before_state, after_state)
+         VALUES ($1,'status_override','order',$2,$3,$4::jsonb,$5::jsonb)`,
+        [
+          req.user!.id,
+          req.params.id,
+          req.body.reason,
+          JSON.stringify(before.rows[0] || {}),
+          JSON.stringify(after.rows[0] || {}),
+        ]
+      );
+      res.json({ status: 'success', data: after.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+adminOpsRouter.get(
+  '/orders/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const row = await db.query(`SELECT * FROM marketplace_orders WHERE id = $1`, [req.params.id]);
+      if (!row.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Order not found' });
+      }
+      res.json({ status: 'success', data: row.rows[0] });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 adminOpsRouter.get('/notes', authenticateToken, requireAdmin, async (req: any, res: Response) => {
   try {
     const result = await db.query(
@@ -828,6 +911,17 @@ const DEFAULT_FLAGS = [
       label: 'Cross-border transfers',
       phase: 'Phase 27',
       rolloutLabel: '0% · compliance review pending',
+    },
+  },
+  {
+    key: 'trip_recording',
+    enabled: false,
+    rollout_pct: 0,
+    metadata: {
+      label: 'In-trip camera recording',
+      phase: 'Phase 28',
+      rolloutLabel: '0% · privacy/legal review pending',
+      retentionHours: 72,
     },
   },
 ];
@@ -1124,6 +1218,20 @@ adminFinanceRouter.post(
       res.status(201).json({ status: 'success', data: batch });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+adminFinanceRouter.get(
+  '/payout-batches',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const rows = await settlement.listBatches(Number(req.query.limit || 50));
+      res.json({ status: 'success', data: rows });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
     }
   }
 );

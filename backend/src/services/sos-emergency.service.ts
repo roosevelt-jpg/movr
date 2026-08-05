@@ -1,6 +1,9 @@
 // backend/src/services/sos-emergency.service.ts
 import { v4 as uuidv4 } from 'uuid';
 import twilio from 'twilio';
+import getLogger from '../utils/logger';
+
+const logger = getLogger('sos-emergency');
 
 class SOSEmergencyService {
   private twilioClient: any;
@@ -13,8 +16,8 @@ class SOSEmergencyService {
   }
 
   /**
-   * Handle SOS emergency button press
-   * Connects to live video recording and security personnel
+   * Handle SOS emergency button press.
+   * Flags trip recording for dispute retention (Phase 28) — not live video streaming.
    */
   async triggerSOS(
     rideId: string,
@@ -81,10 +84,27 @@ class SOSEmergencyService {
         recordingId,
       });
 
+      // Phase 19 — inbox alongside push/SMS alerts
+      try {
+        const { DatabaseService } = require('./database.service');
+        const { InboxService } = require('./inbox.service');
+        const inbox = new InboxService(new DatabaseService());
+        const title = 'Emergency SOS';
+        const body = `SOS (${sosType}) active for ride ${rideId}. Stay safe — security has been notified.`;
+        if (customerId) {
+          await inbox.sendInboxMessage(customerId, 'security', title, body, `movr://sos/${sosId}`);
+        }
+        if (driverId) {
+          await inbox.sendInboxMessage(driverId, 'security', title, body, `movr://sos/${sosId}`);
+        }
+      } catch (inboxErr) {
+        logger.warn('SOS inbox write failed', { error: String(inboxErr) });
+      }
+
       // Create live video stream link for security team
       const streamLink = await this.createEmergencyVideoStream(recordingId, rideId);
 
-      console.log(`🚨 SOS triggered: ${sosId} with video stream: ${streamLink}`);
+      logger.info('SOS triggered', { sosId, streamLink });
 
       return {
         sosId,
@@ -93,7 +113,7 @@ class SOSEmergencyService {
         personnelNotified: securityPersonnel.rows.length,
       };
     } catch (error) {
-      console.error('❌ SOS trigger failed:', error);
+      logger.error('SOS trigger failed', { error: String(error) });
       throw error;
     }
   }
@@ -149,7 +169,7 @@ class SOSEmergencyService {
         token: personnel.fcm_token,
       });
 
-      console.log(`✅ Emergency alert sent to personnel ${personnel.id}`);
+      logger.info('Emergency alert sent', { personnelId: personnel.id });
     } catch (error) {
       console.error('❌ Failed to send emergency alert:', error);
     }
@@ -181,7 +201,7 @@ class SOSEmergencyService {
         });
       }
 
-      console.log(`✅ Emergency contacts notified: ${allContacts.length}`);
+      logger.info('Emergency contacts notified', { count: allContacts.length });
     } catch (error) {
       console.error('❌ Failed to notify emergency contacts:', error);
     }
@@ -259,7 +279,7 @@ class SOSEmergencyService {
         timestamp: new Date(),
       });
 
-      console.log(`✅ SOS ${sosId} resolved: ${resolution}`);
+      logger.info('SOS resolved', { sosId, resolution });
 
       return {
         sosId,
@@ -296,7 +316,7 @@ class SOSEmergencyService {
         ]
       );
 
-      console.log(`✅ Evidence stored on blockchain for SOS: ${evidenceData.sosId}`);
+      logger.info('SOS evidence recorded', { sosId: evidenceData.sosId });
     } catch (error) {
       console.error('❌ Failed to store evidence on blockchain:', error);
     }

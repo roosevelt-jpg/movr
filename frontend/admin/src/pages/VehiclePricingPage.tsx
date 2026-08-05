@@ -23,6 +23,9 @@ export default function VehiclePricingPage() {
     countryCode: 'GH',
     name: '',
     code: '',
+    category: 'sedan',
+    effectiveFrom: '',
+    scheduleMode: 'now' as 'now' | 'later',
   });
 
   const load = async () => {
@@ -90,6 +93,9 @@ export default function VehiclePricingPage() {
       countryCode: 'GH',
       name: t.name || '',
       code: '',
+      category: 'sedan',
+      effectiveFrom: '',
+      scheduleMode: 'now',
     });
   };
 
@@ -104,6 +110,11 @@ export default function VehiclePricingPage() {
         minimumFare: Number(form.minimumFare || 0),
         currencyCode: form.currencyCode,
         countryCode: form.countryCode,
+        effectiveFrom:
+          form.scheduleMode === 'later' && form.effectiveFrom
+            ? new Date(form.effectiveFrom).toISOString()
+            : undefined,
+        reason: 'Admin pricing update',
       },
       { headers: headers() }
     );
@@ -117,11 +128,21 @@ export default function VehiclePricingPage() {
       {
         name: form.name || 'New type',
         code: form.code || `type_${Date.now()}`,
-        category: 'car',
+        category: form.category || 'sedan',
+        reason: 'Admin create vehicle type',
       },
       { headers: headers() }
     );
     setShowAdd(false);
+    await load();
+  };
+
+  const deactivate = async (id: string) => {
+    await axios.patch(
+      `${API}/admin/vehicle-types/${id}`,
+      { is_active: false, reason: 'Admin deactivate' },
+      { headers: headers() }
+    );
     await load();
   };
 
@@ -146,6 +167,9 @@ export default function VehiclePricingPage() {
               countryCode: 'GH',
               name: '',
               code: '',
+              category: 'sedan',
+              effectiveFrom: '',
+              scheduleMode: 'now',
             });
           }}
         >
@@ -174,9 +198,14 @@ export default function VehiclePricingPage() {
               <span>{money(r.per_km_rate)}</span>
               <span>{money(r.per_minute_rate)}</span>
               <span>{money(r.minimum_fare)}</span>
-              <button style={styles.edit} onClick={() => openEdit(r)}>
-                Edit
-              </button>
+              <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button style={styles.edit} onClick={() => openEdit(r)}>
+                  Edit
+                </button>
+                <button style={styles.edit} onClick={() => deactivate(r.id).catch((e) => setError(e.message))}>
+                  Deactivate
+                </button>
+              </span>
             </div>
           ))
         )}
@@ -199,25 +228,65 @@ export default function VehiclePricingPage() {
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value })}
               />
-            </>
-          ) : null}
-          <div style={styles.form}>
-            {(['baseFare', 'perKmRate', 'perMinuteRate', 'minimumFare'] as const).map((k) => (
-              <input
-                key={k}
-                placeholder={k}
+              <select
                 style={styles.input}
-                value={(form as any)[k]}
-                onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-              />
-            ))}
-          </div>
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              >
+                {['motorcycle', 'tricycle', 'sedan', 'suv', 'van', 'luxury', 'bus'].map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <div style={styles.form}>
+                {(['baseFare', 'perKmRate', 'perMinuteRate', 'minimumFare'] as const).map((k) => (
+                  <input
+                    key={k}
+                    placeholder={k}
+                    style={styles.input}
+                    value={(form as any)[k]}
+                    onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                  />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <label style={{ fontSize: 13 }}>
+                  <input
+                    type="radio"
+                    checked={form.scheduleMode === 'now'}
+                    onChange={() => setForm({ ...form, scheduleMode: 'now' })}
+                  />{' '}
+                  Effective immediately
+                </label>
+                <label style={{ fontSize: 13 }}>
+                  <input
+                    type="radio"
+                    checked={form.scheduleMode === 'later'}
+                    onChange={() => setForm({ ...form, scheduleMode: 'later' })}
+                  />{' '}
+                  Schedule
+                </label>
+                {form.scheduleMode === 'later' ? (
+                  <input
+                    type="datetime-local"
+                    style={styles.input}
+                    value={form.effectiveFrom}
+                    onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
+                  />
+                ) : null}
+              </div>
+            </>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button
               style={styles.addBtn}
               onClick={() => (showAdd ? addType() : save()).catch((e) => setError(e.message))}
             >
-              Save
+              {showAdd ? 'Create' : 'Save & schedule'}
             </button>
             <button
               style={styles.ghost}

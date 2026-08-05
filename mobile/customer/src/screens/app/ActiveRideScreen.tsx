@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking, TextInput, ScrollView } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
+import RecordingNoticeModal from './RecordingNoticeModal';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -32,9 +33,11 @@ export default function ActiveRideScreen({
   const [sosMsg, setSosMsg] = useState('');
   const [snapshot, setSnapshot] = useState<any>(null);
   const [emergencyTel, setEmergencyTel] = useState('tel:191');
+  const [noticeAcked, setNoticeAcked] = useState(false);
 
   useEffect(() => {
     if (!rideId) return;
+    setNoticeAcked(false);
     fetch(`${API}/rides/${rideId}/masked-session`, {
       method: 'POST',
       headers: authHeaders(),
@@ -98,6 +101,14 @@ export default function ActiveRideScreen({
 
   return (
     <View style={styles.root}>
+      {rideId ? (
+        <RecordingNoticeModal
+          visible={!noticeAcked}
+          rideId={rideId}
+          onAcknowledged={() => setNoticeAcked(true)}
+        />
+      ) : null}
+
       <View style={styles.map}>
         <Text style={styles.mapLabel}>Live trip</Text>
         <Pressable style={styles.sos} onPress={triggerSos}>
@@ -192,7 +203,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: spacing[3],
     right: spacing[3],
-    backgroundColor: '#FF3B5C',
+    backgroundColor: colors.error,
     borderRadius: radius.pill,
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -204,7 +215,7 @@ const styles = StyleSheet.create({
   iconLabel: { color: colors.textSecondary, fontSize: 11 },
   privacy: { color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginBottom: 8 },
   share: { color: colors.motionBlue, fontSize: 11, textAlign: 'center', marginBottom: 8 },
-  sosMsg: { color: '#FF3B5C', textAlign: 'center', marginBottom: 8, fontWeight: '600' },
+  sosMsg: { color: colors.error, textAlign: 'center', marginBottom: 8, fontWeight: '600' },
   snap: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.md,

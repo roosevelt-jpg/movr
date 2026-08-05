@@ -5,6 +5,7 @@ import AdminShell from '../layouts/AdminShell';
 import DataTable, { DataTableColumn } from '../components/DataTable';
 import FilterBar from '../components/FilterBar';
 import DetailPanel from '../components/DetailPanel';
+import OpsNotesPanel from '../components/OpsNotesPanel';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -224,6 +225,7 @@ export default function UsersListPage() {
               >
                 Open identity review
               </button>
+              <OpsNotesPanel entityType="user" entityId={selected.id} />
             </>
           ) : null}
         </DetailPanel>

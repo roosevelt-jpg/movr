@@ -13,6 +13,23 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { DatabaseService } = require('./services/database.service');
 const authDb = new DatabaseService();
+const { randomUUID } = require('crypto');
+
+// Phase 21 — Sentry (optional when DSN set)
+let Sentry: any = null;
+try {
+  if (process.env.SENTRY_DSN) {
+    Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'development',
+      tracesSampleRate: 0.1,
+    });
+  }
+} catch (e: any) {
+  // package may be absent until npm install
+  console.warn('Sentry init skipped:', e.message);
+}
 
 // Avoid clashing with Node/undici global Request/Response (TS2300)
 type ExpressRequest = any;
@@ -100,16 +117,30 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Request logging middleware
+// Request logging middleware — structured fields (Phase 21)
 app.use((req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
+  const requestId = (req.headers['x-request-id'] as string) || randomUUID();
+  req.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
   const start = Date.now();
   res.on('finish', () => {
-    const duration = Date.now() - start;
-    logger.info(`${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+    const durationMs = Date.now() - start;
+    logger.info('http_request', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs,
+      userId: req.user?.id,
+      service: 'movr-backend',
+    });
   });
   next();
 });
 
+if (Sentry?.Handlers?.requestHandler) {
+  app.use(Sentry.Handlers.requestHandler());
+}
 // Phase 0A / 0C routers (payment providers + integrations hub)
 const {
   paymentWebhooksRouter,
@@ -184,6 +215,9 @@ app.use('/api/v1/admin', adminOpsRouter);
 app.use('/api/v1/admin/finance', adminFinanceRouter);
 app.use('/api/v1/admin/rewards-rules', adminRewardsRouter);
 app.use('/api/v1/inbox', inboxRouter);
+
+const { publicVehicleTypesRouter } = require('./routes/vehicle-types.routes');
+app.use('/api/v1/vehicle-types', publicVehicleTypesRouter);
 
 const {
   rideBookingRouter,
@@ -375,7 +409,7 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
       lastName,
       name,
       userType = 'customer',
-      country = 'GH',
+      country: countryHint,
       city = 'Accra',
     } = req.body;
 
@@ -399,6 +433,20 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
         status: 'error',
         message: 'Email or phone number is required',
       });
+    }
+
+    // Phase 20 — country-aware signup (dial code / OTP locale)
+    let country = String(countryHint || 'GH').toUpperCase();
+    try {
+      const { LocalizationService } = require('./services/localization.service');
+      const loc = new LocalizationService(authDb);
+      const detected = await loc.detectCountry({
+        phoneNumber: cleanPhone || undefined,
+        countryHint: countryHint || undefined,
+      });
+      if (detected?.code) country = detected.code;
+    } catch {
+      /* countries table may be empty */
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -514,8 +562,20 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
       if (!ok) {
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
+      let roles: string[] = [];
+      if (dbUser.user_type === 'admin') {
+        try {
+          const rr = await authDb.query(
+            `SELECT role FROM admin_roles WHERE user_id = $1`,
+            [dbUser.id]
+          );
+          roles = rr.rows.map((r: any) => r.role);
+        } catch {
+          roles = [];
+        }
+      }
       const token = jwt.sign(
-        { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type },
+        { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type, roles },
         process.env.JWT_SECRET || 'secret',
         { expiresIn: '7d' }
       );
@@ -526,6 +586,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
           email: dbUser.email,
           name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim(),
           userType: dbUser.user_type,
+          roles,
           token,
           user: {
             id: dbUser.id,
@@ -534,6 +595,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
             lastName: dbUser.last_name || '',
             phone: dbUser.phone || (!isEmail ? raw : ''),
             userType: dbUser.user_type,
+            roles,
             country: dbUser.country || 'GH',
             city: dbUser.city || 'Accra',
             isVerified: true,
@@ -730,6 +792,23 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
 
     if (!identifier || !code) {
       return res.status(400).json({ status: 'error', message: 'Code and email/phone are required' });
+    }
+
+    // Phase 20 — validate OTP format against country rules when phone-based
+    try {
+      if (!identifier.includes('@')) {
+        const { LocalizationService } = require('./services/localization.service');
+        const loc = new LocalizationService(authDb);
+        const country = await loc.detectCountry({ phoneNumber: identifier });
+        if (country && !loc.validateOtp(code, country)) {
+          return res.status(400).json({
+            status: 'error',
+            message: `OTP format invalid for ${country.code || 'this country'}`,
+          });
+        }
+      }
+    } catch {
+      /* soft fail — still check against store */
     }
 
     let entry: { code: string; expires: number; userId?: string; purpose: 'reset' | 'signup' } | undefined;
@@ -1063,10 +1142,15 @@ app.use((req: ExpressRequest, res: ExpressResponse) => {
 });
 
 app.use((err: any, req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
-  logger.error('Unhandled error:', err);
+  logger.error('Unhandled error:', { error: err, requestId: req.requestId });
+  if (Sentry?.captureException) Sentry.captureException(err);
+  if (Sentry?.Handlers?.errorHandler) {
+    return Sentry.Handlers.errorHandler()(err, req, res, next);
+  }
   res.status(500).json({
     status: 'error',
-    message: 'Internal server error'
+    message: 'Internal server error',
+    requestId: req.requestId,
   });
 });
 
@@ -1075,10 +1159,6 @@ app.use((err: any, req: ExpressRequest, res: ExpressResponse, next: ExpressNextF
 // ============================================
 io.on('connection', (socket) => {
   logger.info(`New client connected: ${socket.id}`);
-
-  socket.on('location:update', (data) => {
-    io.emit('location:updated', { ...data, timestamp: Date.now() });
-  });
 
   socket.on('ride:status', (data) => {
     io.emit('ride:status-changed', { ...data, timestamp: Date.now() });
@@ -1121,7 +1201,54 @@ io.on('connection', (socket) => {
         ...data,
         timestamp: Date.now(),
       });
+      io.to('admin:live').emit('admin:live:marker', {
+        ...data,
+        id: data.orderId,
+        kind: 'parcel',
+        timestamp: Date.now(),
+      });
     }
+  });
+
+  // Phase 17 — admin ops live map (rides / deliveries / rentals)
+  socket.on('admin:live:join', () => {
+    socket.join('admin:live');
+  });
+  socket.on('admin:live:leave', () => {
+    socket.leave('admin:live');
+  });
+  socket.on('rental:join', (rentalId: string) => {
+    if (rentalId) socket.join(`rental:${rentalId}`);
+  });
+  socket.on('rental:location', (data: any) => {
+    if (data?.rentalId) {
+      io.to(`rental:${data.rentalId}`).emit('rental:location', { ...data, timestamp: Date.now() });
+      io.to('admin:live').emit('admin:live:marker', {
+        ...data,
+        id: data.rentalId,
+        kind: 'rental',
+        timestamp: Date.now(),
+      });
+    }
+  });
+  socket.on('ride:location', (data: any) => {
+    if (data?.rideId) {
+      io.to(`ride:${data.rideId}`).emit('ride:location', { ...data, timestamp: Date.now() });
+      io.to('admin:live').emit('admin:live:marker', {
+        ...data,
+        id: data.rideId,
+        kind: 'ride',
+        timestamp: Date.now(),
+      });
+    }
+  });
+  socket.on('location:update', (data: any) => {
+    io.emit('location:updated', { ...data, timestamp: Date.now() });
+    io.to('admin:live').emit('admin:live:marker', {
+      ...data,
+      kind: data.kind || (data.role === 'driver' ? 'ride' : data.kind),
+      timestamp: Date.now(),
+    });
   });
 
   socket.on('disconnect', () => {

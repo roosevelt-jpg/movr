@@ -18,11 +18,13 @@ function headers() {
   return { Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` };
 }
 
-/** Admin finance — KPI cards, GMV chart, export CSV (keeps payout batch APIs). */
+/** Admin finance — GMV charts, payout review/approve, reconciliation (Phase 18). */
 export default function FinanceDashboardPage() {
   const [gmv, setGmv] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [batch, setBatch] = useState<any>(null);
   const [message, setMessage] = useState('');
+  const [limits, setLimits] = useState<any>(null);
   const [metrics, setMetrics] = useState({
     gmv30: 0,
     gmvCurrency: 'GHS',
@@ -37,13 +39,25 @@ export default function FinanceDashboardPage() {
     const rows = res.data.data || [];
     if (rows.length) {
       const sum = rows.reduce((s: number, r: any) => s + Number(r.gmv_amount || 0), 0);
-      const currency = rows[0]?.currency || 'GHS';
+      const currency = rows[0]?.currency || rows[0]?.currency_code || 'GHS';
       setMetrics((m) => ({ ...m, gmv30: sum, gmvCurrency: currency }));
     }
   };
 
+  const loadBatches = async () => {
+    const res = await axios.get(`${API}/admin/finance/payout-batches`, { headers: headers() });
+    setBatches(res.data.data || []);
+  };
+
+  const loadLimits = async () => {
+    const res = await axios.get(`${API}/wallet/transfer/limits`, { headers: headers() });
+    setLimits(res.data.data || null);
+  };
+
   useEffect(() => {
     load().catch((e) => setMessage(e.message));
+    loadBatches().catch(() => undefined);
+    loadLimits().catch(() => undefined);
     axios
       .get(`${API}/admin/finance/summary`, { headers: headers() })
       .then((res) => {
@@ -65,16 +79,35 @@ export default function FinanceDashboardPage() {
       { headers: headers() }
     );
     setBatch(res.data.data);
-    setMessage('Payout batch ready');
+    setMessage('Payout batch ready for review');
+    await loadBatches();
   };
 
-  const exportCsv = () => {
+  const executeBatch = async (id: string) => {
+    const res = await axios.post(
+      `${API}/admin/finance/payout-batches/${id}/execute`,
+      { countryCode: 'GH' },
+      { headers: headers() }
+    );
+    setBatch(res.data.data);
+    setMessage(`Batch ${id.slice(0, 8)} executed`);
+    await loadBatches();
+  };
+
+  const exportCsv = async () => {
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    window.open(
-      `${API}/admin/finance/reconciliation?format=csv&from=${from}&to=${to}`,
-      '_blank'
-    );
+    const res = await axios.get(`${API}/admin/finance/reconciliation`, {
+      headers: headers(),
+      params: { format: 'csv', from, to },
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reconciliation-${from}-${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const chartData = useMemo(() => {
@@ -134,7 +167,7 @@ export default function FinanceDashboardPage() {
       {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
 
       <div style={styles.actions}>
-        <button style={styles.btn} onClick={exportCsv}>
+        <button style={styles.btn} onClick={() => exportCsv().catch((e) => setMessage(e.message))}>
           ↓ Export reconciliation CSV
         </button>
         <button style={styles.btnGhost} onClick={createBatch}>
@@ -150,6 +183,39 @@ export default function FinanceDashboardPage() {
         </button>
       </div>
 
+      <div style={styles.batchList}>
+        <div style={styles.label}>Payout batches</div>
+        {batches.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)' }}>No batches yet</p>
+        ) : (
+          batches.map((b) => (
+            <div key={b.id} style={styles.batchRow}>
+              <div>
+                <strong>{String(b.id).slice(0, 8)}</strong> · {b.status} ·{' '}
+                {formatCurrency(Number(b.total_amount || 0), b.currency || metrics.gmvCurrency)}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={styles.btnGhost}
+                  onClick={() =>
+                    axios
+                      .get(`${API}/admin/finance/payout-batches/${b.id}`, { headers: headers() })
+                      .then((r) => setBatch(r.data.data))
+                  }
+                >
+                  Review
+                </button>
+                {b.status !== 'completed' ? (
+                  <button style={styles.btn} onClick={() => executeBatch(b.id)}>
+                    Approve &amp; execute
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {batch ? (
         <div style={styles.batch}>
           <strong>Batch {batch.id?.slice?.(0, 8)}</strong>
@@ -162,8 +228,73 @@ export default function FinanceDashboardPage() {
             )}
           </div>
           <div>Items: {batch.items?.length || 0}</div>
+          {batch.status !== 'completed' ? (
+            <button style={{ ...styles.btn, marginTop: 12 }} onClick={() => executeBatch(batch.id)}>
+              Approve &amp; execute
+            </button>
+          ) : null}
         </div>
       ) : null}
+
+      <div style={styles.batchList}>
+        <div style={styles.label}>Cross-border transfer limits (Phase 27)</div>
+        {limits ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+            {(
+              [
+                ['max_per_tx', 'Max per transfer'],
+                ['max_per_day', 'Max per day'],
+                ['requires_identity_linked_above', 'Requires Identity-Linked above'],
+                ['fee_percent', 'Fee %'],
+                ['fee_flat', 'Fee flat'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ width: 220, color: 'var(--text-secondary)', fontSize: 13 }}>{label}</span>
+                <input
+                  style={{
+                    flex: 1,
+                    padding: 8,
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--pure-white)',
+                  }}
+                  value={String(limits[key] ?? '')}
+                  onChange={(e) => setLimits({ ...limits, [key]: e.target.value })}
+                />
+              </label>
+            ))}
+            <button
+              style={styles.btn}
+              onClick={() =>
+                axios
+                  .put(
+                    `${API}/wallet/transfer/limits`,
+                    {
+                      maxPerTx: Number(limits.max_per_tx),
+                      maxPerDay: Number(limits.max_per_day),
+                      requiresIdentityLinkedAbove: Number(limits.requires_identity_linked_above),
+                      feePercent: Number(limits.fee_percent),
+                      feeFlat: Number(limits.fee_flat),
+                      reason: 'Admin transfer limits update',
+                    },
+                    { headers: headers() }
+                  )
+                  .then((r) => {
+                    setLimits(r.data.data);
+                    setMessage('Transfer limits saved');
+                  })
+                  .catch((e) => setMessage(e.response?.data?.message || e.message))
+              }
+            >
+              Save transfer limits
+            </button>
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-secondary)' }}>Limits unavailable</p>
+        )}
+      </div>
     </AdminShell>
   );
 }
@@ -199,26 +330,43 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actions: { display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 },
   btn: {
-    background: 'linear-gradient(90deg, var(--movr-green) 0%, var(--electric-violet) 50%, var(--motion-blue) 100%)',
     border: 'none',
+    borderRadius: 10,
+    padding: '10px 14px',
+    background: 'var(--motion-blue)',
     color: 'var(--pure-white)',
-    borderRadius: 999,
-    padding: '12px 18px',
-    fontWeight: 700,
+    fontWeight: 600,
     cursor: 'pointer',
   },
   btnGhost: {
-    background: 'transparent',
     border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '10px 14px',
+    background: 'transparent',
     color: 'var(--pure-white)',
-    borderRadius: 999,
-    padding: '12px 18px',
+    fontWeight: 600,
     cursor: 'pointer',
   },
-  batch: {
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    padding: 16,
+  batchList: {
     background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  batchRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    padding: '10px 0',
+    borderBottom: '1px solid var(--border)',
+    flexWrap: 'wrap',
+  },
+  batch: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 14,
+    padding: 16,
   },
 };

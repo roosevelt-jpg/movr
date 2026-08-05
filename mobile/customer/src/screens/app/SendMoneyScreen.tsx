@@ -13,9 +13,18 @@ import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
 /** Send money — recipient, amount, FX quote cards (cross-border transfer APIs). */
 export default function SendMoneyScreen() {
-  const [to, setTo] = useState('+234 · Adaeze O. · Nigeria');
+  const [to, setTo] = useState('+233201234567');
   const [amount, setAmount] = useState('500');
   const [currency, setCurrency] = useState('GHS');
   const [quote, setQuote] = useState<any>(null);
@@ -23,7 +32,7 @@ export default function SendMoneyScreen() {
   const [message, setMessage] = useState('');
 
   const loadHistory = () => {
-    fetch(`${API}/wallet/transfers`)
+    fetch(`${API}/wallet/transfers`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => setHistory(j.data || []))
       .catch(() => undefined);
@@ -39,30 +48,25 @@ export default function SendMoneyScreen() {
       amount,
       currency,
     });
-    const res = await fetch(`${API}/wallet/transfer/quote?${q}`);
+    const res = await fetch(`${API}/wallet/transfer/quote?${q}`, { headers: authHeaders() });
     const json = await res.json();
     if (json.status === 'error') {
       setMessage(json.message);
-      // Demo FX if API unavailable
-      const n = Number(amount) || 0;
-      setQuote({
-        feeAmount: 5,
-        receivedAmount: Math.round(n * 71.4),
-        receivedCurrency: 'NGN',
-        fxRateUsed: 71.4,
-        canSend: true,
-        demo: true,
-      });
+      setQuote(null);
     } else {
       setQuote(json.data);
-      setMessage('');
+      setMessage(
+        json.data?.requiresIdentityLink && !json.data?.identityLinked
+          ? 'Identity-Linked status required for this amount'
+          : ''
+      );
     }
   };
 
   const send = async () => {
     const res = await fetch(`${API}/wallet/transfer`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ to, amount: Number(amount), currency }),
     });
     const json = await res.json();
@@ -70,7 +74,7 @@ export default function SendMoneyScreen() {
     else {
       setMessage(
         json.data.claim_code
-          ? `Sent — claim code ${json.data.claim_code}`
+          ? `Sent — claim code ${json.data.claim_code} (SMS sent if phone)`
           : 'Transfer complete'
       );
       setQuote(null);

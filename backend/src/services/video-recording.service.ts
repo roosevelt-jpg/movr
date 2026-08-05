@@ -1,317 +1,43 @@
-// backend/src/services/video-recording.service.ts
-import AWS from 'aws-sdk';
-import { v4 as uuidv4 } from 'uuid';
-import Web3 from 'web3';
+/**
+ * @deprecated Phase 28 — use `TripRecordingService` instead.
+ * Legacy live-stream / blockchain video path is intentionally retired:
+ * recordings are local-first + async S3 upload (not realtime streaming).
+ * Kept as a thin facade so unmounted `security-routes.ts` still typechecks.
+ */
+import { DatabaseService } from './database.service';
+import { TripRecordingService } from './trip-recording.service';
+import getLogger from '../utils/logger';
 
-interface RecordingMetadata {
-  rideId: string;
-  driverId: string;
-  customerId: string;
-  startTime: Date;
-  endTime?: Date;
-  pickupLocation: { lat: number; lng: number };
-  dropoffLocation?: { lat: number; lng: number };
-  duration: number;
-  fileSize: number;
-  s3Url: string;
-  blockchainHash: string;
-  ipfsHash: string;
-  status: 'recording' | 'processing' | 'stored' | 'verified';
-}
+const logger = getLogger('video-recording-legacy');
+const db = new DatabaseService();
+const trip = new TripRecordingService(db);
 
 class VideoRecordingService {
-  private s3: AWS.S3;
-  private web3: Web3;
-  private blockchainContract: any;
-
-  constructor() {
-    this.s3 = new AWS.S3({
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      region: process.env.AWS_REGION || 'us-east-1',
-    });
-
-    this.web3 = new Web3(process.env.WEB3_PROVIDER_URL);
-    // Initialize smart contract for video storage
-    this.initializeBlockchain();
-  }
-
-  private initializeBlockchain() {
-    // Smart contract for video evidence storage
-    const contractABI = [
-      {
-        name: 'storeVideoEvidence',
-        inputs: [
-          { name: 'rideId', type: 'string' },
-          { name: 'ipfsHash', type: 'string' },
-          { name: 'driverId', type: 'address' },
-          { name: 'customerId', type: 'address' },
-          { name: 'timestamp', type: 'uint256' },
-        ],
-        outputs: [{ name: 'evidenceId', type: 'bytes32' }],
-      },
-    ];
-
-    this.blockchainContract = new this.web3.eth.Contract(
-      contractABI as any,
-      process.env.VIDEO_STORAGE_CONTRACT_ADDRESS
-    );
-  }
-
-  /**
-   * Initialize video recording for a trip
-   * Called when driver starts the ride
-   */
-  async startRecording(rideId: string, driverId: string, customerId: string, pickupLocation: any) {
-    try {
-      const recordingId = uuidv4();
-      const startTime = new Date();
-
-      // Create recording metadata in database
-      const recording: RecordingMetadata = {
-        rideId,
-        driverId,
-        customerId,
-        startTime,
-        pickupLocation,
-        duration: 0,
-        fileSize: 0,
-        s3Url: '',
-        blockchainHash: '',
-        ipfsHash: '',
-        status: 'recording',
-      };
-
-      // Store in database
-      await db.query(
-        `INSERT INTO video_recordings (id, ride_id, driver_id, customer_id, start_time, pickup_location, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [recordingId, rideId, driverId, customerId, startTime, JSON.stringify(pickupLocation), 'recording']
-      );
-
-      // Emit WebSocket event to driver's phone to start recording
-      io.to(`driver_${driverId}`).emit('START_RECORDING', {
-        recordingId,
-        rideId,
-        quality: 'high', // 1080p
-        orientation: 'landscape', // Face passenger
-        includeAudio: true,
-      });
-
-      console.log(`✅ Video recording started for ride ${rideId}`);
-      return { recordingId, status: 'recording_started' };
-    } catch (error) {
-      console.error('❌ Error starting video recording:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * End recording and upload to blockchain
-   * Called when ride completes
-   */
-  async stopRecording(rideId: string, driverId: string, dropoffLocation: any) {
-    try {
-      const recording = await db.query(
-        'SELECT * FROM video_recordings WHERE ride_id = $1',
-        [rideId]
-      );
-
-      if (!recording.rows[0]) throw new Error('Recording not found');
-
-      const rec = recording.rows[0];
-      const endTime = new Date();
-      const duration = (endTime.getTime() - new Date(rec.start_time).getTime()) / 1000;
-
-      // Emit stop recording to driver's phone
-      io.to(`driver_${driverId}`).emit('STOP_RECORDING', {
-        rideId,
-        dropoffLocation,
-      });
-
-      // Update recording status
-      await db.query(
-        `UPDATE video_recordings 
-         SET end_time = $1, duration = $2, dropoff_location = $3, status = $4
-         WHERE ride_id = $5`,
-        [endTime, duration, JSON.stringify(dropoffLocation), 'processing', rideId]
-      );
-
-      console.log(`✅ Video recording stopped for ride ${rideId}, duration: ${duration}s`);
-      return { status: 'recording_stopped', duration };
-    } catch (error) {
-      console.error('❌ Error stopping video recording:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Upload video to S3 and blockchain
-   * Called after ride completion
-   */
-  async uploadVideoToBlockchain(rideId: string, videoBuffer: Buffer, metadata: any) {
-    try {
-      // Upload to AWS S3
-      const s3Key = `movr-trip-recordings/${rideId}/${uuidv4()}.mp4`;
-      const s3Params = {
-        Bucket: process.env.AWS_S3_BUCKET || 'movr-recordings',
-        Key: s3Key,
-        Body: videoBuffer,
-        ContentType: 'video/mp4',
-        ServerSideEncryption: 'AES256',
-        StorageClass: 'STANDARD_IA', // Cost-effective
-        Metadata: {
-          rideId,
-          driverId: metadata.driverId,
-          customerId: metadata.customerId,
-          timestamp: new Date().toISOString(),
-        },
-      };
-
-      const s3Response = await this.s3.upload(s3Params).promise();
-      const s3Url = s3Response.Location;
-
-      console.log(`✅ Video uploaded to S3: ${s3Url}`);
-
-      // Upload to IPFS (decentralized storage)
-      const ipfsHash = await this.uploadToIPFS(videoBuffer);
-
-      // Store on blockchain (immutable record)
-      const blockchainHash = await this.storeOnBlockchain(
-        rideId,
-        ipfsHash,
-        metadata.driverId,
-        metadata.customerId
-      );
-
-      // Update database with blockchain references
-      await db.query(
-        `UPDATE video_recordings 
-         SET s3_url = $1, ipfs_hash = $2, blockchain_hash = $3, status = $4
-         WHERE ride_id = $5`,
-        [s3Url, ipfsHash, blockchainHash, 'stored', rideId]
-      );
-
-      return {
-        status: 'video_stored',
-        s3Url,
-        ipfsHash,
-        blockchainHash,
-        duration: metadata.duration,
-      };
-    } catch (error) {
-      console.error('❌ Error uploading video to blockchain:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Upload video to IPFS for decentralized storage
-   */
-  private async uploadToIPFS(videoBuffer: Buffer): Promise<string> {
-    try {
-      // Use Pinata or similar IPFS service
-      const FormData = require('form-data');
-      const axios = require('axios');
-
-      const formData = new FormData();
-      formData.append('file', videoBuffer, 'trip-recording.mp4');
-
-      const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
-        headers: {
-          ...formData.getHeaders(),
-          pinata_api_key: process.env.PINATA_API_KEY,
-          pinata_secret_api_key: process.env.PINATA_SECRET_API_KEY,
-        },
-      });
-
-      return response.data.IpfsHash;
-    } catch (error) {
-      console.error('❌ IPFS upload failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Store immutable record on blockchain
-   */
-  private async storeOnBlockchain(
+  async startRecording(
     rideId: string,
-    ipfsHash: string,
     driverId: string,
-    customerId: string
-  ): Promise<string> {
-    try {
-      const account = this.web3.eth.accounts.privateKeyToAccount(
-        process.env.WEB3_PRIVATE_KEY || ''
-      );
-
-      const tx = this.blockchainContract.methods.storeVideoEvidence(
-        rideId,
-        ipfsHash,
-        driverId,
-        customerId,
-        Math.floor(Date.now() / 1000)
-      );
-
-      const gas = await tx.estimateGas({ from: account.address });
-      const gasPrice = await this.web3.eth.getGasPrice();
-
-      const transaction = {
-        from: account.address,
-        to: process.env.VIDEO_STORAGE_CONTRACT_ADDRESS,
-        gas,
-        gasPrice,
-        data: tx.encodeABI(),
-      };
-
-      const signed = account.signTransaction(transaction as any);
-      const receipt = await this.web3.eth.sendSignedTransaction(signed.rawTransaction);
-
-      console.log(`✅ Video stored on blockchain: ${receipt.transactionHash}`);
-      return receipt.transactionHash;
-    } catch (error) {
-      console.error('❌ Blockchain storage failed:', error);
-      throw error;
-    }
+    _customerId?: string,
+    _pickup?: { lat: number; lng: number }
+  ) {
+    logger.info('delegating startRecording to TripRecordingService', { rideId });
+    await trip.logDriverConsent(rideId);
+    return trip.startLocalRecording(rideId, driverId);
   }
 
-  /**
-   * Get video evidence for dispute resolution
-   */
+  async stopRecording(rideId: string, _driverId?: string, _dropoff?: { lat: number; lng: number }) {
+    logger.info('delegating stopRecording → upload URL request', { rideId });
+    return trip.requestUploadUrl(rideId);
+  }
+
+  async uploadVideoToBlockchain(rideId: string, _buffer?: Buffer, _meta?: any) {
+    logger.warn('blockchain video storage removed in Phase 28; completing S3 upload metadata only', {
+      rideId,
+    });
+    return trip.completeUpload(rideId);
+  }
+
   async getVideoEvidence(rideId: string) {
-    try {
-      const recording = await db.query(
-        `SELECT * FROM video_recordings WHERE ride_id = $1`,
-        [rideId]
-      );
-
-      if (!recording.rows[0]) throw new Error('Recording not found');
-
-      const rec = recording.rows[0];
-
-      // Verify blockchain integrity
-      const blockchainData = await this.blockchainContract.methods
-        .getVideoEvidence(rideId)
-        .call();
-
-      return {
-        rideId,
-        driverId: rec.driver_id,
-        customerId: rec.customer_id,
-        startTime: rec.start_time,
-        endTime: rec.end_time,
-        duration: rec.duration,
-        s3Url: rec.s3_url,
-        ipfsHash: rec.ipfs_hash,
-        blockchainHash: rec.blockchain_hash,
-        blockchainVerified: blockchainData.ipfsHash === rec.ipfs_hash,
-        status: rec.status,
-      };
-    } catch (error) {
-      console.error('❌ Error retrieving video evidence:', error);
-      throw error;
-    }
+    return trip.getRecordingMeta(rideId);
   }
 }
 

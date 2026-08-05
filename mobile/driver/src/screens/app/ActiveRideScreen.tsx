@@ -15,6 +15,18 @@ function authHeaders(): Record<string, string> {
   };
 }
 
+function parseJwtId(): string {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  if (!token) return '';
+  try {
+    return JSON.parse(atob(token.split('.')[1])).id || '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Driver active ride — map, ETA badge, pickup banner, masked call/chat, Arrived CTA.
  */
@@ -167,7 +179,16 @@ export default function ActiveRideScreen({
         ) : null}
       </View>
 
-      {rideId ? <ActiveRideRecordingPanel rideId={rideId} driverId="" /> : null}
+      {rideId ? (
+        <ActiveRideRecordingPanel
+          rideId={rideId}
+          driverId={parseJwtId()}
+          tripActive={['accepted', 'arrived', 'started', 'in_progress', 'ongoing'].includes(
+            String(ride.status || 'accepted')
+          )}
+          tripEnded={['completed', 'cancelled'].includes(String(ride.status || ''))}
+        />
+      ) : null}
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 

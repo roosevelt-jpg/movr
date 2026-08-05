@@ -3,6 +3,9 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
 import { DatabaseService } from './database.service';
+import getLogger from '../utils/logger';
+
+const logger = getLogger('identity-verification');
 
 interface IdentityDocument {
   type: 'national_id' | 'passport' | 'driving_license';
@@ -61,7 +64,7 @@ class IdentityVerificationService {
       };
 
       const result = await this.s3.upload(params).promise();
-      console.log(`✅ Document uploaded: ${result.Location}`);
+      logger.info('Document uploaded', { location: result.Location });
       return result.Location;
     } catch (error) {
       console.error('❌ Document upload failed:', error);
@@ -138,7 +141,7 @@ class IdentityVerificationService {
         ]
       );
 
-      console.log(`✅ Identity verification completed for driver ${driverId}: ${verified ? 'VERIFIED' : 'FAILED'}`);
+      logger.info('Identity verification completed', { driverId, verified });
 
       return {
         documentId,
@@ -443,7 +446,7 @@ class IdentityVerificationService {
         ]
       );
 
-      console.log(`✅ Merchant verification completed: ${businessName} - ${verified ? 'VERIFIED' : 'FAILED'}`);
+      logger.info('Merchant verification completed', { businessName, verified });
 
       return {
         documentId: verificationId,
@@ -555,10 +558,18 @@ class IdentityVerificationService {
     );
 
     let vehicleStatus: 'match' | 'mismatch' | 'unverifiable' = 'unverifiable';
+    const authLetter = docs.find(
+      (d: any) =>
+        d.document_type === 'authorization_letter' ||
+        d.document_type === 'vehicle_lease_agreement'
+    );
     if (vehicleReg && idNumber) {
       const veh = await dvla.verifyVehicleRegistration(vehicleReg, fullName);
       if (veh.pendingManualReview) vehicleStatus = 'unverifiable';
-      else vehicleStatus = veh.matched ? 'match' : 'mismatch';
+      else if (veh.matched || authLetter) vehicleStatus = 'match';
+      else vehicleStatus = 'mismatch';
+    } else if (authLetter) {
+      vehicleStatus = 'match';
     }
     checks.push(
       (
@@ -570,10 +581,13 @@ class IdentityVerificationService {
             vehicleStatus,
             JSON.stringify({
               vehicleReg,
+              authorizationLetter: Boolean(authLetter),
               note:
                 vehicleStatus === 'mismatch'
                   ? 'Fleet/authorized-operator may need authorization letter override'
-                  : undefined,
+                  : authLetter
+                    ? 'Authorized via authorization letter / lease agreement'
+                    : undefined,
             }),
           ]
         )
@@ -621,6 +635,54 @@ class IdentityVerificationService {
       countryOfId: country,
       fieldPattern: national.idFieldPattern(country),
     };
+  }
+
+  /**
+   * OCR preview for confirm/correct step — uses Textract when available, else body stubs.
+   */
+  async ocrPreviewDocument(opts: {
+    fileUrl?: string;
+    imageBase64?: string;
+    documentType?: string;
+    countryCode?: string;
+  }) {
+    const extracted: Record<string, any> = {
+      fullName: null,
+      idNumber: null,
+      dateOfBirth: null,
+      licenseNumber: null,
+      vehicleRegistration: null,
+      documentType: opts.documentType || 'national_id',
+    };
+
+    try {
+      if (opts.imageBase64 || opts.fileUrl) {
+        // Soft OCR: when AWS Textract is configured, DetectDocumentText; otherwise return stubs
+        const AWS = require('aws-sdk');
+        if (process.env.AWS_ACCESS_KEY_ID && opts.imageBase64) {
+          const textract = new AWS.Textract({ region: process.env.AWS_REGION || 'us-east-1' });
+          const buf = Buffer.from(opts.imageBase64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+          const result = await textract
+            .detectDocumentText({ Document: { Bytes: buf } })
+            .promise();
+          const lines = (result.Blocks || [])
+            .filter((b: any) => b.BlockType === 'LINE')
+            .map((b: any) => b.Text)
+            .join('\n');
+          extracted.rawText = lines;
+          const ghanaCard = lines.match(/[A-Z]{3}-\d{9}-\d/);
+          const nin = lines.match(/\b\d{11}\b/);
+          extracted.idNumber = ghanaCard?.[0] || nin?.[0] || null;
+          const dob = lines.match(/\b\d{2}[\/\-]\d{2}[\/\-]\d{4}\b/);
+          extracted.dateOfBirth = dob?.[0] || null;
+        }
+      }
+    } catch (err: any) {
+      extracted.ocrError = err.message;
+      extracted.pendingManualReview = true;
+    }
+
+    return extracted;
   }
 
   async manualOverrideLink(

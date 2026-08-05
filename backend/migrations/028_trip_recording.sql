@@ -3,12 +3,12 @@
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Video Recordings
+-- Video Recordings (legacy table; Phase 28 primary model is trip_recordings)
 CREATE TABLE IF NOT EXISTS video_recordings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ride_id UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
-  driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
-  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL,
+  customer_id UUID NOT NULL,
   start_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   end_time TIMESTAMPTZ,
   duration INTEGER,
@@ -70,12 +70,12 @@ CREATE TABLE IF NOT EXISTS merchant_verifications (
 CREATE INDEX IF NOT EXISTS idx_merchant_verifications_merchant_id ON merchant_verifications(merchant_id);
 CREATE INDEX IF NOT EXISTS idx_merchant_verifications_verified ON merchant_verifications(verified);
 
--- SOS Emergency Records
+-- SOS Emergency Records (driver/customer ids are users.id in ride flow — no hard FK)
 CREATE TABLE IF NOT EXISTS sos_emergencies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ride_id UUID NOT NULL REFERENCES rides(id) ON DELETE CASCADE,
-  driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
-  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL,
+  customer_id UUID NOT NULL,
   sos_type VARCHAR(20) NOT NULL,
   location JSONB NOT NULL,
   video_recording_id UUID REFERENCES video_recordings(id),
@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS sos_emergencies (
   resolved_by UUID,
   resolution VARCHAR(100),
   notes TEXT,
+  triggered_by VARCHAR(16),
+  incident_snapshot JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   resolved_at TIMESTAMPTZ
 );
@@ -221,16 +223,20 @@ CREATE INDEX IF NOT EXISTS idx_trip_recordings_retention ON trip_recordings(rete
   WHERE status = 'uploaded' AND flagged_for_dispute = FALSE;
 
 -- 026 columns that depend on identity_verifications existing
-ALTER TABLE identity_verifications
-  ADD COLUMN IF NOT EXISTS national_id_number VARCHAR(64),
-  ADD COLUMN IF NOT EXISTS national_id_country VARCHAR(8),
-  ADD COLUMN IF NOT EXISTS driving_license_number VARCHAR(64),
-  ADD COLUMN IF NOT EXISTS driving_license_issuing_authority VARCHAR(128),
-  ADD COLUMN IF NOT EXISTS vehicle_registration_number VARCHAR(64),
-  ADD COLUMN IF NOT EXISTS linked_phone_number VARCHAR(32),
-  ADD COLUMN IF NOT EXISTS link_verified BOOLEAN DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS link_verified_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS identity_linked BOOLEAN DEFAULT FALSE;
+DO $$ BEGIN
+  ALTER TABLE identity_verifications
+    ADD COLUMN IF NOT EXISTS national_id_number VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS national_id_country VARCHAR(8),
+    ADD COLUMN IF NOT EXISTS driving_license_number VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS driving_license_issuing_authority VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS vehicle_registration_number VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS linked_phone_number VARCHAR(32),
+    ADD COLUMN IF NOT EXISTS link_verified BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS link_verified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS identity_linked BOOLEAN DEFAULT FALSE;
+EXCEPTION
+  WHEN undefined_table THEN NULL;
+END $$;
 
 DO $$ BEGIN
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO movr_app;

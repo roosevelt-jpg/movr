@@ -64,6 +64,8 @@ export class KycAttestationService {
     verificationMethod?: string;
     approvalTimestamp?: string | Date;
     verifierAdminId?: string;
+    identityLinked?: boolean;
+    trustTier?: string;
   }): string {
     const payload = [
       kycRecord.documentType || '',
@@ -72,6 +74,9 @@ export class KycAttestationService {
         ? new Date(kycRecord.approvalTimestamp).toISOString()
         : '',
       kycRecord.verifierAdminId || '',
+      // Phase 26 — higher trust tier when full identity link verified
+      kycRecord.identityLinked ? 'identity_linked' : 'documents_only',
+      kycRecord.trustTier || '',
     ].join('|');
     return `0x${crypto.createHash('sha256').update(payload).digest('hex')}`;
   }
@@ -84,8 +89,28 @@ export class KycAttestationService {
       verificationMethod?: string;
       approvalTimestamp?: string | Date;
       verifierAdminId?: string;
+      identityLinked?: boolean;
+      trustTier?: string;
     }
   ) {
+    // Enrich with current Identity-Linked status when not explicitly provided
+    if (kycRecord.identityLinked == null) {
+      try {
+        const linked = await this.db.query(
+          `SELECT 1 FROM identity_verifications iv
+           JOIN drivers d ON d.id = iv.driver_id
+           WHERE d.user_id = $1 AND iv.identity_linked = TRUE
+           LIMIT 1`,
+          [userId]
+        );
+        kycRecord.identityLinked = Boolean(linked.rows[0]);
+        if (kycRecord.identityLinked) {
+          kycRecord.trustTier = kycRecord.trustTier || 'full_identity_link_verified';
+        }
+      } catch {
+        /* optional */
+      }
+    }
     const subjectId = this.computeSubjectId(userId);
     const recordHash = this.computeRecordHash(kycRecord);
     let txHash: string | null = null;

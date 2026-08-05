@@ -40,7 +40,9 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 |---|---|
 | 029_ride_experience.sql | Ride experience extras |
 | 030_africa_currencies.sql | Africa-wide currencies + city pricing / FX |
-| 031_cms.sql | CMS pages + sections for marketing content |
+| 035_subscription_plans_seed.sql | Subscription plan seeds |
+| 036_vehicle_pricing_gaps.sql | Phase 24/25: Sedan naming, driver_vehicles, zone demand seed |
+| 037_trip_recording_acl.sql | Phase 28: admin_roles (trust_and_safety), driver recording consent, trip_recording flag |
 
 ## Notes
 

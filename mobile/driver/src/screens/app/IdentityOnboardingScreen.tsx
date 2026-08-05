@@ -11,6 +11,15 @@ import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
 const COUNTRIES = [
   { code: 'GH', label: 'Ghana (Ghana Card)' },
   { code: 'NG', label: 'Nigeria (NIN)' },
@@ -18,24 +27,28 @@ const COUNTRIES = [
   { code: 'SN', label: 'Senegal (CNI)' },
 ];
 
-type DocStatus = 'uploaded' | 'required' | 'pending';
+type DocStatus = 'uploaded' | 'required' | 'pending' | 'confirmed';
 
 /**
- * Driver identity onboarding — country of ID + document checklist + upload.
- * Keeps verify-national-id API; adds mockup document upload UX.
+ * Driver identity onboarding — Country of ID → capture → OCR confirm → submit (Phase 26).
  */
 export default function IdentityOnboardingScreen() {
   const [country, setCountry] = useState('GH');
   const [fields, setFields] = useState<any>(null);
   const [idNumber, setIdNumber] = useState('');
   const [fullName, setFullName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [vehicleReg, setVehicleReg] = useState('');
   const [result, setResult] = useState('');
+  const [step, setStep] = useState<'docs' | 'ocr' | 'done'>('docs');
   const [docs, setDocs] = useState<{ key: string; label: string; status: DocStatus }[]>([
-    { key: 'ghana_card', label: 'Ghana Card', status: 'uploaded' },
-    { key: 'driving_license', label: 'Driving license', status: 'uploaded' },
+    { key: 'ghana_card', label: 'Ghana Card', status: 'required' },
+    { key: 'driving_license', label: 'Driving license', status: 'required' },
     { key: 'vehicle_registration', label: 'Vehicle registration', status: 'required' },
   ]);
-  const [activeUpload, setActiveUpload] = useState('vehicle_registration');
+  const [activeUpload, setActiveUpload] = useState('ghana_card');
+  const [recordingConsent, setRecordingConsent] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/identity/id-fields/${country}`)
@@ -45,10 +58,11 @@ export default function IdentityOnboardingScreen() {
 
     if (country === 'GH') {
       setDocs([
-        { key: 'ghana_card', label: 'Ghana Card', status: 'uploaded' },
-        { key: 'driving_license', label: 'Driving license', status: 'uploaded' },
+        { key: 'ghana_card', label: 'Ghana Card', status: 'required' },
+        { key: 'driving_license', label: 'Driving license', status: 'required' },
         { key: 'vehicle_registration', label: 'Vehicle registration', status: 'required' },
       ]);
+      setActiveUpload('ghana_card');
     } else {
       setDocs([
         { key: 'national_id', label: fields?.label || 'National ID', status: 'required' },
@@ -58,48 +72,105 @@ export default function IdentityOnboardingScreen() {
     }
   }, [country]);
 
-  const markUploaded = (key: string) => {
+  const markUploaded = async (key: string) => {
     setDocs((prev) =>
       prev.map((d) => (d.key === key ? { ...d, status: 'uploaded' as DocStatus } : d))
     );
-    const nextRequired = docs.find((d) => d.key !== key && d.status === 'required');
-    if (nextRequired) setActiveUpload(nextRequired.key);
+    // OCR preview for confirm/correct
+    const res = await fetch(`${API}/identity/ocr-preview`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        countryCode: country,
+        documentType: key,
+        idNumber,
+        fullName,
+        dateOfBirth,
+        licenseNumber,
+        vehicleRegistration: vehicleReg,
+      }),
+    }).catch(() => null);
+    const json = res ? await res.json() : null;
+    if (json?.data?.extracted) {
+      const e = json.data.extracted;
+      if (e.idNumber) setIdNumber(e.idNumber);
+      if (e.fullName) setFullName(e.fullName);
+      if (e.dateOfBirth) setDateOfBirth(e.dateOfBirth);
+      if (e.licenseNumber) setLicenseNumber(e.licenseNumber);
+      if (e.vehicleRegistration) setVehicleReg(e.vehicleRegistration);
+    }
+    setStep('ocr');
+  };
+
+  const confirmOcr = () => {
+    setDocs((prev) =>
+      prev.map((d) =>
+        d.key === activeUpload ? { ...d, status: 'confirmed' as DocStatus } : d
+      )
+    );
+    const next = docs.find((d) => d.key !== activeUpload && d.status === 'required');
+    if (next) {
+      setActiveUpload(next.key);
+      setStep('docs');
+    } else {
+      setStep('docs');
+    }
   };
 
   const submit = async () => {
+    if (!recordingConsent) {
+      setResult('You must accept in-trip safety recording to continue onboarding.');
+      return;
+    }
     const res = await fetch(`${API}/identity/verify-national-id`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ countryCode: country, idNumber, fullName }),
-    });
-    const json = await res.json();
-    if (json.data?.pendingManualReview) {
-      setResult('Submitted for OCR + manual review (gov API not configured).');
-    } else if (json.status === 'error') {
-      setResult(json.message || 'Verification failed');
-    } else {
-      setResult(json.data?.matched ? 'Matched — submitted for verification' : 'Submitted for verification');
-    }
-
-    // Also attempt document link endpoint when available
-    await fetch(`${API}/identity/documents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         countryCode: country,
-        documents: docs.map((d) => ({ type: d.key, status: d.status })),
+        idNumber,
+        fullName,
+        dateOfBirth,
+      }),
+    });
+    const json = await res.json();
+    if (json.status === 'error') {
+      setResult(json.message || 'Verification failed');
+      return;
+    }
+    if (json.data?.pendingManualReview) {
+      setResult('Submitted — pending automated verification (gov API not configured).');
+    } else {
+      setResult(json.data?.matched ? 'Matched — identity checks queued' : 'Submitted for verification');
+    }
+
+    await fetch(`${API}/identity/documents`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        countryCode: country,
+        idNumber,
+        licenseNumber,
+        vehicleRegistration: vehicleReg,
+        documents: docs.map((d) => ({ type: d.key, status: d.status, number: idNumber })),
+        ocrConfirmed: true,
       }),
     }).catch(() => undefined);
+
+    await fetch(`${API}/drivers/recording-consent`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ consented: true }),
+    }).catch(() => undefined);
+
+    setStep('done');
   };
 
-  const activeDoc = docs.find((d) => d.key === activeUpload) || docs.find((d) => d.status === 'required');
+  const activeDoc = docs.find((d) => d.key === activeUpload);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Verify your identity</Text>
-      <Text style={styles.sub}>
-        Country of ID: {COUNTRIES.find((c) => c.code === country)?.label || country}
-      </Text>
+      <Text style={styles.sub}>Country of ID first, then capture each document and confirm OCR fields.</Text>
 
       <View style={styles.countryRow}>
         {COUNTRIES.map((c) => (
@@ -113,134 +184,161 @@ export default function IdentityOnboardingScreen() {
         ))}
       </View>
 
-      {docs.map((d) => {
-        const uploaded = d.status === 'uploaded';
-        return (
-          <Pressable
-            key={d.key}
-            style={styles.docRow}
-            onPress={() => setActiveUpload(d.key)}
-          >
-            <Text style={{ marginRight: 10 }}>{uploaded ? '📄✓' : '📄'}</Text>
-            <Text style={styles.docLabel}>{d.label}</Text>
-            <View
-              style={[
-                styles.badge,
-                uploaded ? styles.badgeOk : styles.badgeReq,
-              ]}
-            >
-              <Text style={[styles.badgeText, uploaded ? styles.badgeOkText : styles.badgeReqText]}>
-                {uploaded ? 'Uploaded' : 'Required'}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
+      {docs.map((d) => (
+        <Pressable key={d.key} style={styles.docRow} onPress={() => setActiveUpload(d.key)}>
+          <Text style={styles.docLabel}>{d.label}</Text>
+          <Text style={styles.badgeText}>{d.status}</Text>
+        </Pressable>
+      ))}
 
-      {activeDoc && activeDoc.status !== 'uploaded' ? (
-        <Pressable
-          style={styles.upload}
-          onPress={() => markUploaded(activeDoc.key)}
-        >
-          <Text style={styles.uploadIcon}>⬆</Text>
-          <Text style={styles.uploadTitle}>Upload {activeDoc.label.toLowerCase()}</Text>
-          <Text style={styles.uploadMeta}>JPG, PNG or PDF · max 10 MB</Text>
+      {step === 'docs' && activeDoc && activeDoc.status === 'required' ? (
+        <Pressable style={styles.upload} onPress={() => markUploaded(activeDoc.key)}>
+          <Text style={styles.uploadText}>Capture / upload {activeDoc.label}</Text>
         </Pressable>
       ) : null}
 
-      <Text style={styles.label}>{fields?.label || 'ID number'}</Text>
-      <TextInput
-        style={styles.input}
-        value={idNumber}
-        onChangeText={setIdNumber}
-        placeholderTextColor={colors.textSecondary}
-        placeholder={fields?.regex || 'Enter ID number'}
-      />
-      <TextInput
-        style={styles.input}
-        value={fullName}
-        onChangeText={setFullName}
-        placeholder="Full name as on ID"
-        placeholderTextColor={colors.textSecondary}
-      />
+      {step === 'ocr' ? (
+        <View style={styles.ocrCard}>
+          <Text style={styles.ocrTitle}>Confirm OCR fields</Text>
+          <Text style={styles.hint}>{fields?.label || 'ID number'}</Text>
+          <TextInput
+            style={styles.input}
+            value={idNumber}
+            onChangeText={setIdNumber}
+            placeholder={fields?.example || 'ID number'}
+            placeholderTextColor={colors.textSecondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="Full name"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={dateOfBirth}
+            onChangeText={setDateOfBirth}
+            placeholder="Date of birth"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={licenseNumber}
+            onChangeText={setLicenseNumber}
+            placeholder="Driving license number"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <TextInput
+            style={styles.input}
+            value={vehicleReg}
+            onChangeText={setVehicleReg}
+            placeholder="Vehicle registration (or fleet auth letter ref)"
+            placeholderTextColor={colors.textSecondary}
+          />
+          <Pressable style={styles.upload} onPress={confirmOcr}>
+            <Text style={styles.uploadText}>Confirm fields</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
-      <Pressable style={styles.cta} onPress={submit}>
-        <View style={styles.ctaGlow} />
-        <Text style={styles.ctaText}>Submit for verification</Text>
+      <Pressable
+        style={styles.consentRow}
+        onPress={() => setRecordingConsent((v) => !v)}
+      >
+        <View style={[styles.checkbox, recordingConsent && styles.checkboxOn]} />
+        <Text style={styles.consentText}>
+          I consent to in-cabin trip recording for safety and dispute resolution. Footage is stored
+          locally then uploaded securely — not live-streamed — and reviewed only if there is a
+          dispute or safety report.
+        </Text>
       </Pressable>
-      {!!result && <Text style={styles.result}>{result}</Text>}
+
+      <Pressable style={styles.submit} onPress={submit}>
+        <Text style={styles.uploadText}>Submit for verification</Text>
+      </Pressable>
+      {result ? <Text style={styles.result}>{result}</Text> : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-  sub: { color: colors.textSecondary, marginTop: 6, marginBottom: spacing[4] },
+  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
+  sub: { color: colors.textSecondary, marginTop: spacing[2], marginBottom: spacing[4] },
   countryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginBottom: spacing[4] },
   countryChip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  countryOn: { borderColor: colors.electricViolet, backgroundColor: colors.surface },
+  countryOn: { backgroundColor: colors.electricViolet, borderColor: colors.electricViolet },
   countryText: { color: colors.pureWhite, fontWeight: '600' },
   docRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[2],
+    justifyContent: 'space-between',
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  docLabel: { color: colors.pureWhite, fontWeight: '600', flex: 1 },
-  badge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeOk: { backgroundColor: 'rgba(63,112,72,0.35)' },
-  badgeReq: { backgroundColor: 'rgba(255,184,0,0.2)' },
-  badgeText: { fontSize: 12, fontWeight: '700' },
-  badgeOkText: { color: colors.success },
-  badgeReqText: { color: colors.warning },
+  docLabel: { color: colors.pureWhite, fontWeight: '600' },
+  badgeText: { color: colors.textSecondary, textTransform: 'capitalize' },
   upload: {
-    marginTop: spacing[3],
-    marginBottom: spacing[4],
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.border,
+    marginTop: spacing[4],
+    backgroundColor: colors.motionBlue,
     borderRadius: radius.md,
-    paddingVertical: spacing[6],
+    padding: spacing[3],
     alignItems: 'center',
   },
-  uploadIcon: { color: colors.pureWhite, fontSize: 22, marginBottom: spacing[2] },
-  uploadTitle: { color: colors.pureWhite, fontWeight: '700' },
-  uploadMeta: { color: colors.textSecondary, marginTop: 6, fontSize: 12 },
-  label: { color: colors.pureWhite, marginBottom: spacing[1] },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
+  submit: {
+    marginTop: spacing[5],
+    backgroundColor: colors.electricViolet,
     borderRadius: radius.md,
-    color: colors.pureWhite,
     padding: spacing[3],
+    alignItems: 'center',
+  },
+  consentRow: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginTop: spacing[5],
+    alignItems: 'flex-start',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.border,
+    marginTop: 2,
+  },
+  checkboxOn: {
+    backgroundColor: colors.movrGreen,
+    borderColor: colors.movrGreen,
+  },
+  consentText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  uploadText: { color: colors.pureWhite, fontWeight: '700' },
+  ocrCard: {
+    marginTop: spacing[4],
+    padding: spacing[3],
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceElevated,
+  },
+  ocrTitle: { color: colors.pureWhite, fontWeight: '700', marginBottom: spacing[2] },
+  hint: { color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing[3],
+    color: colors.pureWhite,
     marginBottom: spacing[2],
   },
-  cta: {
-    marginTop: spacing[4],
-    borderRadius: radius.pill,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.electricViolet,
-    overflow: 'hidden',
-  },
-  ctaGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
-  },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-  result: { color: colors.movrGreen, marginTop: spacing[3] },
+  result: { color: colors.warning, marginTop: spacing[3] },
 });

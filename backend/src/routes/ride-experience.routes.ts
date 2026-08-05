@@ -45,6 +45,32 @@ rideExperienceRouter.post(
         await performance.recalculateMetrics(ride.rows[0].driver_id);
       }
 
+      try {
+        const { InboxService } = require('../services/inbox.service');
+        const inboxSvc = new InboxService(db);
+        const fare = ride.rows[0].actual_fare || ride.rows[0].estimated_fare;
+        if (customerId) {
+          await inboxSvc.sendInboxMessage(
+            customerId,
+            'ride_update',
+            'Trip completed',
+            `Your ride is complete${fare != null ? ` · fare ${fare}` : ''}.`,
+            `/ride/${ride.rows[0].id}`
+          );
+        }
+        if (ride.rows[0].driver_id) {
+          await inboxSvc.sendInboxMessage(
+            ride.rows[0].driver_id,
+            'ride_update',
+            'Trip completed',
+            `Ride ${ride.rows[0].id} marked complete.`,
+            `/ride/${ride.rows[0].id}`
+          );
+        }
+      } catch {
+        /* inbox optional */
+      }
+
       res.json({ status: 'success', data: ride.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
@@ -266,6 +292,19 @@ sosRouter.post('/trigger', authenticateToken, async (req: AuthRequest, res: Resp
         JSON.stringify(snapshot),
       ]
     );
+
+    // Phase 28 — auto-flag trip recording for dispute retention when SOS fires
+    try {
+      const { TripRecordingService } = await import('../services/trip-recording.service');
+      const tripRec = new TripRecordingService(db);
+      await tripRec.flagRecordingForDispute(
+        rideId,
+        req.user!.id,
+        `SOS incident ${sos.rows[0].id}`
+      );
+    } catch {
+      /* recording may be disabled / tables missing */
+    }
 
     // Best-effort alert dispatch via existing SOS service (non-blocking)
     try {

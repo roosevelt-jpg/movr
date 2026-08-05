@@ -4,6 +4,15 @@ import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
 const TABS = [
   { key: undefined, label: 'All' },
   { key: 'order_update', label: 'Order' },
@@ -21,7 +30,7 @@ const ICON_META: Record<string, { bg: string; glyph: string }> = {
   system: { bg: colors.surfaceElevated, glyph: 'ℹ' },
 };
 
-/** Inbox — category tabs, unread rail, typed icon chips. */
+/** Inbox — category tabs, unread rail, typed icon chips (Phase 19). */
 export default function InboxScreen({
   onOpenWhatsApp,
   onOpenBot,
@@ -37,10 +46,10 @@ export default function InboxScreen({
 
   const load = () => {
     const q = category ? `?category=${category}` : '';
-    fetch(`${API}/inbox${q}`)
+    fetch(`${API}/inbox${q}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        setMessages(j.data?.messages || []);
+        setMessages(j.data?.messages || j.data || []);
         setUnread(j.data?.unread || 0);
       })
       .catch(() => undefined);
@@ -51,7 +60,18 @@ export default function InboxScreen({
   }, [category]);
 
   const markAllRead = async () => {
-    await fetch(`${API}/inbox/mark-all-read`, { method: 'PATCH' }).catch(() => undefined);
+    await fetch(`${API}/inbox/mark-all-read`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+    }).catch(() => undefined);
+    load();
+  };
+
+  const markOne = async (id: string) => {
+    await fetch(`${API}/inbox/${id}/read`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+    }).catch(() => undefined);
     load();
   };
 
@@ -121,87 +141,79 @@ export default function InboxScreen({
 
       <FlatList
         data={messages}
-        keyExtractor={(i) => i.id}
-        contentContainerStyle={{ paddingBottom: spacing[6] }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No messages yet</Text>
-        }
+        keyExtractor={(m) => String(m.id)}
+        contentContainerStyle={{ paddingBottom: spacing[8] }}
         renderItem={({ item }) => {
           const meta = ICON_META[item.category] || ICON_META.system;
           return (
-            <View style={[styles.card, !item.read && styles.unread]}>
-              {!item.read ? <View style={styles.unreadRail} /> : null}
+            <Pressable onPress={() => markOne(item.id)} style={styles.row}>
               <View style={[styles.icon, { backgroundColor: meta.bg }]}>
                 <Text>{meta.glyph}</Text>
               </View>
-              <View style={styles.body}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.meta} numberOfLines={2}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.msgTitle}>
+                  {!item.read ? '● ' : ''}
+                  {item.title}
+                </Text>
+                <Text style={styles.msgBody} numberOfLines={2}>
                   {item.body}
                 </Text>
-                <Text style={styles.time}>
-                  {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
-                </Text>
               </View>
-            </View>
+            </Pressable>
           );
         }}
+        ListEmptyComponent={
+          <Text style={{ color: colors.textSecondary, padding: spacing[4] }}>No messages</Text>
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, paddingHorizontal: spacing[4], paddingTop: spacing[4] },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-  markRead: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+  root: { flex: 1, backgroundColor: colors.jetBlack },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+  },
+  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
+  markRead: { color: colors.motionBlue, fontWeight: '600' },
   waRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
+    gap: spacing[3],
+    marginHorizontal: spacing[4],
+    marginTop: spacing[3],
     padding: spacing[3],
-    marginTop: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceElevated,
   },
   waAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.electricViolet,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.movrGreen,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
-  waSub: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  waTitle: { color: colors.pureWhite, fontWeight: '700' },
+  waSub: { color: colors.textSecondary, fontSize: 12 },
   online: { color: colors.success, fontSize: 12, fontWeight: '600' },
-  tabs: { gap: spacing[5], paddingVertical: spacing[4] },
-  tab: { paddingBottom: spacing[2] },
-  tabText: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
+  tabs: { paddingHorizontal: spacing[4], paddingVertical: spacing[3], gap: spacing[4] },
+  tab: { marginRight: spacing[4] },
+  tabText: { color: colors.textSecondary, fontWeight: '600' },
   tabActive: { color: colors.pureWhite },
-  underline: { marginTop: 6, height: 3, borderRadius: 2, backgroundColor: colors.motionBlue },
-  empty: { color: colors.textSecondary, marginTop: spacing[6], textAlign: 'center' },
-  card: {
+  underline: { height: 2, backgroundColor: colors.electricViolet, marginTop: 4, borderRadius: 1 },
+  row: {
     flexDirection: 'row',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    padding: spacing[4],
-    marginBottom: spacing[3],
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  unread: { borderColor: 'rgba(0,85,255,0.35)' },
-  unreadRail: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: colors.motionBlue,
+    gap: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   icon: {
     width: 40,
@@ -209,10 +221,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing[3],
   },
-  body: { flex: 1 },
-  cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
-  meta: { color: colors.textSecondary, marginTop: 4, fontSize: 13, lineHeight: 18 },
-  time: { color: colors.textSecondary, marginTop: 8, fontSize: 12 },
+  msgTitle: { color: colors.pureWhite, fontWeight: '600' },
+  msgBody: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
 });

@@ -27,9 +27,14 @@ CREATE TABLE IF NOT EXISTS ride_tips (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE sos_emergencies
-  ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(16),
-  ADD COLUMN IF NOT EXISTS incident_snapshot JSONB DEFAULT '{}'::jsonb;
+-- sos_emergencies may be created in 028; skip gracefully if that migration has not run yet
+DO $$ BEGIN
+  ALTER TABLE sos_emergencies
+    ADD COLUMN IF NOT EXISTS triggered_by VARCHAR(16),
+    ADD COLUMN IF NOT EXISTS incident_snapshot JSONB DEFAULT '{}'::jsonb;
+EXCEPTION
+  WHEN undefined_table THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_ride_messages_ride ON ride_messages(ride_id);
 CREATE INDEX IF NOT EXISTS idx_ride_share_token ON ride_share_links(token);

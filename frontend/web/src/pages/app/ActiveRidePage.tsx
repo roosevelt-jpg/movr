@@ -22,9 +22,12 @@ const ActiveRidePage: React.FC = () => {
   const [messages, setMessages] = useState<string[]>([]);
   const [sosMsg, setSosMsg] = useState('');
   const [emergencyTel, setEmergencyTel] = useState('tel:191');
+  const [noticeAcked, setNoticeAcked] = useState(false);
+  const [noticeBusy, setNoticeBusy] = useState(false);
 
   useEffect(() => {
     if (!id) return;
+    setNoticeAcked(false);
     ridesApi
       .getRideDetails(id)
       .then((res) => setRide(res.data?.data || res.data))
@@ -87,13 +90,52 @@ const ActiveRidePage: React.FC = () => {
     }).catch(() => undefined);
   };
 
+  const acknowledgeRecording = async () => {
+    if (!id) return;
+    setNoticeBusy(true);
+    try {
+      await fetch(`${API}/rides/${id}/recording/notice`, {
+        method: 'POST',
+        headers: headers(),
+      });
+      setNoticeAcked(true);
+    } catch {
+      toast.error('Could not log recording notice');
+    } finally {
+      setNoticeBusy(false);
+    }
+  };
+
   const name =
     ride?.driver_name || ride?.driverName || 'Driver';
   const plate = ride?.vehicle_plate || ride?.plate || '—';
   const fare = Number(ride?.estimated_fare || ride?.actual_fare || 45);
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white overflow-hidden border border-border">
+    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white overflow-hidden border border-border relative">
+      {!noticeAcked ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-jet-black/80 p-6">
+          <div className="max-w-md rounded-2xl border border-border bg-surface-elevated p-6 space-y-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-warning">Safety recording</p>
+            <p className="text-lg font-bold leading-snug">
+              This trip is recorded for safety. Recording is stored securely and only reviewed if
+              there&apos;s a dispute or safety report.
+            </p>
+            <p className="text-sm text-text-secondary">
+              Footage is recorded on the driver device and uploaded later — not live-streamed.
+            </p>
+            <button
+              type="button"
+              disabled={noticeBusy}
+              onClick={acknowledgeRecording}
+              className="w-full rounded-xl bg-motion-blue py-3 font-semibold"
+            >
+              {noticeBusy ? 'Saving…' : 'I understand — continue'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="relative h-64 md:h-80 bg-surface-elevated">
         <div
           className="absolute inset-0 opacity-40"

@@ -129,3 +129,27 @@ export const requireRole = (...roles: string[]) => {
 };
 
 export const requireMerchant = requireRole('merchant');
+
+/**
+ * Phase 28 — recording playback: admin + trust_and_safety role (not general admin).
+ */
+export const requireTrustAndSafety = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user || req.user.userType !== 'admin') {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Admin access required',
+    });
+  }
+  const roles = req.user.roles || [];
+  if (!roles.includes('trust_and_safety')) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'trust-and-safety role required',
+    });
+  }
+  next();
+};

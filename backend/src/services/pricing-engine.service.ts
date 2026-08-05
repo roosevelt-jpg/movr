@@ -8,6 +8,8 @@ export interface PricingInput {
   lng: number;
   rideId?: string;
   at?: Date;
+  destLat?: number;
+  destLng?: number;
 }
 
 export interface PricingBreakdown {
@@ -88,7 +90,14 @@ export class PricingEngineService {
     const time = this.timeOfDayMultiplier(at, byType.get('time_of_day'));
     const day = this.dayOfWeekMultiplier(at, byType.get('day_of_week'));
     const weather = await this.weatherMultiplier(input.lat, input.lng, byType.get('weather'));
-    const traffic = await this.trafficMultiplier(input.lat, input.lng, byType.get('traffic'));
+    const traffic = await this.trafficMultiplier(
+      input.lat,
+      input.lng,
+      byType.get('traffic'),
+      input.destLat != null && input.destLng != null
+        ? { lat: input.destLat, lng: input.destLng }
+        : undefined
+    );
     const event = await this.eventMultiplier(zone.id);
 
     const raw =
@@ -198,12 +207,29 @@ export class PricingEngineService {
 
   private async weatherMultiplier(lat: number, lng: number, factor?: any) {
     const cfg = factor?.weight_or_config_json || {};
+    const cacheKey = `weather:${lat.toFixed(2)}:${lng.toFixed(2)}`;
     try {
+      if (this.redis?.get) {
+        const cached = await this.redis.get(cacheKey);
+        if (cached?.main) {
+          const mult = Number(cfg[cached.main] ?? cfg.Clear ?? 1) || 1;
+          return {
+            type: 'weather',
+            mult,
+            label: mult > 1 ? `${String(cached.main).toLowerCase()} weather` : 'clear weather',
+          };
+        }
+      }
       const apiKey = await this.integrations.getCredential('openweathermap', 'api_key');
       if (!apiKey) return { type: 'weather', mult: 1, label: 'clear' };
       const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}`;
       const res = await axios.get(url, { timeout: 2500 });
       const main = res.data?.weather?.[0]?.main || 'Clear';
+      try {
+        if (this.redis?.set) await this.redis.set(cacheKey, { main }, 20 * 60);
+      } catch {
+        /* ignore */
+      }
       const mult = Number(cfg[main] ?? cfg.Clear ?? 1) || 1;
       return {
         type: 'weather',
@@ -216,11 +242,36 @@ export class PricingEngineService {
     }
   }
 
-  private async trafficMultiplier(lat: number, lng: number, factor?: any) {
+  private async trafficMultiplier(
+    lat: number,
+    lng: number,
+    factor?: any,
+    dest?: { lat: number; lng: number }
+  ) {
     const cfg = factor?.weight_or_config_json || { threshold: 1.3, mult: 1.15 };
     try {
-      // Placeholder: without a live traffic provider, use time-of-day heuristic only.
-      // Real Google Maps Distance Matrix traffic can be wired via integrations hub later.
+      const mapsKey =
+        (await this.integrations.getCredential('google_maps', 'api_key').catch(() => null)) ||
+        process.env.GOOGLE_MAPS_API_KEY;
+      if (mapsKey && dest) {
+        const url =
+          `https://maps.googleapis.com/maps/api/directions/json` +
+          `?origin=${lat},${lng}&destination=${dest.lat},${dest.lng}` +
+          `&departure_time=now&traffic_model=best_guess&key=${mapsKey}`;
+        const res = await axios.get(url, { timeout: 3000 });
+        const leg = res.data?.routes?.[0]?.legs?.[0];
+        const trafficSec = Number(leg?.duration_in_traffic?.value || leg?.duration?.value || 0);
+        const freeSec = Number(leg?.duration?.value || 0);
+        if (freeSec > 0 && trafficSec / freeSec >= Number(cfg.threshold || 1.3)) {
+          return {
+            type: 'traffic',
+            mult: Number(cfg.mult) || 1.15,
+            label: 'heavy traffic',
+          };
+        }
+        return { type: 'traffic', mult: 1, label: 'normal traffic' };
+      }
+      // Soft fallback when Directions API unavailable
       const hour = new Date().getHours();
       const congested = (hour >= 7 && hour < 9) || (hour >= 17 && hour < 20);
       if (congested) {
@@ -230,8 +281,6 @@ export class PricingEngineService {
           label: 'heavy traffic',
         };
       }
-      void lat;
-      void lng;
       return { type: 'traffic', mult: 1, label: 'normal traffic' };
     } catch {
       return { type: 'traffic', mult: 1, label: 'traffic unavailable' };
@@ -281,6 +330,77 @@ export class PricingEngineService {
     ).rows[0];
   }
 
+  async updateFactorConfig(factorId: string, config: any, isActive?: boolean) {
+    return (
+      await this.db.query(
+        `UPDATE pricing_factors SET
+           weight_or_config_json = COALESCE($1::jsonb, weight_or_config_json),
+           is_active = COALESCE($2, is_active),
+           updated_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [config ? JSON.stringify(config) : null, isActive ?? null, factorId]
+      )
+    ).rows[0];
+  }
+
+  async createZone(input: {
+    name: string;
+    countryCode?: string;
+    centerLat: number;
+    centerLng: number;
+    radiusKm?: number;
+    maxSurgeCap?: number;
+  }) {
+    return (
+      await this.db.query(
+        `INSERT INTO pricing_zones (name, country_code, center_lat, center_lng, radius_km, max_surge_cap)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [
+          input.name,
+          input.countryCode || 'GH',
+          input.centerLat,
+          input.centerLng,
+          input.radiusKm ?? 5,
+          input.maxSurgeCap ?? 2,
+        ]
+      )
+    ).rows[0];
+  }
+
+  async updateZone(
+    id: string,
+    input: Partial<{
+      name: string;
+      centerLat: number;
+      centerLng: number;
+      radiusKm: number;
+      maxSurgeCap: number;
+      isActive: boolean;
+    }>
+  ) {
+    return (
+      await this.db.query(
+        `UPDATE pricing_zones SET
+           name = COALESCE($1, name),
+           center_lat = COALESCE($2, center_lat),
+           center_lng = COALESCE($3, center_lng),
+           radius_km = COALESCE($4, radius_km),
+           max_surge_cap = COALESCE($5, max_surge_cap),
+           is_active = COALESCE($6, is_active)
+         WHERE id = $7 RETURNING *`,
+        [
+          input.name ?? null,
+          input.centerLat ?? null,
+          input.centerLng ?? null,
+          input.radiusKm ?? null,
+          input.maxSurgeCap ?? null,
+          input.isActive ?? null,
+          id,
+        ]
+      )
+    ).rows[0];
+  }
+
   async upsertEvent(input: {
     zoneId: string;
     name: string;
@@ -295,6 +415,19 @@ export class PricingEngineService {
         [input.zoneId, input.name, input.startsAt, input.endsAt, input.multiplier]
       )
     ).rows[0];
+  }
+
+  async listEvents(zoneId?: string) {
+    if (zoneId) {
+      return (
+        await this.db.query(
+          `SELECT * FROM pricing_events WHERE zone_id = $1 ORDER BY starts_at DESC`,
+          [zoneId]
+        )
+      ).rows;
+    }
+    return (await this.db.query(`SELECT * FROM pricing_events ORDER BY starts_at DESC LIMIT 50`))
+      .rows;
   }
 
   async snapshotDemand(zoneId: string, activeRides: number, availableDrivers: number) {

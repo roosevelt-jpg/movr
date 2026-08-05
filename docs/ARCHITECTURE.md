@@ -14,13 +14,15 @@ Monolith today, microservice-ready by domain (Phase 21).
 | **Notifications / inbox** | inbox, rewards-engine (side effects), channel bots |
 | **Localization** | localization (countries, FX, city pricing) |
 | **Voice / channels** | voice-intent, whatsapp/telegram/sms/ussd/ivr webhooks |
-| **Trust & safety** | trip-recording (local + async upload; feature-flagged) |
+| **Trust & safety** | trip-recording (local + async upload; feature-flagged `trip_recording` / `TRIP_RECORDING_ENABLED`; trust_and_safety ACL; SOS auto-flag). Legacy `video-recording.service` is a Phase 28 facade only. |
+| **Ops / channels** | channel-session, ivr-booking, cms, inbox, sos-emergency |
 
-## Health probes
+## Observability
 
-- `GET /health`
-- `GET /health/db`
-- `GET /health/redis`
+- Winston structured request logs (`requestId`, `userId`, `service`, `durationMs`)
+- Sentry via `SENTRY_DSN` / `VITE_SENTRY_DSN` on backend + web/admin entrypoints
+- Health: `GET /health`, `/health/db`, `/health/redis`
+- Matching load test: `backend/scripts/load-test-matching.ts`
 
 ## Frontends
 

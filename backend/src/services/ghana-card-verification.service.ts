@@ -100,6 +100,40 @@ export class NigeriaNinVerifier implements NationalIdVerifier {
   }
 }
 
+/** Côte d'Ivoire ONECI stub. */
+export class CoteDivoireOneciVerifier implements NationalIdVerifier {
+  countryCode = 'CI';
+  idType = 'cote_divoire_oneci';
+
+  async verify(input: NationalIdVerifyInput): Promise<NationalIdVerifyResult> {
+    return {
+      matched: false,
+      confidence: 0,
+      provider: 'oneci',
+      pendingManualReview: true,
+      message: 'ONECI integration pending credentials — OCR + manual review',
+      biodata: { fullName: input.fullName, idNumber: input.idNumber },
+    };
+  }
+}
+
+/** Senegal CNI stub. */
+export class SenegalCniVerifier implements NationalIdVerifier {
+  countryCode = 'SN';
+  idType = 'senegal_cni';
+
+  async verify(input: NationalIdVerifyInput): Promise<NationalIdVerifyResult> {
+    return {
+      matched: false,
+      confidence: 0,
+      provider: 'senegal_cni',
+      pendingManualReview: true,
+      message: 'Senegal CNI integration pending credentials — OCR + manual review',
+      biodata: { fullName: input.fullName, idNumber: input.idNumber },
+    };
+  }
+}
+
 export class NationalIdVerificationService {
   private integrations: IntegrationsService;
   private verifiers: NationalIdVerifier[];
@@ -109,6 +143,8 @@ export class NationalIdVerificationService {
     this.verifiers = [
       new GhanaCardVerifier(db, this.integrations),
       new NigeriaNinVerifier(),
+      new CoteDivoireOneciVerifier(),
+      new SenegalCniVerifier(),
     ];
   }
 
@@ -144,13 +180,28 @@ export class NationalIdVerificationService {
     return verifier.verify({ idNumber, fullName, dateOfBirth });
   }
 
-  idFieldPattern(countryCode: string): { idType: string; label: string; regex: string } {
-    const map: Record<string, { idType: string; label: string; regex: string }> = {
-      GH: { idType: 'ghana_card', label: 'Ghana Card number', regex: '^[A-Z]{3}-\\d{9}-\\d$' },
-      NG: { idType: 'nigeria_nin', label: 'NIN', regex: '^\\d{11}$' },
-      CI: { idType: 'cote_divoire_oneci', label: 'ONECI number', regex: '^[A-Z0-9-]{6,20}$' },
+  idFieldPattern(countryCode: string): { idType: string; label: string; regex: string; example?: string } {
+    const map: Record<string, { idType: string; label: string; regex: string; example?: string }> = {
+      GH: {
+        idType: 'ghana_card',
+        label: 'Ghana Card number',
+        regex: '^[A-Z]{3}-\\d{9}-\\d$',
+        example: 'GHA-123456789-0',
+      },
+      NG: { idType: 'nigeria_nin', label: 'NIN', regex: '^\\d{11}$', example: '12345678901' },
+      CI: {
+        idType: 'cote_divoire_oneci',
+        label: 'ONECI number',
+        regex: '^[A-Z0-9-]{6,20}$',
+      },
       SN: { idType: 'senegal_cni', label: 'CNI number', regex: '^[A-Z0-9-]{6,20}$' },
     };
     return map[countryCode.toUpperCase()] || map.GH;
+  }
+
+  validateIdNumber(countryCode: string, idNumber: string) {
+    const pattern = this.idFieldPattern(countryCode);
+    const re = new RegExp(pattern.regex);
+    return { valid: re.test(String(idNumber || '').trim()), pattern };
   }
 }

@@ -28,6 +28,8 @@ export default function AdminLoginPage() {
       }
       localStorage.setItem('movr_admin_token', json.data.token);
       localStorage.setItem('movr_admin_email', email);
+      const roles = json.data?.roles || json.data?.user?.roles || [];
+      localStorage.setItem('movr_admin_roles', JSON.stringify(roles));
       toast.success('Signed in');
       navigate('/overview');
     } catch (err: any) {

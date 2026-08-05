@@ -1,79 +1,68 @@
 import { Router, Express } from 'express';
 import { authenticateToken, requireCustomer, requireDriver } from '../middleware/auth.middleware';
+import { DatabaseService } from '../services/database.service';
+import { MatchingEngineService } from '../services/matching-engine.service';
+import { RideBookingService } from '../services/ride-booking.service';
 
 const router: Express.Router = Router();
 
 // ============================================
-// CUSTOMER RIDES
+// CUSTOMER RIDES — thin wrapper → ride-booking.service (Phase 22)
 // ============================================
 
 router.post('/request', authenticateToken, requireCustomer, async (req, res) => {
   try {
     const { pickupLat, pickupLng, dropoffLat, dropoffLng, rideType = 'standard' } = req.body;
     const customerId = req.user?.id;
-    const db = req.app.locals.db;
-    const matching = req.app.locals.matching;
-    const realtime = req.app.locals.realtime;
+    const db = (req.app.locals.db as DatabaseService) || new DatabaseService();
+    const matching =
+      (req.app.locals.matching as MatchingEngineService) ||
+      new MatchingEngineService(db, req.app.locals.redis || null, {
+        broadcastToDrivers: () => undefined,
+      } as any);
+    const booking = new RideBookingService(db, matching);
 
     if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
       return res.status(400).json({
         status: 'error',
-        message: 'Missing required location fields'
+        message: 'Missing required location fields',
       });
     }
 
-    // Calculate fare
-    const estimatedDistance = Math.sqrt(
-      Math.pow(dropoffLat - pickupLat, 2) + Math.pow(dropoffLng - pickupLng, 2)
-    ) * 111; // Approximate km conversion
-    const estimatedDuration = Math.ceil(estimatedDistance * 2); // Rough estimate
-
-    const estimatedFare = await matching.calculateFare(estimatedDistance, estimatedDuration, rideType);
-
-    // Create ride
-    const rideResult = await db.createRide({
-      customerId,
-      pickupLat,
-      pickupLng,
-      dropoffLat,
-      dropoffLng,
+    const result = await booking.createRideRequest({
+      userId: customerId!,
+      pickupLat: Number(pickupLat),
+      pickupLng: Number(pickupLng),
+      dropoffLat: Number(dropoffLat),
+      dropoffLng: Number(dropoffLng),
+      pickupAddress: req.body.pickupAddress,
+      dropoffAddress: req.body.dropoffAddress,
       rideType,
-      estimatedFare,
-      distanceKm: estimatedDistance,
-      estimatedDurationMinutes: estimatedDuration
+      vehicleTypeCode: req.body.vehicleTypeCode,
+      sourceChannel: 'app',
+      countryCode: req.body.countryCode,
     });
 
-    const rideId = rideResult.rows[0].id;
-
-    // Find drivers
-    const drivers = await matching.findBestDrivers(pickupLat, pickupLng, rideType);
-
-    // Notify drivers via Socket.io
-    realtime.broadcastToDrivers('ride:new-request', {
-      rideId,
+    const realtime = req.app.locals.realtime;
+    realtime?.broadcastToDrivers?.('ride:new-request', {
+      rideId: result.rideId || result.id,
       pickupLat,
       pickupLng,
       dropoffLat,
       dropoffLng,
-      estimatedFare,
-      rideType
+      estimatedFare: result.estimatedFare,
+      rideType,
     });
 
     res.status(201).json({
       status: 'success',
       message: 'Ride requested successfully',
-      data: {
-        rideId,
-        estimatedFare,
-        estimatedDistance,
-        estimatedDuration,
-        driversNotified: drivers.length
-      }
+      data: result,
     });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({
       status: 'error',
-      message: 'Failed to request ride'
+      message: error.message || 'Failed to request ride',
     });
   }
 });

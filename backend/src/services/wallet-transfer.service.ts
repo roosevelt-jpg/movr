@@ -193,7 +193,6 @@ export class WalletTransferService {
           claimCode,
           to: recipientIdentifier,
         });
-        // SMS via Twilio is best-effort; channels layer can send claimCode later
       }
 
       const transfer = await client.query(
@@ -221,8 +220,73 @@ export class WalletTransferService {
         ]
       );
 
-      return transfer.rows[0];
+      const row = transfer.rows[0];
+
+      // Best-effort SMS claim link (Twilio) for recipients without a Movr account
+      if (claimCode && recipientIdentifier) {
+        setImmediate(() => {
+          this.sendClaimSms(recipientIdentifier, claimCode!, q.receivedAmount, q.receivedCurrency).catch(
+            (err) => this.logger.warn('claim SMS failed', { error: err.message })
+          );
+        });
+      }
+
+      return row;
     });
+  }
+
+  private async sendClaimSms(
+    to: string,
+    claimCode: string,
+    amount: number,
+    currency: string
+  ) {
+    const phone = String(to).startsWith('+') || /^\d/.test(to) ? to : null;
+    if (!phone) return;
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!sid || !token || !from) {
+      this.logger.warn('Twilio not configured — claim code logged only', { claimCode, phone });
+      return;
+    }
+    const claimUrl =
+      process.env.CLAIM_TRANSFER_URL ||
+      `${process.env.PUBLIC_WEB_URL || 'https://movr.io'}/claim/${claimCode}`;
+    const twilio = require('twilio')(sid, token);
+    await twilio.messages.create({
+      from,
+      to: phone,
+      body: `MOVR: You received ${amount} ${currency}. Claim with code ${claimCode}: ${claimUrl}`,
+    });
+  }
+
+  async updateLimits(input: {
+    maxPerTx?: number;
+    maxPerDay?: number;
+    requiresIdentityLinkedAbove?: number;
+    feePercent?: number;
+    feeFlat?: number;
+  }) {
+    const row = await this.db.query(
+      `UPDATE transfer_limits_config SET
+         max_per_tx = COALESCE($1, max_per_tx),
+         max_per_day = COALESCE($2, max_per_day),
+         requires_identity_linked_above = COALESCE($3, requires_identity_linked_above),
+         fee_percent = COALESCE($4, fee_percent),
+         fee_flat = COALESCE($5, fee_flat),
+         updated_at = NOW()
+       WHERE id = 1
+       RETURNING *`,
+      [
+        input.maxPerTx ?? null,
+        input.maxPerDay ?? null,
+        input.requiresIdentityLinkedAbove ?? null,
+        input.feePercent ?? null,
+        input.feeFlat ?? null,
+      ]
+    );
+    return row.rows[0];
   }
 
   async claimTransfer(claimCode: string, claimantUserId: string) {

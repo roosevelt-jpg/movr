@@ -201,6 +201,14 @@ export class SettlementService {
     return { ...batch.rows[0], items: items.rows };
   }
 
+  async listBatches(limit = 50) {
+    const result = await this.db.query(
+      `SELECT * FROM payout_batches ORDER BY created_at DESC LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
+  }
+
   async listGmv(filters: {
     serviceType?: string;
     country?: string;

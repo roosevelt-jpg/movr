@@ -1,21 +1,73 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-/** Speak-to-order — matches voice booking mockup. */
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
+function speak(text: string) {
+  try {
+    const synth = (globalThis as any).speechSynthesis;
+    if (synth) {
+      const u = new SpeechSynthesisUtterance(text);
+      synth.cancel();
+      synth.speak(u);
+      return;
+    }
+  } catch {
+    /* native TTS optional */
+  }
+}
+
+function listenOnce(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const SR =
+      (globalThis as any).SpeechRecognition || (globalThis as any).webkitSpeechRecognition;
+    if (!SR) {
+      reject(new Error('Speech recognition unavailable'));
+      return;
+    }
+    const rec = new SR();
+    rec.lang = 'en-GH';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    let finalText = '';
+    rec.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      if (interim) (globalThis as any).__movrVoiceInterim = interim;
+    };
+    rec.onerror = (e: any) => reject(e.error || e);
+    rec.onend = () => resolve(finalText || (globalThis as any).__movrVoiceInterim || '');
+    rec.start();
+  });
+}
+
+/** Speak-to-order — STT + confirm → createRideRequest sourceChannel=voice (Phase 23). */
 export default function VoiceBookingScreen() {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState<any>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
 
   const parse = async (text: string) => {
     const res = await fetch(`${API}/voice/parse-intent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         text,
         currentLat: 5.6037,
@@ -26,23 +78,50 @@ export default function VoiceBookingScreen() {
     const json = await res.json();
     setResult(json.data);
     setSelected(json.data?.options?.[0]?.code || null);
+    if (json.data?.needsClarification) {
+      speak(json.data.prompt || 'Where are you going?');
+    } else if (json.data?.options?.[0]) {
+      const o = json.data.options[0];
+      const surge = json.data.surgeReason ? ` ${json.data.surgeReason}.` : '';
+      speak(
+        `Pickup ${json.data.pickup?.address || 'current location'} to ${json.data.destination?.address}. ${o.name}, ${o.price} ${json.data.currency || 'GHS'}.${surge} Say yes or tap book.`
+      );
+    }
   };
 
   const startListen = async () => {
     setListening(true);
-    const sample = "I'm going from Osu to the airport";
-    setTranscript(sample);
-    setListening(false);
-    await parse(sample);
+    setMessage('');
+    try {
+      const heard = await listenOnce();
+      const text = heard?.trim() || '';
+      if (!text) throw new Error('empty');
+      setTranscript(text);
+      setListening(false);
+      await parse(text);
+    } catch {
+      // Fallback sample when device STT unavailable (dev / Expo Go)
+      const sample = "I'm going from Osu to the airport";
+      setTranscript(sample);
+      setListening(false);
+      setMessage('Using demo utterance — enable mic permissions for live STT');
+      await parse(sample);
+    }
   };
 
   const selectedOpt = result?.options?.find((o: any) => o.code === selected) || result?.options?.[0];
 
-  const confirm = async () => {
+  useEffect(() => {
+    if (selectedOpt && result?.pickup) {
+      // visual card is source of truth; TTS already ran on parse
+    }
+  }, [selectedOpt, result]);
+
+  const confirm = async (spoken?: string) => {
     if (!result?.pickup || !result?.destination) return;
-    await fetch(`${API}/voice/confirm`, {
+    const res = await fetch(`${API}/voice/confirm`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         pickupLat: result.pickup.lat,
         pickupLng: result.pickup.lng,
@@ -51,9 +130,16 @@ export default function VoiceBookingScreen() {
         pickupAddress: result.pickup.address,
         dropoffAddress: result.destination.address,
         rideType: selected,
-        spoken: 'yes',
+        spoken: spoken || 'yes',
       }),
     });
+    const json = await res.json();
+    if (json.status === 'success') {
+      setMessage('Ride booked');
+      speak('Ride booked. Finding a driver.');
+    } else {
+      setMessage(json.message || 'Booking failed');
+    }
   };
 
   return (
@@ -66,6 +152,7 @@ export default function VoiceBookingScreen() {
       <Text style={styles.quote}>
         {transcript ? `“${transcript}”` : '“I\'m going from Osu to the airport”'}
       </Text>
+      {message ? <Text style={styles.warn}>{message}</Text> : null}
 
       {result?.needsClarification ? <Text style={styles.warn}>{result.prompt}</Text> : null}
 
@@ -75,6 +162,11 @@ export default function VoiceBookingScreen() {
           <Text style={styles.route}>
             {result.pickup?.address || 'Osu'} → {result.destination?.address || 'Kotoka Airport'}
           </Text>
+          {result.surgeReason ? (
+            <Text style={{ color: colors.warning, marginBottom: spacing[2], fontSize: 12 }}>
+              {result.surgeReason}
+            </Text>
+          ) : null}
 
           <FlatList
             data={result.options}
@@ -102,12 +194,26 @@ export default function VoiceBookingScreen() {
             }}
           />
 
-          <Pressable style={styles.cta} onPress={confirm}>
+          <Pressable style={styles.cta} onPress={() => confirm('yes')}>
             <View style={styles.ctaGlow} />
             <Text style={styles.ctaText}>
               Book {selectedOpt?.name || 'ride'} ·{' '}
               {formatCurrency(selectedOpt?.price || 0, result.currency || 'GHS')}
             </Text>
+          </Pressable>
+          <Pressable
+            style={{ marginTop: spacing[2], padding: spacing[2] }}
+            onPress={async () => {
+              try {
+                const heard = await listenOnce();
+                if (/^(yes|book|confirm)/i.test(heard.trim())) await confirm(heard);
+                else setMessage('Say yes to confirm');
+              } catch {
+                setMessage('Tap Book to confirm');
+              }
+            }}
+          >
+            <Text style={{ color: colors.motionBlue, textAlign: 'center' }}>Or say “yes”</Text>
           </Pressable>
         </View>
       ) : null}
@@ -149,50 +255,39 @@ const styles = StyleSheet.create({
     marginBottom: spacing[5],
     paddingHorizontal: spacing[4],
   },
-  warn: { color: colors.warning, marginBottom: spacing[3] },
+  warn: { color: colors.warning, marginBottom: spacing[3], textAlign: 'center' },
   card: {
     width: '100%',
     backgroundColor: colors.surfaceElevated,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing[4],
   },
-  routeLabel: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    letterSpacing: 1,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  route: { color: colors.pureWhite, fontSize: 18, fontWeight: '700', marginBottom: spacing[4] },
+  routeLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  route: { color: colors.pureWhite, fontSize: 16, fontWeight: '600', marginVertical: spacing[2] },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing[3],
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    marginBottom: spacing[2],
+    paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  optionActive: { borderColor: colors.motionBlue, backgroundColor: 'rgba(0,85,255,0.08)' },
-  optionName: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  optionMeta: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
-  price: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
+  optionActive: { opacity: 1 },
+  optionName: { color: colors.pureWhite, fontWeight: '600' },
+  optionMeta: { color: colors.textSecondary, fontSize: 12 },
+  price: { color: colors.pureWhite, fontWeight: '700' },
   priceMuted: { color: colors.textSecondary },
   cta: {
-    marginTop: spacing[3],
-    borderRadius: radius.pill,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    marginTop: spacing[4],
     backgroundColor: colors.electricViolet,
+    borderRadius: radius.md,
+    paddingVertical: spacing[3],
+    alignItems: 'center',
+    overflow: 'hidden',
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
-    opacity: 0.45,
+    opacity: 0.35,
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
 });

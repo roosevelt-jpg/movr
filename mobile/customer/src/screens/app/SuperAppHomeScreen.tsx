@@ -212,7 +212,7 @@ export default function SuperAppHomeScreen({
               </View>
             </View>
             {/* Keep HomeScreen reusable as Ride content below the map */}
-            <HomeScreen />
+            <HomeScreen destination={destination} />
           </View>
         ) : null}
 

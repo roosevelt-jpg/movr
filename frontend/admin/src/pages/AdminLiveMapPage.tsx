@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { io, Socket } from 'socket.io-client';
 import AdminShell from '../layouts/AdminShell';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL ||
+  (typeof window !== 'undefined' ? window.location.origin.replace(/:\d+$/, ':3000') : 'http://localhost:3000');
 
 type Marker = {
   id: string;
@@ -17,6 +21,7 @@ const KIND_COLOR: Record<string, string> = {
   rides: 'var(--motion-blue)',
   parcel: 'var(--movr-green)',
   parcels: 'var(--movr-green)',
+  delivery: 'var(--movr-green)',
   shop: 'var(--warning)',
   shops: 'var(--warning)',
   rental: 'var(--electric-violet)',
@@ -27,18 +32,20 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-/** Admin live ops map — category pills + marker grid. */
+/** Admin live ops map — Socket.io rooms + filter toggles (Phase 17). */
 export default function AdminLiveMapPage() {
   const [filters, setFilters] = useState({
     rides: true,
-    parcels: false,
-    shops: false,
-    rentals: false,
+    parcels: true,
+    shops: true,
+    rentals: true,
   });
   const [counts, setCounts] = useState({ rides: 0, parcels: 0, shops: 0, rentals: 0 });
   const [markers, setMarkers] = useState<Marker[]>([]);
+  const [live, setLive] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
-  useEffect(() => {
+  const refreshRest = () => {
     const headers = { Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` };
     axios
       .get(`${API}/admin/live/counts`, { headers })
@@ -51,7 +58,59 @@ export default function AdminLiveMapPage() {
       .get(`${API}/admin/live/markers`, { headers })
       .then((res) => setMarkers(res.data?.data || []))
       .catch(() => setMarkers([]));
+  };
+
+  useEffect(() => {
+    refreshRest();
+    const poll = setInterval(refreshRest, 15000);
+    return () => clearInterval(poll);
   }, [filters]);
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      auth: { token: localStorage.getItem('movr_admin_token') || '' },
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      setLive(true);
+      socket.emit('admin:live:join', {
+        rooms: ['rides', 'deliveries', 'rentals', 'shops'],
+      });
+    });
+    socket.on('disconnect', () => setLive(false));
+
+    const upsert = (payload: any, kind: string) => {
+      if (!payload?.id && !payload?.rideId && !payload?.orderId && !payload?.rentalId) return;
+      const id = String(payload.id || payload.rideId || payload.orderId || payload.rentalId);
+      setMarkers((prev) => {
+        const next = prev.filter((m) => m.id !== id);
+        next.push({
+          id,
+          lat: payload.lat ?? payload.latitude ?? payload.pickupLat,
+          lng: payload.lng ?? payload.longitude ?? payload.pickupLng,
+          status: payload.status,
+          kind: payload.kind || kind,
+        });
+        return next;
+      });
+    };
+
+    socket.on('admin:live:marker', (payload: any) => upsert(payload, payload.kind || 'ride'));
+    socket.on('ride:location', (payload: any) => upsert(payload, 'ride'));
+    socket.on('delivery:location', (payload: any) => upsert({ ...payload, id: payload.orderId }, 'parcel'));
+    socket.on('rental:location', (payload: any) => upsert({ ...payload, id: payload.rentalId }, 'rental'));
+    socket.on('location:updated', (payload: any) => {
+      if (payload?.role === 'driver' || payload?.kind) upsert(payload, payload.kind || 'ride');
+    });
+
+    return () => {
+      socket.emit('admin:live:leave');
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
 
   const total =
     (filters.rides ? counts.rides : 0) +
@@ -135,6 +194,10 @@ export default function AdminLiveMapPage() {
             {p.label} ({p.count})
           </button>
         ))}
+        <span style={styles.liveDot}>
+          <span style={{ ...styles.dotInline, background: live ? 'var(--success)' : 'var(--text-secondary)' }} />
+          {live ? 'Live' : 'Reconnecting…'}
+        </span>
       </div>
 
       <div style={styles.map}>
@@ -163,14 +226,16 @@ export default function AdminLiveMapPage() {
             ))}
           </div>
         ) : null}
-        <div style={styles.badge}>Accra region · {total} active</div>
+        <div style={styles.badge}>
+          Accra region · {total} active · sockets: rides/deliveries/rentals
+        </div>
       </div>
     </AdminShell>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  filters: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
+  filters: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
   pill: {
     border: '1px solid var(--border)',
     borderRadius: 999,
@@ -185,6 +250,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: 'var(--surface-elevated)',
     color: 'var(--pure-white)',
   },
+  liveDot: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    color: 'var(--text-secondary)',
+    fontSize: 13,
+    marginLeft: 8,
+  },
+  dotInline: { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' },
   map: {
     position: 'relative',
     height: '70vh',

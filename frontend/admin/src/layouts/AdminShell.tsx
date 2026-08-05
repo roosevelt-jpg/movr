@@ -9,6 +9,8 @@ const NAV = [
   { label: 'Pricing engine', to: '/pricing' },
   { label: 'Finance', to: '/finance' },
   { label: 'Users', to: '/users' },
+  { label: 'Rides', to: '/rides' },
+  { label: 'Orders', to: '/orders' },
   { label: 'Merchants', to: '/merchants' },
   { label: 'KYC queue', to: '/kyc-queue' },
   { label: 'Identity review', to: '/identity' },

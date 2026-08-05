@@ -185,7 +185,30 @@ merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: Auth
       return res.status(404).json({ status: 'error', message: 'Merchant not found' });
     }
 
-    const { documentType, documentNumber, fileUrl, businessRegistrationNumber } = req.body;
+    const {
+      documentType,
+      documentNumber,
+      fileUrl,
+      businessRegistrationNumber,
+      countryCode = 'GH',
+      fullName,
+      dateOfBirth,
+      ocrConfirmed,
+    } = req.body;
+
+    // Phase 26 — country-specific ID validation before identity pipeline
+    if (documentType === 'national_id' || documentType === 'ghana_card' || documentNumber) {
+      const { NationalIdVerificationService } = require('../services/ghana-card-verification.service');
+      const national = new NationalIdVerificationService(db);
+      const check = national.validateIdNumber(countryCode, documentNumber || '');
+      if (documentNumber && !check.valid) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid ${check.pattern.label} for ${String(countryCode).toUpperCase()}`,
+          data: { field: check.pattern },
+        });
+      }
+    }
 
     if (businessRegistrationNumber) {
       await db.query(
@@ -200,7 +223,11 @@ merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: Auth
       documentType,
       documentNumber,
       fileUrl,
-    }) || { verified: false, confidence: 0 };
+      countryCode,
+      fullName,
+      dateOfBirth,
+      ocrConfirmed: Boolean(ocrConfirmed),
+    }) || { verified: false, confidence: 0, pendingManualReview: true };
 
     const doc = await db.query(
       `INSERT INTO merchant_kyc_documents
@@ -217,11 +244,28 @@ merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: Auth
     );
 
     await db.query(
-      `UPDATE merchants SET kyc_status = $1, updated_at = NOW() WHERE id = $2`,
-      [verification.verified ? 'approved' : 'pending', merchant.id]
-    );
+      `UPDATE merchants SET kyc_status = $1, country = COALESCE($2, country), updated_at = NOW() WHERE id = $3`,
+      [
+        verification.verified ? 'approved' : 'pending',
+        countryCode || null,
+        merchant.id,
+      ]
+    ).catch(async () => {
+      await db.query(
+        `UPDATE merchants SET kyc_status = $1, updated_at = NOW() WHERE id = $2`,
+        [verification.verified ? 'approved' : 'pending', merchant.id]
+      );
+    });
 
-    res.status(201).json({ status: 'success', data: { document: doc.rows[0], verification } });
+    res.status(201).json({
+      status: 'success',
+      data: {
+        document: doc.rows[0],
+        verification,
+        countryCode,
+        pendingAutomatedVerification: Boolean(verification.pendingManualReview),
+      },
+    });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }

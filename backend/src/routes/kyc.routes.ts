@@ -75,6 +75,10 @@ kycRouter.post(
         verificationMethod: verificationMethod || 'manual',
         approvalTimestamp: new Date(),
         verifierAdminId: req.user!.id,
+        identityLinked: req.body.identityLinked,
+        trustTier: req.body.identityLinked
+          ? 'full_identity_link_verified'
+          : req.body.trustTier,
       });
       res.json({
         status: 'success',
