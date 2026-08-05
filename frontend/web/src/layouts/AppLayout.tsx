@@ -20,6 +20,8 @@ import {
   Camera,
   ChevronDown,
 } from 'lucide-react';
+import MovrLogoMark from '../components/MovrLogoMark';
+import { colors } from '@movr/design-system/theme';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: Home, match: ['/dashboard'] },
@@ -161,10 +163,10 @@ const AppLayout: React.FC = () => {
   const SidebarNav = ({ onNavigate }: { onNavigate?: (path: string) => void }) => (
     <>
       <div className="flex items-center gap-2 px-2 mb-6">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
-          <span className="text-white font-black text-sm">M</span>
-        </div>
-        <span className="text-xl font-black text-white">MOVR</span>
+        <MovrLogoMark className="w-9 h-9" />
+        <span className="text-xl font-black" style={{ color: colors.pureWhite }}>
+          MOVR
+        </span>
       </div>
 
       <nav className="space-y-1 flex-1 overflow-y-auto">
@@ -241,10 +243,10 @@ const AppLayout: React.FC = () => {
               <Menu size={22} />
             </button>
             <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#6A00FF] to-[#0055FF]">
-                <span className="text-white font-black text-xs">M</span>
-              </div>
-              <span className="font-black">MOVR</span>
+              <MovrLogoMark className="w-8 h-8" />
+              <span className="font-black" style={{ color: colors.pureWhite }}>
+                MOVR
+              </span>
             </Link>
 
             {/* Live date & time on every dashboard page */}

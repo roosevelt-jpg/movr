@@ -18,6 +18,8 @@ const COUNTRY_NAME: Record<string, string> = {
   GH: 'Ghana',
   NG: 'Nigeria',
   KE: 'Kenya',
+  ZA: 'South Africa',
+  CI: "Côte d'Ivoire",
   SN: 'Senegal (Paystack unsupported)',
 };
 

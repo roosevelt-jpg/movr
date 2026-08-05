@@ -40,7 +40,11 @@ Both `mobile/customer` and `mobile/driver` must import from this package — do 
 
 ## Logo
 
-Place official wordmark assets in `assets/logo/`. Always use the image asset — never recreate "Movr" as styled text. Minimum height 24px; respect 0.5× cap-height safe area.
+Official assets in `assets/logo/`:
+- `movr-mark.svg` — square mark
+- `movr-wordmark.svg` — mark + wordmark
+
+Always use these (or `MovrLogoMark` on web) — never recreate "MOVR" / "M" as styled text. Minimum height 24px; respect 0.5× cap-height safe area.
 
 ## Lint
 

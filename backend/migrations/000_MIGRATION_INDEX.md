@@ -34,9 +34,18 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 | 025_cross_border_transfers.sql | 027_cross_border_transfers.sql | 27 |
 | 026_trip_recording.sql / legacy `001_add_security_features.sql` | 028_trip_recording.sql | 28 |
 
+## Later append-only migrations (after the original 0D map)
+
+| Filename | Purpose |
+|---|---|
+| 029_ride_experience.sql | Ride experience extras |
+| 030_africa_currencies.sql | Africa-wide currencies + city pricing / FX |
+| 031_cms.sql | CMS pages + sections for marketing content |
+
 ## Notes
 
 - Baseline schema lives in `backend/scripts/init.sql` (users, rides, payments, etc.).
 - Migrations are ordered by **execution order**, not gap-analysis row number.
 - If a future phase must insert between existing migrations, append at the end with the next number.
-- Phases 5B / 7 / 8 / 9 (token / staking / claims / staking webapp) remain **on hold**.
+- Phases 5B / 7 / 8 / 9 (token / staking / claims / staking webapp) remain **on hold** for live enablement (flags off until legal/privacy go-ahead).
+- Brand logo files live in `design-system/assets/logo/` — do not recreate the mark as styled text.

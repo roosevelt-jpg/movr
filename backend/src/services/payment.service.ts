@@ -10,6 +10,7 @@ import {
 } from './payment-provider.interface';
 import { PaystackService } from './paystack.service';
 import { FlutterwaveService } from './flutterwave.service';
+import { IntegrationsService } from './integrations.service';
 
 type ProviderName = 'paystack' | 'flutterwave';
 
@@ -22,9 +23,12 @@ export class PaymentService {
   private logger: winston.Logger;
   private paystack: PaystackService;
   private flutterwave: FlutterwaveService;
+  private integrations: IntegrationsService;
+  private credentialsLoaded = false;
 
   constructor(db: DatabaseService) {
     this.db = db;
+    this.integrations = new IntegrationsService(db);
     this.logger = winston.createLogger({
       defaultMeta: { service: 'payment' },
       transports: [new winston.transports.Console()],
@@ -39,12 +43,88 @@ export class PaymentService {
   }
 
   async initialize(): Promise<void> {
+    await this.ensureProviderDefaults();
+    await this.refreshProviderCredentials();
     const hasPaystack = !!process.env.PAYSTACK_SECRET_KEY;
     const hasFlutterwave = !!process.env.FLUTTERWAVE_SECRET_KEY;
     this.logger.info('Payment service ready', { hasPaystack, hasFlutterwave });
   }
 
+  /** Seed global + Paystack live-market country rows if missing (Phase 0A). */
+  async ensureProviderDefaults(): Promise<void> {
+    try {
+      await this.db.query(
+        `INSERT INTO payment_provider_config (scope, country_code, provider, is_active)
+         SELECT 'global', NULL, 'flutterwave', TRUE
+         WHERE NOT EXISTS (
+           SELECT 1 FROM payment_provider_config WHERE scope = 'global' AND is_active = TRUE
+         )`
+      );
+      await this.db.query(
+        `INSERT INTO payment_provider_config (scope, country_code, provider, is_active)
+         SELECT v.scope::payment_provider_scope, v.country_code, v.provider::payment_provider_name, TRUE
+         FROM (VALUES
+           ('country', 'GH', 'paystack'),
+           ('country', 'NG', 'paystack'),
+           ('country', 'ZA', 'paystack'),
+           ('country', 'KE', 'paystack'),
+           ('country', 'CI', 'paystack')
+         ) AS v(scope, country_code, provider)
+         WHERE NOT EXISTS (
+           SELECT 1 FROM payment_provider_config p
+           WHERE p.scope = 'country' AND p.country_code = v.country_code AND p.is_active = TRUE
+         )`
+      );
+    } catch (e: any) {
+      this.logger.warn(`ensureProviderDefaults skipped: ${e.message}`);
+    }
+  }
+
+  /**
+   * Resolve secrets via Integrations Hub first, then .env (Phase 0C).
+   */
+  async refreshProviderCredentials(): Promise<void> {
+    try {
+      const paystackSecret =
+        (await this.integrations.getCredential('paystack', 'secret_key')) ||
+        process.env.PAYSTACK_SECRET_KEY ||
+        '';
+      const flutterwaveSecret =
+        (await this.integrations.getCredential('flutterwave', 'secret_key')) ||
+        process.env.FLUTTERWAVE_SECRET_KEY ||
+        '';
+      const flutterwaveHash =
+        (await this.integrations.getCredential('flutterwave', 'secret_hash')) ||
+        process.env.FLUTTERWAVE_SECRET_HASH ||
+        '';
+
+      this.paystack.setSecretKey(paystackSecret);
+      this.flutterwave.setSecretKey(flutterwaveSecret);
+      this.flutterwave.setSecretHash(flutterwaveHash);
+      this.credentialsLoaded = true;
+
+      // Reflect env-configured providers in the hub status without writing secrets back
+      if (paystackSecret) {
+        await this.db.query(
+          `UPDATE integrations SET status = 'configured', updated_at = NOW()
+           WHERE key = 'paystack' AND status = 'not_configured'`
+        );
+      }
+      if (flutterwaveSecret) {
+        await this.db.query(
+          `UPDATE integrations SET status = 'configured', updated_at = NOW()
+           WHERE key = 'flutterwave' AND status = 'not_configured'`
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(`refreshProviderCredentials: ${e.message}`);
+    }
+  }
+
   async getProvider(countryCode?: string): Promise<PaymentProvider> {
+    if (!this.credentialsLoaded) {
+      await this.refreshProviderCredentials();
+    }
     const normalized = countryCode?.toUpperCase();
 
     if (normalized) {

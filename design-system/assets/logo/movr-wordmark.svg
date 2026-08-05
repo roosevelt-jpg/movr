@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" role="img" aria-label="MOVR">
+  <defs>
+    <linearGradient id="movrWordGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3F7048"/>
+      <stop offset="50%" stop-color="#6A00FF"/>
+      <stop offset="100%" stop-color="#0055FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="48" height="48" rx="12" fill="url(#movrWordGrad)"/>
+  <path fill="#FFFFFF" d="M10 36V12h5.2l4.8 11.2L24.8 12H30v24h-4.6V22.4L21.2 36h-3.8L13.6 22.4V36H10zm23 0V12h4.6v24H33z"/>
+  <text x="60" y="33" font-family="Poppins, Montserrat, sans-serif" font-size="28" font-weight="800" fill="#FFFFFF">MOVR</text>
+</svg>

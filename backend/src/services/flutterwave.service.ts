@@ -19,6 +19,7 @@ import {
 export class FlutterwaveService implements PaymentProvider {
   readonly name = 'flutterwave' as const;
   private secretKey: string;
+  private secretHashOverride?: string;
   private baseUrl = 'https://api.flutterwave.com/v3';
   private logger: winston.Logger;
   private onVerified?: (reference: string, data: any) => Promise<void>;
@@ -30,6 +31,15 @@ export class FlutterwaveService implements PaymentProvider {
       defaultMeta: { service: 'flutterwave' },
       transports: [new winston.transports.Console()],
     });
+  }
+
+  /** Prefer Integrations Hub credential; fall back to env. */
+  setSecretKey(secretKey: string) {
+    if (secretKey) this.secretKey = secretKey;
+  }
+
+  setSecretHash(secretHash: string) {
+    if (secretHash) this.secretHashOverride = secretHash;
   }
 
   private headers() {
@@ -168,7 +178,8 @@ export class FlutterwaveService implements PaymentProvider {
   }
 
   verifySignature(payload: string | Buffer, signature: string): boolean {
-    const secretHash = process.env.FLUTTERWAVE_SECRET_HASH || this.secretKey;
+    const secretHash =
+      this.secretHashOverride || process.env.FLUTTERWAVE_SECRET_HASH || this.secretKey;
     const hash = crypto.createHmac('sha256', secretHash).update(payload).digest('hex');
     return hash === signature || signature === secretHash;
   }

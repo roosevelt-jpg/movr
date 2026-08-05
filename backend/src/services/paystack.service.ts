@@ -31,6 +31,11 @@ export class PaystackService implements PaymentProvider {
     });
   }
 
+  /** Prefer Integrations Hub credential; fall back to env. */
+  setSecretKey(secretKey: string) {
+    if (secretKey) this.secretKey = secretKey;
+  }
+
   private headers() {
     return {
       Authorization: `Bearer ${this.secretKey}`,

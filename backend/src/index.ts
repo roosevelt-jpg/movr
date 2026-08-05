@@ -1121,13 +1121,21 @@ async function startServer() {
       const { CmsService } = require('./services/cms.service');
       const { ensureCmsDefaults, CMS_SEED } = require('./scripts/seed-cms');
       const { DatabaseService } = require('./services/database.service');
+      const { PaymentService } = require('./services/payment.service');
+      const { IntegrationsService } = require('./services/integrations.service');
       const dbBoot = new DatabaseService();
       const cmsBoot = new CmsService(dbBoot);
       const result = await ensureCmsDefaults(dbBoot);
       const n = await cmsBoot.countPages();
       logger.info(`CMS ready: ${n} pages (${CMS_SEED.length} defaults). added=${result.created}`);
+
+      const paymentsBoot = new PaymentService(dbBoot);
+      await paymentsBoot.initialize();
+
+      const integrationsBoot = new IntegrationsService(dbBoot);
+      await integrationsBoot.warnRequiredOnBoot();
     } catch (e: any) {
-      logger.warn(`CMS bootstrap skipped: ${e.message}`);
+      logger.warn(`Boot defaults skipped: ${e.message}`);
     }
 
     server.listen(PORT, () => {
