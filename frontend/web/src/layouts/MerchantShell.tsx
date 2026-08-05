@@ -6,7 +6,10 @@ import {
   CreditCard,
   Settings,
   LogOut,
+  Moon,
+  Sun,
 } from 'lucide-react';
+import { useTheme } from '../theme/ThemeProvider';
 
 const NAV = [
   { to: '/merchant/dashboard', label: 'Orders', icon: LayoutList },
@@ -25,6 +28,7 @@ export default function MerchantShell({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { mode, setPreference } = useTheme();
   const path = activePath || location.pathname;
 
   const signOut = () => {
@@ -34,8 +38,8 @@ export default function MerchantShell({
   };
 
   return (
-    <div className="min-h-screen bg-surface text-pure-white flex font-[Poppins,Montserrat,sans-serif]">
-      <aside className="w-56 shrink-0 border-r border-border bg-jet-black p-4 flex flex-col">
+    <div className="min-h-screen bg-surface text-text-primary flex font-[Poppins,Montserrat,sans-serif]">
+      <aside className="w-56 shrink-0 border-r border-border bg-jet-black text-pure-white p-4 flex flex-col">
         <div className="font-bold text-xl mb-6 px-2">Movr</div>
         <div className="space-y-2 flex-1">
           {NAV.map((item) => {
@@ -73,7 +77,20 @@ export default function MerchantShell({
           <LogOut size={16} /> Sign out
         </button>
       </aside>
-      <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="shrink-0 h-14 border-b border-border bg-surface-elevated px-6 md:px-8 flex items-center justify-end">
+          <button
+            type="button"
+            aria-label={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            title={mode === 'light' ? 'Dark mode' : 'Light mode'}
+            onClick={() => setPreference(mode === 'light' ? 'dark' : 'light')}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary hover:text-text-primary hover:bg-surface"
+          >
+            {mode === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+        </header>
+        <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }

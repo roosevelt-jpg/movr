@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { DatabaseService } from './database.service';
+import { IntegrationsService } from './integrations.service';
 import getLogger from '../utils/logger';
 
 export interface TripIntent {
@@ -15,8 +16,11 @@ export interface TripIntent {
  */
 export class VoiceIntentService {
   private logger = getLogger('voice-intent');
+  private integrations: IntegrationsService;
 
-  constructor(private db: DatabaseService) {}
+  constructor(private db: DatabaseService, integrations?: IntegrationsService) {
+    this.integrations = integrations || new IntegrationsService(db);
+  }
 
   async transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/webm'): Promise<string> {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -153,10 +157,32 @@ export class VoiceIntentService {
     return next;
   }
 
-  /** Lightweight geocode stub — replace with Google/Mapbox via integrations hub */
+  /**
+   * Geocode via Google Maps (integrations hub / GOOGLE_MAPS_API_KEY).
+   * Falls back to Accra-centric aliases when the API key is missing or the call fails.
+   */
   async geocode(address: string, fallback?: { lat: number; lng: number }) {
     if (!address && fallback) return fallback;
-    // Accra-centric demo geocode
+
+    const mapsKey =
+      (await this.integrations.getCredential('google_maps', 'api_key').catch(() => null)) ||
+      process.env.GOOGLE_MAPS_API_KEY;
+
+    if (mapsKey && address) {
+      try {
+        const url =
+          `https://maps.googleapis.com/maps/api/geocode/json` +
+          `?address=${encodeURIComponent(address)}&key=${mapsKey}`;
+        const res = await axios.get(url, { timeout: 4000 });
+        const loc = res.data?.results?.[0]?.geometry?.location;
+        if (loc?.lat != null && loc?.lng != null) {
+          return { lat: Number(loc.lat), lng: Number(loc.lng) };
+        }
+      } catch (err: any) {
+        this.logger.warn('geocode API failed — using fallback', { error: err?.message });
+      }
+    }
+
     const known: Record<string, { lat: number; lng: number }> = {
       osu: { lat: 5.5557, lng: -0.182 },
       airport: { lat: 5.6052, lng: -0.1668 },

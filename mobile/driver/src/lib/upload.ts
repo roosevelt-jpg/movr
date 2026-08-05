@@ -7,6 +7,7 @@ function authToken(): string | null {
   );
 }
 
+/** Direct multipart upload to POST /uploads — never paste a remote image URL. */
 export async function uploadDirectFile(
   file: Blob | File | { uri: string; name?: string; type?: string },
   opts?: { fieldName?: string; token?: string | null }
@@ -38,32 +39,66 @@ export async function uploadDirectFile(
   return json.data.url as string;
 }
 
-export function pickAndUploadImage(opts?: {
+async function pickViaExpoImagePicker(): Promise<{ uri: string; name?: string; type?: string } | null> {
+  try {
+    // Optional peer — present in Expo device builds, absent in web screen packs.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ImagePicker = require('expo-image-picker');
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+      const cam = await ImagePicker.requestCameraPermissionsAsync();
+      if (cam.status !== 'granted') return null;
+      const shot = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      });
+      if (shot.canceled || !shot.assets?.[0]) return null;
+      const a = shot.assets[0];
+      return { uri: a.uri, name: a.fileName || 'photo.jpg', type: a.mimeType || 'image/jpeg' };
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const a = result.assets[0];
+    return { uri: a.uri, name: a.fileName || 'photo.jpg', type: a.mimeType || 'image/jpeg' };
+  } catch {
+    return null;
+  }
+}
+
+/** Open a system/web/native file picker and upload the selected file. */
+export async function pickAndUploadImage(opts?: {
   accept?: string;
   token?: string | null;
 }): Promise<string> {
   const accept = opts?.accept || 'image/jpeg,image/png,image/webp,image/gif,application/pdf';
-  return new Promise((resolve, reject) => {
-    const doc = (globalThis as any).document;
-    if (!doc?.createElement) {
-      reject(new Error('File picker unavailable on this build — use a device build with camera support'));
-      return;
-    }
-    const input = doc.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    input.onchange = async () => {
-      try {
-        const file = input.files?.[0];
-        if (!file) {
-          reject(new Error('No file selected'));
-          return;
+  const doc = (globalThis as any).document;
+  if (doc?.createElement) {
+    return new Promise((resolve, reject) => {
+      const input = doc.createElement('input');
+      input.type = 'file';
+      input.accept = accept;
+      input.onchange = async () => {
+        try {
+          const file = input.files?.[0];
+          if (!file) {
+            reject(new Error('No file selected'));
+            return;
+          }
+          resolve(await uploadDirectFile(file, { token: opts?.token }));
+        } catch (e: any) {
+          reject(e);
         }
-        resolve(await uploadDirectFile(file, { token: opts?.token }));
-      } catch (e: any) {
-        reject(e);
-      }
-    };
-    input.click();
-  });
+      };
+      input.click();
+    });
+  }
+
+  const picked = await pickViaExpoImagePicker();
+  if (!picked) {
+    throw new Error('File picker unavailable — grant photo/camera permission or use a web build');
+  }
+  return uploadDirectFile(picked, { token: opts?.token });
 }

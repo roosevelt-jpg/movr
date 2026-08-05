@@ -26,9 +26,42 @@ function parseJwtId(token: string | null): string {
 }
 
 /**
+ * Capture a short cabin clip via MediaRecorder when getUserMedia is available (web).
+ * Falls back to a tiny placeholder blob on native until expo-camera / FS is wired.
+ */
+async function captureLocalClip(): Promise<Blob> {
+  const nav = (globalThis as any).navigator;
+  if (nav?.mediaDevices?.getUserMedia && typeof (globalThis as any).MediaRecorder !== 'undefined') {
+    const stream: MediaStream = await nav.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: true,
+    });
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: BlobPart[] = [];
+      const done = new Promise<Blob>((resolve, reject) => {
+        recorder.ondataavailable = (e: any) => {
+          if (e.data?.size) chunks.push(e.data);
+        };
+        recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
+        recorder.onerror = () => reject(new Error('MediaRecorder failed'));
+      });
+      recorder.start(250);
+      await new Promise((r) => setTimeout(r, 2500));
+      if (recorder.state !== 'inactive') recorder.stop();
+      return await done;
+    } finally {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  }
+  // Native / unsupported — placeholder until device camera module is linked
+  return new Blob([new Uint8Array([0, 0, 0, 1])], { type: 'video/mp4' });
+}
+
+/**
  * Phase 28 — local record then async upload (not live stream).
  * Auto-starts when trip is active; stops + uploads when trip ends.
- * Camera hardware is stubbed without native modules; local path is app-private marker.
+ * Uses browser MediaRecorder when available; otherwise uploads a placeholder until native camera is linked.
  */
 export default function ActiveRideRecordingPanel({
   rideId,
@@ -55,6 +88,7 @@ export default function ActiveRideRecordingPanel({
   const startedAt = useRef<number | null>(null);
   const autoStarted = useRef(false);
   const uploadStarted = useRef(false);
+  const clipRef = useRef<Blob | null>(null);
 
   const start = async () => {
     const res = await fetch(`${API}/rides/${rideId}/recording/start`, {
@@ -68,12 +102,22 @@ export default function ActiveRideRecordingPanel({
       setNote(json.data?.message || 'Recording disabled pending privacy review');
       return;
     }
-    // App-private path marker (encrypted-at-rest via OS when using real FileSystem)
-    const path = `private://trip-recordings/${rideId}.mp4`;
+    const path = `private://trip-recordings/${rideId}.${Platform.OS === 'web' ? 'webm' : 'mp4'}`;
     setLocalPath(path);
     startedAt.current = Date.now();
     setStatus('recording');
-    setNote('Recording locally (cabin camera). Upload after trip ends — prefer Wi‑Fi.');
+    setNote('Recording locally (cabin). Upload after trip ends — prefer Wi‑Fi.');
+    try {
+      clipRef.current = await captureLocalClip();
+      setNote(
+        clipRef.current.size > 4
+          ? 'Clip captured. Will upload when trip ends.'
+          : 'Camera unavailable — placeholder clip queued for upload path test.'
+      );
+    } catch (e: any) {
+      clipRef.current = new Blob([new Uint8Array([0, 0, 0, 1])], { type: 'video/mp4' });
+      setNote(e?.message || 'Camera permission denied — placeholder queued');
+    }
   };
 
   const finishAndUpload = async () => {
@@ -97,15 +141,20 @@ export default function ActiveRideRecordingPanel({
     }
 
     const uploadUrl = urlJson.data?.uploadUrl as string | undefined;
-    // Chunked/resumable PUT — retry once on failure (placeholder body until native camera wired)
+    const body = clipRef.current || new Blob([new Uint8Array([0, 0, 0, 1])], { type: 'video/mp4' });
     if (uploadUrl) {
-      const body = new Uint8Array([0, 0, 0, 0]); // stub local encrypted blob
       let ok = false;
       for (let attempt = 0; attempt < 2 && !ok; attempt++) {
         try {
+          const putHeaders: Record<string, string> = {
+            'Content-Type': body.type || 'video/mp4',
+          };
+          if (uploadUrl.includes('/recording/upload-body')) {
+            Object.assign(putHeaders, authHeaders());
+          }
           const put = await fetch(uploadUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': 'video/mp4' },
+            headers: putHeaders,
             body,
           });
           ok = put.ok || put.status === 200 || put.status === 204;
@@ -160,44 +209,41 @@ export default function ActiveRideRecordingPanel({
         </Pressable>
       ) : null}
       {status === 'recording' ? (
-        <Pressable style={styles.btn} onPress={finishAndUpload}>
-          <Text style={styles.btnText}>End trip & upload</Text>
-        </Pressable>
+        <>
+          <Text style={styles.live}>● Recording</Text>
+          <Text style={styles.note}>{note}</Text>
+          <Pressable style={styles.btn} onPress={() => finishAndUpload()}>
+            <Text style={styles.btnText}>Stop & upload</Text>
+          </Pressable>
+        </>
       ) : null}
-      <Text style={styles.meta}>
-        {status} · {Platform.OS} · {localPath ? 'private store' : '—'}
-      </Text>
-      {note ? <Text style={styles.note}>{note}</Text> : null}
+      {status === 'uploading' ? <Text style={styles.note}>Uploading…</Text> : null}
+      {status === 'done' ? <Text style={styles.note}>{note}</Text> : null}
     </View>
   );
 }
 
-/** Rider-facing notice — call before confirming pickup. */
-export async function acknowledgeRecordingNotice(rideId: string) {
-  await fetch(`${API}/rides/${rideId}/recording/notice`, {
-    method: 'POST',
-    headers: authHeaders(),
-  });
-}
-
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  panel: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing[3],
-    marginTop: spacing[3],
-  },
-  title: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[2], fontSize: 13 },
-  btn: {
-    backgroundColor: colors.electricViolet,
-    borderRadius: radius.md,
-    padding: spacing[3],
-    alignItems: 'center',
-  },
-  btnText: { color: colors.pureWhite, fontWeight: '600' },
-  meta: { color: colors.textSecondary, marginTop: spacing[2], fontSize: 12 },
-  note: { color: colors.movrGreen, marginTop: spacing[2], fontSize: 13 },
-});
+    panel: {
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.lg,
+      padding: spacing[4],
+      marginBottom: spacing[3],
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    title: { color: colors.textPrimary, fontWeight: '700', fontSize: 16 },
+    sub: { color: colors.textSecondary, marginTop: 6, marginBottom: spacing[3], fontSize: 13 },
+    note: { color: colors.textSecondary, marginTop: spacing[2], fontSize: 13 },
+    live: { color: colors.error, fontWeight: '700', marginTop: spacing[2] },
+    btn: {
+      marginTop: spacing[3],
+      backgroundColor: colors.electricViolet,
+      borderRadius: radius.pill,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    btnText: { color: '#FFFFFF', fontWeight: '700' },
+  });
 }

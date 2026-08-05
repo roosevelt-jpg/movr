@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { AuthRequest, authenticateToken } from '../middleware/auth.middleware';
+import { AuthRequest, authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { TokenService } from '../services/token.service';
 
@@ -74,6 +74,43 @@ tokenRouter.post('/claim/custodial', async (req: AuthRequest, res: Response) => 
   try {
     const result = await tokens.claimCustodial(req.user!.id);
     res.json({ status: 'success', data: result });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+/**
+ * Admin — create Merkle airdrop snapshot so users can claim (Phase 8).
+ * Body: { label?, allocations: [{ userId?, address?, amount }] }
+ * If address omitted, custodial wallet for userId is used.
+ */
+tokenRouter.post('/admin/airdrop-snapshot', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const allocations = Array.isArray(req.body?.allocations) ? req.body.allocations : [];
+    if (!allocations.length) {
+      return res.status(400).json({ status: 'error', message: 'allocations[] required' });
+    }
+    const snapshotList: Array<{ address: string; amount: string | number; userId?: string }> = [];
+    for (const row of allocations) {
+      const amount = Number(row.amount);
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ status: 'error', message: 'each allocation needs amount > 0' });
+      }
+      let address = row.address as string | undefined;
+      const userId = row.userId as string | undefined;
+      if (!address && userId) {
+        const wallet = await tokens.ensureCustodialWallet(userId);
+        address = wallet.address;
+      }
+      if (!address) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'each allocation needs address or userId' });
+      }
+      snapshotList.push({ address, amount, userId });
+    }
+    const data = await tokens.persistAirdropSnapshot(snapshotList, req.body?.label);
+    res.status(201).json({ status: 'success', data });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }

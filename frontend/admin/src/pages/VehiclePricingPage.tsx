@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import { formatCurrency } from '../lib/currency';
+import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -46,6 +47,7 @@ export default function VehiclePricingPage() {
             return {
               id: t.id,
               name: t.name,
+              is_active: t.is_active !== false,
               base_fare: Number(price?.base_fare ?? 0),
               per_km_rate: Number(price?.per_km_rate ?? 0),
               per_minute_rate: Number(price?.per_minute_rate ?? 0),
@@ -55,6 +57,7 @@ export default function VehiclePricingPage() {
             return {
               id: t.id,
               name: t.name,
+              is_active: t.is_active !== false,
               base_fare: 0,
               per_km_rate: 0,
               per_minute_rate: 0,
@@ -140,10 +143,10 @@ export default function VehiclePricingPage() {
     await load();
   };
 
-  const deactivate = async (id: string) => {
+  const setActive = async (id: string, isActive: boolean) => {
     await axios.patch(
       `${API}/admin/vehicle-types/${id}`,
-      { is_active: false, reason: 'Admin deactivate' },
+      { is_active: isActive, reason: isActive ? 'Admin activate' : 'Admin deactivate' },
       { headers: headers() }
     );
     await load();
@@ -202,13 +205,14 @@ export default function VehiclePricingPage() {
               <span>{money(r.per_km_rate)}</span>
               <span>{money(r.per_minute_rate)}</span>
               <span>{money(r.minimum_fare)}</span>
-              <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <span style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                 <button style={styles.edit} onClick={() => openEdit(r)}>
                   Edit
                 </button>
-                <button style={styles.edit} onClick={() => deactivate(r.id).catch((e) => setError(e.message))}>
-                  Deactivate
-                </button>
+                <OnOffButton
+                  on={r.is_active !== false}
+                  onClick={() => setActive(r.id, r.is_active === false).catch((e) => setError(e.message))}
+                />
               </span>
             </div>
           ))

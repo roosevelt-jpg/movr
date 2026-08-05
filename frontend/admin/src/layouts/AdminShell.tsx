@@ -20,6 +20,7 @@ const NAV = [
   { label: 'KYC queue', to: '/kyc-queue' },
   { label: 'Identity review', to: '/identity' },
   { label: 'Feature flags', to: '/feature-flags' },
+  { label: 'Airdrops', to: '/airdrops' },
   { label: 'Integrations', to: '/integrations' },
   { label: 'Payments', to: '/payments' },
   { label: 'Rewards', to: '/rewards' },

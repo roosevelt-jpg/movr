@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "main": "index.js",
+  "exports": {
+    ".": "./src/App.tsx",
+    "./screens/*": "./src/screens/*",
+    "./theme": "./src/theme.tsx",
+    "./lib/*": "./src/lib/*"
+  },
   "dependencies": {
     "@movr/design-system": "workspace:*"
   }

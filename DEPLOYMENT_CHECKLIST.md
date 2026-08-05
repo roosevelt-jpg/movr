@@ -30,4 +30,4 @@ Point `stake.movr.io` → static host. CORS on the API must allow this origin fo
 ### Notes
 
 - In-app custodial staking (drivers/merchants) remains in the main web/mobile apps.
-- Keep `TOKEN_SYSTEM_ENABLED` / `STAKING_SYSTEM_ENABLED` false until legal review.
+- `TOKEN_SYSTEM_ENABLED` / `STAKING_SYSTEM_ENABLED` / `CLAIM_CUSTODIAL_ENABLED` / `TRIP_RECORDING_ENABLED` are `true` (see `.env.example`). On-chain mint/stake still need contract addresses + RPC configured.

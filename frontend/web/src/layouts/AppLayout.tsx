@@ -19,6 +19,8 @@ import {
   HelpCircle,
   Camera,
   ChevronDown,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import MovrLogoMark from '../components/MovrLogoMark';
 import { useTheme } from '../theme/ThemeProvider';
@@ -53,7 +55,7 @@ function formatDateTime(d: Date) {
 
 const AppLayout: React.FC = () => {
   const { user, logout, setUser } = useAuthStore();
-  const { mode, cyclePreference } = useTheme();
+  const { mode, setPreference } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -149,9 +151,7 @@ const AppLayout: React.FC = () => {
     <>
       <div className="flex items-center gap-2 px-2 mb-6">
         <MovrLogoMark className="w-9 h-9" />
-        <span className="text-xl font-black" style={{ color: colors.pureWhite }}>
-          MOVR
-        </span>
+        <span className="text-xl font-black text-text-primary">MOVR</span>
       </div>
 
       <nav className="space-y-1 flex-1 overflow-y-auto">
@@ -165,8 +165,8 @@ const AppLayout: React.FC = () => {
               onClick={() => (onNavigate ? onNavigate(item.path) : go(item.path))}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-movr-gradient text-pure-white'
-                  : 'text-text-secondary hover:text-pure-white hover:bg-surface-elevated'
+                  ? 'bg-movr-gradient text-brand-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
               }`}
             >
               <Icon size={16} />
@@ -179,7 +179,7 @@ const AppLayout: React.FC = () => {
       <button
         type="button"
         onClick={handleLogout}
-        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-text-secondary hover:text-pure-white hover:bg-surface-elevated w-full"
+        className="mt-6 flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-elevated w-full"
       >
         <LogOut size={16} /> Sign out
       </button>
@@ -187,7 +187,7 @@ const AppLayout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-surface text-pure-white flex font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-surface text-text-primary flex font-[Poppins,Montserrat,sans-serif]">
       <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-jet-black p-4 flex-col sticky top-0 h-screen">
         <SidebarNav />
       </aside>
@@ -204,7 +204,7 @@ const AppLayout: React.FC = () => {
             <div className="flex justify-end mb-2">
               <button
                 type="button"
-                className="p-2 text-text-secondary hover:text-pure-white"
+                className="p-2 text-text-secondary hover:text-text-primary"
                 onClick={() => setIsMenuOpen(false)}
                 aria-label="Close"
               >
@@ -245,11 +245,12 @@ const AppLayout: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={cyclePreference}
-              className="hidden sm:inline-flex rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary"
-              title="Cycle appearance"
+              onClick={() => setPreference(mode === 'light' ? 'dark' : 'light')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface-elevated text-text-primary"
+              aria-label={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              title={mode === 'light' ? 'Dark mode' : 'Light mode'}
             >
-              {mode === 'light' ? 'Light' : 'Dark'}
+              {mode === 'light' ? <Moon size={16} /> : <Sun size={16} />}
             </button>
           <div className="relative shrink-0" ref={dropdownRef}>
             <button

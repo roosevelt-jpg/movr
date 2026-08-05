@@ -1,11 +1,15 @@
 import AWS from 'aws-sdk';
+import fs from 'fs';
+import path from 'path';
 import { DatabaseService } from './database.service';
 import { IntegrationsService } from './integrations.service';
 import getLogger from '../utils/logger';
 
+const LOCAL_RECORDING_ROOT = path.resolve(__dirname, '../../uploads/trip-recordings');
+
 /**
  * Phase 28 — local record + async upload (not live stream).
- * Keep TRIP_RECORDING_ENABLED / feature flag off until privacy/legal review.
+ * Enabled via TRIP_RECORDING_ENABLED / feature_flags.trip_recording.
  */
 export class TripRecordingService {
   private logger = getLogger('trip-recording');
@@ -14,6 +18,9 @@ export class TripRecordingService {
 
   constructor(private db: DatabaseService) {
     this.integrations = new IntegrationsService(db);
+    if (!fs.existsSync(LOCAL_RECORDING_ROOT)) {
+      fs.mkdirSync(LOCAL_RECORDING_ROOT, { recursive: true });
+    }
   }
 
   async isEnabled(): Promise<boolean> {
@@ -41,6 +48,16 @@ export class TripRecordingService {
     return Number(process.env.TRIP_RECORDING_RETENTION_HOURS) || this.retentionHoursDefault;
   }
 
+  private async hasS3Credentials(): Promise<boolean> {
+    const accessKeyId =
+      (await this.integrations.getCredential('aws_s3', 'access_key_id').catch(() => null)) ||
+      process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey =
+      (await this.integrations.getCredential('aws_s3', 'secret_access_key').catch(() => null)) ||
+      process.env.AWS_SECRET_ACCESS_KEY;
+    return Boolean(accessKeyId && secretAccessKey);
+  }
+
   private async s3Client() {
     const accessKeyId =
       (await this.integrations.getCredential('aws_s3', 'access_key_id')) ||
@@ -61,6 +78,14 @@ export class TripRecordingService {
       process.env.AWS_S3_BUCKET ||
       'movr-documents'
     );
+  }
+
+  private apiPublicBase() {
+    return (
+      process.env.API_PUBLIC_URL ||
+      process.env.PUBLIC_API_URL ||
+      `http://localhost:${process.env.PORT || 3000}`
+    ).replace(/\/$/, '');
   }
 
   async logRiderNotice(rideId: string) {
@@ -99,7 +124,7 @@ export class TripRecordingService {
 
   async startLocalRecording(rideId: string, driverId: string) {
     if (!(await this.isEnabled())) {
-      return { enabled: false, message: 'Trip recording disabled pending privacy review' };
+      return { enabled: false, message: 'Trip recording is disabled' };
     }
 
     const row = await this.db.query(
@@ -119,8 +144,26 @@ export class TripRecordingService {
     );
     if (!rec.rows[0]) throw new Error('No recording for ride');
 
-    const bucket = await this.bucketName();
     const key = `trip-recordings/${rideId}/${rec.rows[0].id}.mp4`;
+
+    await this.db.query(
+      `UPDATE trip_recordings SET status = 'uploading', cloud_storage_key = $1 WHERE id = $2`,
+      [key, rec.rows[0].id]
+    );
+
+    if (!(await this.hasS3Credentials())) {
+      return {
+        uploadUrl: `${this.apiPublicBase()}/api/v1/rides/${rideId}/recording/upload-body`,
+        key,
+        recordingId: rec.rows[0].id,
+        expiresInSeconds: 3600,
+        chunked: false,
+        local: true,
+        resumeHint: 'PUT raw video body to upload-body (local storage fallback when S3 unset)',
+      };
+    }
+
+    const bucket = await this.bucketName();
     const s3 = await this.s3Client();
     const uploadUrl = s3.getSignedUrl('putObject', {
       Bucket: bucket,
@@ -129,19 +172,33 @@ export class TripRecordingService {
       Expires: 3600,
     });
 
-    await this.db.query(
-      `UPDATE trip_recordings SET status = 'uploading', cloud_storage_key = $1 WHERE id = $2`,
-      [key, rec.rows[0].id]
-    );
-
     return {
       uploadUrl,
       key,
       recordingId: rec.rows[0].id,
       expiresInSeconds: 3600,
       chunked: true,
+      local: false,
       resumeHint: 'Use HTTP PUT; retry failed ranges; prefer Wi-Fi',
     };
+  }
+
+  /** Persist recording bytes when S3 is not configured (dev / local). */
+  async saveLocalUploadBody(rideId: string, buffer: Buffer) {
+    const rec = await this.db.query(
+      `SELECT * FROM trip_recordings WHERE ride_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [rideId]
+    );
+    if (!rec.rows[0]) throw new Error('No recording for ride');
+    const filename = `${rec.rows[0].id}.mp4`;
+    const full = path.join(LOCAL_RECORDING_ROOT, filename);
+    fs.writeFileSync(full, buffer);
+    const key = `local:${filename}`;
+    await this.db.query(
+      `UPDATE trip_recordings SET cloud_storage_key = $1, status = 'uploading' WHERE id = $2`,
+      [key, rec.rows[0].id]
+    );
+    return { key, bytes: buffer.length, path: `/uploads/trip-recordings/${filename}` };
   }
 
   async completeUpload(rideId: string, localDurationSeconds?: number) {
@@ -172,7 +229,6 @@ export class TripRecordingService {
        RETURNING *`,
       [adminId, rideId]
     );
-    // If no row yet (SOS mid-trip), create a flagged placeholder
     if (!row.rows[0]) {
       const inserted = await this.db.query(
         `INSERT INTO trip_recordings (ride_id, driver_id, status, flagged_for_dispute, flagged_at, flagged_by_admin_id, retention_expires_at)
@@ -201,7 +257,6 @@ export class TripRecordingService {
     return row.rows[0];
   }
 
-  /** Validate incident ref against SOS or explicit DISPUTE- prefix (no browsing without reason). */
   async assertIncidentRef(rideId: string, incidentRef: string) {
     if (!incidentRef || !String(incidentRef).trim()) {
       throw new Error('incident reference required');
@@ -270,16 +325,31 @@ export class TripRecordingService {
       throw new Error('No flagged uploaded recording for this ride');
     }
 
-    const bucket = await this.bucketName();
-    const s3 = await this.s3Client();
-    // Inline disposition — playback, not a forced download
-    const url = s3.getSignedUrl('getObject', {
-      Bucket: bucket,
-      Key: rec.rows[0].cloud_storage_key,
-      Expires: 300,
-      ResponseContentDisposition: 'inline',
-      ResponseContentType: 'video/mp4',
-    });
+    const key = String(rec.rows[0].cloud_storage_key);
+    let url: string;
+
+    if (key.startsWith('local:')) {
+      const filename = key.slice('local:'.length);
+      url = `${this.apiPublicBase()}/uploads/trip-recordings/${filename}`;
+    } else if (!(await this.hasS3Credentials())) {
+      const basename = path.basename(key);
+      const localFile = path.join(LOCAL_RECORDING_ROOT, basename);
+      if (fs.existsSync(localFile)) {
+        url = `${this.apiPublicBase()}/uploads/trip-recordings/${basename}`;
+      } else {
+        throw new Error('Local recording file missing');
+      }
+    } else {
+      const bucket = await this.bucketName();
+      const s3 = await this.s3Client();
+      url = s3.getSignedUrl('getObject', {
+        Bucket: bucket,
+        Key: key,
+        Expires: 300,
+        ResponseContentDisposition: 'inline',
+        ResponseContentType: 'video/mp4',
+      });
+    }
 
     await this.db.query(
       `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, metadata)
@@ -309,16 +379,26 @@ export class TripRecordingService {
          AND retention_expires_at < NOW()`
     );
 
-    const bucket = await this.bucketName();
-    const s3 = await this.s3Client();
+    const useS3 = await this.hasS3Credentials();
+    const bucket = useS3 ? await this.bucketName() : null;
+    const s3 = useS3 ? await this.s3Client() : null;
 
     for (const row of due.rows) {
       try {
         if (row.cloud_storage_key) {
-          await s3
-            .deleteObject({ Bucket: bucket, Key: row.cloud_storage_key })
-            .promise()
-            .catch(() => undefined);
+          const key = String(row.cloud_storage_key);
+          if (key.startsWith('local:')) {
+            const full = path.join(LOCAL_RECORDING_ROOT, key.slice('local:'.length));
+            if (fs.existsSync(full)) fs.unlinkSync(full);
+          } else if (s3 && bucket) {
+            await s3
+              .deleteObject({ Bucket: bucket, Key: key })
+              .promise()
+              .catch(() => undefined);
+          } else {
+            const full = path.join(LOCAL_RECORDING_ROOT, path.basename(key));
+            if (fs.existsSync(full)) fs.unlinkSync(full);
+          }
         }
         await this.db.query(
           `UPDATE trip_recordings SET status = 'deleted', cloud_storage_key = NULL WHERE id = $1`,

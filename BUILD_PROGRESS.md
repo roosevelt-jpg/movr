@@ -1,24 +1,28 @@
 # Build Progress — movr-cursor-build-prompts
 
-## Status: **Playbook complete** (Phases 0D–28, including previously held 5B / 7 / 8 / 9)
+## Status: **Playbook complete** (Phases 0D–28) — all product flags enabled
 
 | Batch | Status |
 |---|---|
-| 0D–5A, 6, 10–28 | Done (prior sessions) |
-| 5B DVT · 7 Staking · 8 Claims · 9 Staking webapp | Done |
+| 0D–5A, 6, 10–28 | Done |
+| 5B DVT · 7 Staking · 8 Claims · 9 Staking webapp | Done · **enabled** |
 
-## Feature flags (keep off until legal / privacy review)
-- `TOKEN_SYSTEM_ENABLED=false`
-- `STAKING_SYSTEM_ENABLED=false`
-- `CLAIM_CUSTODIAL_ENABLED=false`
-- `TRIP_RECORDING_ENABLED=false`
+## Feature flags (env)
+- `TOKEN_SYSTEM_ENABLED=true`
+- `STAKING_SYSTEM_ENABLED=true`
+- `CLAIM_CUSTODIAL_ENABLED=true`
+- `TRIP_RECORDING_ENABLED=true`
 
 ## Hygiene
-- Migrations `001`→`031` under `backend/migrations/` (030 Africa currencies; **031 CMS pages/sections**)
-- Backend boots on `:3000` with root `.env` loaded (`DB_USER=movr`); `/health` + `/api/v1/public/staking/stats` OK
+- Migrations `001`→`040` under `backend/migrations/` (see `000_MIGRATION_INDEX.md`)
+- Backend boots on `:3000` with root `.env` loaded (`DB_USER=movr`); `/health` OK
 - Public localize: `GET /api/v1/public/countries`, `/resolve`, `/city-pricing`
 - **CMS:** `GET /api/v1/public/cms/pages/:slug` · Admin **Site content** (`/admin/cms`) · seed `pnpm --filter @movr/backend run db:seed-cms`
-- Marketing pages (home, merchants, download, help, terms, privacy, onboarding, footer) are CMS-driven — no hardcoded copy
-- Pricing displays in the user's local African currency (web/admin + city_pricing)
-- Deploy DVT / Merkle contracts on Polygon Amoy when ready (`backend/blockchain`)
-- Token & trip-recording launches need separate compliance review
+- Marketing pages are CMS-driven — no hardcoded copy
+- Pricing displays in the user's local African currency
+- Direct uploads: `POST /api/v1/uploads` + `POST /api/v1/users/avatar`
+- Dual theme across web, admin, merchant, mobile
+- **Claims:** Admin **Airdrops** → user `/claim`
+- **Trip recording:** rider notice + driver upload + admin Ride ops playback
+- DB `feature_flags` all enabled at 100% rollout (migration 040)
+- Deploy DVT / Merkle contracts on Polygon Amoy when ready (`backend/blockchain`) — on-chain paths need contract addresses in env

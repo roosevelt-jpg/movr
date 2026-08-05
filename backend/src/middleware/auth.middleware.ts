@@ -132,8 +132,9 @@ export const requireMerchant = requireRole('merchant');
 
 /**
  * Phase 28 — recording playback: admin + trust_and_safety role (not general admin).
+ * Loads admin_roles from DB so stale JWTs without the claim still work after migration 037.
  */
-export const requireTrustAndSafety = (
+export const requireTrustAndSafety = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
@@ -144,7 +145,18 @@ export const requireTrustAndSafety = (
       message: 'Admin access required',
     });
   }
-  const roles = req.user.roles || [];
+  let roles = req.user.roles || [];
+  if (!roles.includes('trust_and_safety')) {
+    try {
+      const { DatabaseService } = await import('../services/database.service');
+      const db = new DatabaseService();
+      const rr = await db.query(`SELECT role FROM admin_roles WHERE user_id = $1`, [req.user.id]);
+      roles = rr.rows.map((r: any) => r.role);
+      req.user.roles = roles;
+    } catch {
+      /* keep JWT roles */
+    }
+  }
   if (!roles.includes('trust_and_safety')) {
     return res.status(403).json({
       status: 'error',

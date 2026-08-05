@@ -4,7 +4,10 @@ import { Link } from 'react-router-dom';
 const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 function authHeaders() {
-  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  const token =
+    localStorage.getItem('movr_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

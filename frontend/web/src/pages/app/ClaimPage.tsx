@@ -6,7 +6,10 @@ const CLAIM_DAPP =
   'http://localhost:5174/claim';
 
 function authHeaders() {
-  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  const token =
+    localStorage.getItem('movr_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -17,11 +20,13 @@ function authHeaders() {
 const ClaimPage: React.FC = () => {
   const [eligibility, setEligibility] = useState<any>(null);
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const load = () => {
     fetch(`${API}/token/claim/eligibility`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((j) => setEligibility(j.data));
+      .then((j) => setEligibility(j.data))
+      .catch(() => setEligibility(null));
   };
 
   useEffect(() => {
@@ -30,14 +35,19 @@ const ClaimPage: React.FC = () => {
 
   const claimCustodial = async () => {
     setMsg('');
-    const res = await fetch(`${API}/token/claim/custodial`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: '{}',
-    });
-    const json = await res.json();
-    setMsg(json.message || (res.ok ? 'Claimed via custodial wallet' : 'Failed'));
-    load();
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/token/claim/custodial`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: '{}',
+      });
+      const json = await res.json();
+      setMsg(json.message || (res.ok ? 'Claimed via custodial wallet' : 'Failed'));
+      load();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const openExternal = () => {
@@ -51,24 +61,27 @@ const ClaimPage: React.FC = () => {
         <p className="text-pure-white/80 mt-2">Merkle airdrop eligibility from the latest snapshot</p>
       </div>
 
-      <div className="bg-white rounded-xl border p-6 space-y-4">
+      <div className="bg-surface-elevated rounded-xl border border-border p-6 space-y-4 text-text-primary">
         {!eligibility?.eligible ? (
-          <p className="text-gray-600">No claimable allocation for your account right now.</p>
+          <p className="text-text-secondary">No claimable allocation for your account right now.</p>
         ) : (
           <>
             <p className="text-4xl font-bold">{Number(eligibility.amount).toFixed(2)} DVT</p>
-            <p className="text-sm text-gray-500 font-mono">{eligibility.address}</p>
+            <p className="text-sm text-text-secondary font-mono">{eligibility.address}</p>
             <p className="text-sm">Mode: {eligibility.claimMode}</p>
             <div className="flex flex-wrap gap-3">
               {eligibility.claimMode === 'custodial' ? (
                 <button
+                  type="button"
+                  disabled={busy}
                   onClick={claimCustodial}
-                  className="bg-electric-violet text-pure-white px-5 py-2 rounded-lg font-semibold"
+                  className="bg-electric-violet text-pure-white px-5 py-2 rounded-lg font-semibold disabled:opacity-60"
                 >
-                  Claim (custodial)
+                  {busy ? 'Claiming…' : 'Claim (custodial)'}
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={openExternal}
                   className="bg-motion-blue text-pure-white px-5 py-2 rounded-lg font-semibold"
                 >
@@ -78,7 +91,7 @@ const ClaimPage: React.FC = () => {
             </div>
           </>
         )}
-        {msg && <p className="text-sm">{msg}</p>}
+        {msg && <p className="text-sm text-text-secondary">{msg}</p>}
       </div>
     </div>
   );

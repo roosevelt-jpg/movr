@@ -19,6 +19,7 @@ import AdminOverviewPage from './pages/AdminOverviewPage';
 import KycQueuePage from './pages/KycQueuePage';
 import SmsChannelPage from './pages/SmsChannelPage';
 import FeatureFlagsPage from './pages/FeatureFlagsPage';
+import AirdropsPage from './pages/AirdropsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import CmsPagesPage from './pages/CmsPagesPage';
@@ -174,6 +175,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <FeatureFlagsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/airdrops"
+          element={
+            <RequireAdmin>
+              <AirdropsPage />
             </RequireAdmin>
           }
         />

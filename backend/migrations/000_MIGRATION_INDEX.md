@@ -40,15 +40,21 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 |---|---|
 | 029_ride_experience.sql | Ride experience extras |
 | 030_africa_currencies.sql | Africa-wide currencies + city pricing / FX |
+| 031_cms.sql | CMS pages & sections (marketing copy) |
+| 032_storefront_catalog.sql | Store banners, product categories, catalog links |
+| 033_driver_kyc_status.sql | Driver KYC status + unique user index |
+| 034_referrals_sos_gaps.sql | Referral milestones, reward config, SOS snapshot columns |
 | 035_subscription_plans_seed.sql | Subscription plan seeds |
 | 036_vehicle_pricing_gaps.sql | Phase 24/25: Sedan naming, driver_vehicles, zone demand seed |
 | 037_trip_recording_acl.sql | Phase 28: admin_roles (trust_and_safety), driver recording consent, trip_recording flag |
 | 038_driver_vehicle_photo.sql | Driver vehicle photo_url + profile columns for direct upload |
+| 039_enable_claims_trip_recording.sql | Enable trip_recording feature flag (Phase 28 live); claims via CLAIM_CUSTODIAL_ENABLED |
+| 040_enable_all_feature_flags.sql | Enable all feature_flags (cross-border, rentals, voice, ussd, trip recording) at 100% |
 
 ## Notes
 
 - Baseline schema lives in `backend/scripts/init.sql` (users, rides, payments, etc.).
 - Migrations are ordered by **execution order**, not gap-analysis row number.
 - If a future phase must insert between existing migrations, append at the end with the next number.
-- Phases 5B / 7 / 8 / 9 (token / staking / claims / staking webapp) remain **on hold** for live enablement (flags off until legal/privacy go-ahead).
+- Env live switches: `TOKEN_SYSTEM_ENABLED`, `STAKING_SYSTEM_ENABLED`, `CLAIM_CUSTODIAL_ENABLED`, `TRIP_RECORDING_ENABLED` (all `true` in `.env.example`).
 - Brand logo files live in `design-system/assets/logo/` — do not recreate the mark as styled text.

@@ -604,6 +604,30 @@ tripRecordingRouter.post(
   }
 );
 
+/** Local/dev fallback when S3 is unset — PUT raw video bytes. */
+tripRecordingRouter.put(
+  '/rides/:id/recording/upload-body',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        req.on('end', () => resolve());
+        req.on('error', reject);
+      });
+      const buffer = Buffer.concat(chunks);
+      if (!buffer.length) {
+        return res.status(400).json({ status: 'error', message: 'empty body' });
+      }
+      const data = await recordings.saveLocalUploadBody(req.params.id, buffer);
+      res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 tripRecordingRouter.post(
   '/rides/:id/recording/complete',
   authenticateToken,
