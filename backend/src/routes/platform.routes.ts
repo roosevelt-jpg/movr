@@ -852,6 +852,66 @@ adminOpsRouter.get('/kyc-queue', authenticateToken, requireAdmin, async (_req: a
   }
 });
 
+/** Approve/reject KYC — drivers update drivers.kyc_status; merchants use merchant id; both publish attestation. */
+adminOpsRouter.patch(
+  '/kyc-queue/:id',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, role } = req.body as { status?: string; role?: string };
+      if (!['approved', 'rejected', 'pending'].includes(String(status))) {
+        return res.status(400).json({ status: 'error', message: 'Invalid status' });
+      }
+      const mapped =
+        status === 'approved' ? 'Verified' : status === 'rejected' ? 'Rejected' : 'Pending';
+      let userId: string | null = null;
+
+      if (String(role).toLowerCase() === 'merchant') {
+        const result = await db.query(
+          `UPDATE merchants SET kyc_status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+          [status, req.params.id]
+        );
+        if (!result.rows[0]) {
+          return res.status(404).json({ status: 'error', message: 'Merchant not found' });
+        }
+        userId = result.rows[0].user_id;
+      } else {
+        userId = req.params.id;
+        const updated = await db.query(
+          `UPDATE drivers SET kyc_status = $1 WHERE user_id = $2 RETURNING id`,
+          [status, userId]
+        );
+        if (!updated.rows[0]) {
+          await db.query(
+            `INSERT INTO drivers (user_id, kyc_status) VALUES ($1, $2)`,
+            [userId, status]
+          ).catch(async () => {
+            // drivers.kyc_status may be missing on older schemas — try alter-less fallthrough
+            await db.query(`UPDATE users SET status = $1 WHERE id = $2`, [
+              status === 'approved' ? 'active' : 'pending',
+              userId,
+            ]);
+          });
+        }
+      }
+
+      if (userId) {
+        await kyc.publishAttestation(userId, mapped as any, {
+          documentType: role === 'Merchant' ? 'merchant_kyc' : 'driver_kyc',
+          verificationMethod: 'manual',
+          approvalTimestamp: new Date(),
+          verifierAdminId: req.user!.id,
+        });
+      }
+
+      res.json({ status: 'success', data: { id: req.params.id, status, attestation: mapped } });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 // --- Phase 18 finance ---
 adminFinanceRouter.get('/summary', authenticateToken, requireAdmin, async (_req: any, res: Response) => {
   const num = async (sql: string, field = 'c') => {

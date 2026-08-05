@@ -20,6 +20,7 @@ import FeatureFlagsPage from './pages/FeatureFlagsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import CmsPagesPage from './pages/CmsPagesPage';
 import MarketplaceCatalogPage from './pages/MarketplaceCatalogPage';
+import MerchantsOversightPage from './pages/MerchantsOversightPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -97,6 +98,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <UsersListPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/merchants"
+          element={
+            <RequireAdmin>
+              <MerchantsOversightPage />
             </RequireAdmin>
           }
         />

@@ -1,8 +1,31 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  // Expo SecureStore / AsyncStorage can replace this; keep simple for shared screens package.
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export type WalletTx = {
+  id: string;
+  type: string;
+  amount: number;
+  reference?: string;
+  created_at: string;
+};
+
 type WalletState = {
+  balance: number;
+  rewardsBalance: number;
+  currency: string;
+  transactions: WalletTx[];
+  loading: boolean;
+  refresh: () => Promise<void>;
+  /** Phase 5B token fields kept for TokenScreen compatibility */
   dvtBalance: number;
   dvtPending: number;
   dvtOnchain: number;
@@ -11,6 +34,12 @@ type WalletState = {
 };
 
 const WalletContext = createContext<WalletState>({
+  balance: 0,
+  rewardsBalance: 0,
+  currency: 'GHS',
+  transactions: [],
+  loading: false,
+  refresh: async () => undefined,
   dvtBalance: 0,
   dvtPending: 0,
   dvtOnchain: 0,
@@ -18,17 +47,44 @@ const WalletContext = createContext<WalletState>({
   refreshDvt: async () => undefined,
 });
 
+/**
+ * Single wallet for Ride / Shop / Parcel / Rental (Phase 1).
+ * Backed by GET /api/v1/wallet — not per-module wallets.
+ */
 export function WalletProvider({ children }: { children: ReactNode }) {
+  const [balance, setBalance] = useState(0);
+  const [rewardsBalance, setRewardsBalance] = useState(0);
+  const [currency, setCurrency] = useState('GHS');
+  const [transactions, setTransactions] = useState<WalletTx[]>([]);
+  const [loading, setLoading] = useState(false);
   const [dvtBalance, setDvtBalance] = useState(0);
   const [dvtPending, setDvtPending] = useState(0);
   const [dvtOnchain, setDvtOnchain] = useState(0);
   const [dvtHistory, setDvtHistory] = useState<any[]>([]);
 
-  const refreshDvt = async () => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/wallet`, { headers: authHeaders() });
+      const j = await res.json();
+      if (j?.data) {
+        setBalance(Number(j.data.balance || 0));
+        setRewardsBalance(Number(j.data.rewardsBalance ?? j.data.points_balance ?? 0));
+        setCurrency(String(j.data.currency || 'GHS'));
+        setTransactions(Array.isArray(j.data.transactions) ? j.data.transactions : []);
+      }
+    } catch {
+      /* offline */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const refreshDvt = useCallback(async () => {
     try {
       const [b, h] = await Promise.all([
-        fetch(`${API}/token/balance`).then((r) => r.json()),
-        fetch(`${API}/token/history`).then((r) => r.json()),
+        fetch(`${API}/token/balance`, { headers: authHeaders() }).then((r) => r.json()),
+        fetch(`${API}/token/history`, { headers: authHeaders() }).then((r) => r.json()),
       ]);
       if (b?.data) {
         setDvtBalance(Number(b.data.total || 0));
@@ -39,15 +95,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch {
       /* offline */
     }
-  };
+  }, []);
 
   useEffect(() => {
+    refresh();
     refreshDvt();
-  }, []);
+  }, [refresh, refreshDvt]);
 
   return (
     <WalletContext.Provider
-      value={{ dvtBalance, dvtPending, dvtOnchain, dvtHistory, refreshDvt }}
+      value={{
+        balance,
+        rewardsBalance,
+        currency,
+        transactions,
+        loading,
+        refresh,
+        dvtBalance,
+        dvtPending,
+        dvtOnchain,
+        dvtHistory,
+        refreshDvt,
+      }}
     >
       {children}
     </WalletContext.Provider>

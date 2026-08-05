@@ -24,6 +24,7 @@ export default defineConfig({
       '@movr/format': path.resolve(__dirname, '../../design-system/format.ts'),
       '@movr/design-system/theme': path.resolve(__dirname, '../../design-system/theme.ts'),
       '@movr/design-system/assets': path.resolve(__dirname, '../../design-system/assets'),
+      '@movr/design-system/components': path.resolve(__dirname, '../../design-system/components'),
       '@movr/design-system': path.resolve(__dirname, '../../design-system/theme.ts'),
     },
   },

@@ -70,6 +70,42 @@ walletRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+walletRouter.get('/balance', async (req: AuthRequest, res: Response) => {
+  try {
+    // Alias of GET / so older clients calling /wallet/balance still hit live data
+    const userId = req.user!.id;
+    let wallet = await db.query(
+      `SELECT id, user_id, balance_fiat AS balance, COALESCE(points_balance, balance_points, 0) AS points_balance,
+              balance_tokens, currency, last_updated
+       FROM wallets WHERE user_id = $1`,
+      [userId]
+    );
+    if (!wallet.rows[0]) {
+      const { currency } = await resolveUserCurrency(userId);
+      await db.query(
+        `INSERT INTO wallets (user_id, balance_fiat, balance_points, points_balance, currency)
+         VALUES ($1, 0, 0, 0, $2)`,
+        [userId, currency]
+      );
+      wallet = await db.query(
+        `SELECT id, user_id, balance_fiat AS balance, COALESCE(points_balance, balance_points, 0) AS points_balance,
+                balance_tokens, currency, last_updated
+         FROM wallets WHERE user_id = $1`,
+        [userId]
+      );
+    }
+    res.json({
+      status: 'success',
+      data: {
+        ...wallet.rows[0],
+        rewardsBalance: wallet.rows[0].points_balance,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 walletRouter.get('/addresses', async (req: AuthRequest, res: Response) => {
   try {
     const result = await db.query(

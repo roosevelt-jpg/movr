@@ -16,46 +16,35 @@ export default function WalletScreen({
   onTopUp?: () => void;
   onRedeem?: () => void;
 }) {
-  const { dvtBalance, refreshDvt } = useWallet();
+  const { balance: ctxBalance, rewardsBalance, transactions, currency, refresh, dvtBalance, refreshDvt } =
+    useWallet();
   const [balance, setBalance] = useState(0);
   const [points, setPoints] = useState(0);
   const [estimatedDvt, setEstimatedDvt] = useState(0);
   const [activity, setActivity] = useState<any[]>([]);
 
   useEffect(() => {
+    refresh();
     refreshDvt();
-    fetch(`${API}/wallet`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.data?.balance_fiat != null) setBalance(Number(j.data.balance_fiat));
-        if (j?.data?.points_balance != null) setPoints(Number(j.data.points_balance));
-      })
-      .catch(() => undefined);
+    setBalance(ctxBalance);
+    setPoints(rewardsBalance);
+    setActivity(
+      transactions.slice(0, 10).map((t) => ({
+        id: t.id,
+        title: t.type || t.reference || 'Transaction',
+        when: t.created_at ? new Date(t.created_at).toLocaleString() : '',
+        amount: Number(t.amount),
+        kind: 'fiat',
+        status: 'Completed',
+      }))
+    );
     fetch(`${API}/points/estimated-dvt`)
       .then((r) => r.json())
       .then((j) => {
         if (j?.data?.estimatedDvt != null) setEstimatedDvt(Number(j.data.estimatedDvt));
-        if (j?.data?.points != null) setPoints(Number(j.data.points));
       })
       .catch(() => undefined);
-    fetch(`${API}/wallet/transactions`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (Array.isArray(j?.data)) {
-          setActivity(
-            j.data.slice(0, 10).map((t: any) => ({
-              id: t.id,
-              title: t.type || t.reference || 'Transaction',
-              when: t.created_at ? new Date(t.created_at).toLocaleString() : '',
-              amount: Number(t.amount),
-              kind: 'fiat',
-              status: 'Completed',
-            }))
-          );
-        }
-      })
-      .catch(() => undefined);
-  }, []);
+  }, [ctxBalance, rewardsBalance, transactions, refresh, refreshDvt]);
 
   const dvtDisplay = estimatedDvt || dvtBalance || 0;
 
@@ -66,7 +55,7 @@ export default function WalletScreen({
       <View style={styles.balanceCard}>
         <View style={styles.balanceGlow} />
         <Text style={styles.label}>Available balance</Text>
-        <Text style={styles.balance}>{formatCurrency(balance, 'GHS')}</Text>
+        <Text style={styles.balance}>{formatCurrency(balance, currency || 'GHS')}</Text>
         <View style={styles.divider} />
         <View style={styles.pointsRow}>
           <View>

@@ -863,6 +863,73 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
   }
 });
 
+merchantRouter.get(
+  '/balance',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const earned = await db.query(
+        `SELECT COALESCE(SUM(o.total), 0)::float AS total
+         FROM marketplace_orders o
+         JOIN stores s ON s.id = o.store_id
+         WHERE s.merchant_id = $1
+           AND o.status IN ('completed', 'paid', 'out_for_delivery', 'ready_for_pickup', 'preparing', 'accepted')`,
+        [merchant.id]
+      );
+      const paidOut = await db.query(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM merchant_payouts
+         WHERE merchant_id = $1 AND status IN ('processing', 'completed', 'paid')`,
+        [merchant.id]
+      ).catch(() => ({ rows: [{ total: 0 }] }));
+      const pending = await db.query(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM merchant_payouts
+         WHERE merchant_id = $1 AND status IN ('pending', 'processing')`,
+        [merchant.id]
+      ).catch(() => ({ rows: [{ total: 0 }] }));
+      const total = Number(earned.rows[0]?.total || 0);
+      const withdrawn = Number(paidOut.rows[0]?.total || 0);
+      res.json({
+        status: 'success',
+        data: {
+          available: Math.max(0, total - withdrawn),
+          pending: Number(pending.rows[0]?.total || 0),
+          balance: Math.max(0, total - withdrawn),
+          currency: merchant.country === 'NG' ? 'NGN' : 'GHS',
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.get(
+  '/payouts',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const rows = await db.query(
+        `SELECT id, amount, currency, status, reference_id, created_at,
+                COALESCE(reference_id, 'Payout') AS label
+         FROM merchant_payouts
+         WHERE merchant_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [merchant.id]
+      ).catch(() => ({ rows: [] }));
+      res.json({ status: 'success', data: rows.rows });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 merchantRouter.post(
   '/payouts/withdraw',
   authenticateToken,

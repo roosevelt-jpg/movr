@@ -1,46 +1,77 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import { cartApi, storesApi } from '../../services/api';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const SIZES = ['S', 'M', 'L', 'XL'] as const;
-const SWATCHES = [colors.motionBlue, colors.border, colors.textPrimary] as const;
+type Variant = { id: string; name: string; price_delta?: number };
 
-/** Product detail — size/color, wishlist, add to cart (keeps cart API when available). */
+/** Product detail — loads product/variants, add to cart via API. */
 export default function ProductDetailScreen({
   productId,
-  name = 'Cotton shirt',
-  price = 120,
+  storeId,
+  name: nameProp = 'Product',
+  price: priceProp = 0,
   onAdded,
 }: {
   productId?: string;
+  storeId?: string;
   name?: string;
   price?: number;
   onAdded?: () => void;
 }) {
-  const [size, setSize] = useState<(typeof SIZES)[number]>('M');
-  const [color, setColor] = useState(0);
+  const [name, setName] = useState(nameProp);
+  const [price, setPrice] = useState(priceProp);
+  const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [variantId, setVariantId] = useState<string | undefined>();
+  const [qty, setQty] = useState(1);
   const [wish, setWish] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    if (!productId || !storeId) return;
+    storesApi
+      .products(storeId)
+      .then((res) => {
+        const rows = res.data?.data || [];
+        const list = Array.isArray(rows) ? rows : rows.products || [];
+        const p = list.find((x: any) => String(x.id) === String(productId));
+        if (!p) return;
+        setName(p.name || nameProp);
+        setPrice(Number(p.price || priceProp));
+        setDescription(p.description || '');
+        setImageUrl(p.image_url || null);
+        const vs: Variant[] = Array.isArray(p.variants) ? p.variants : [];
+        setVariants(vs);
+        if (vs[0]) setVariantId(vs[0].id);
+      })
+      .catch(() => undefined);
+  }, [productId, storeId]);
+
+  const unit =
+    price + Number(variants.find((v) => v.id === variantId)?.price_delta || 0);
 
   const addToCart = async () => {
+    if (!productId || !storeId) {
+      setMsg('Missing product');
+      return;
+    }
     setAdding(true);
+    setMsg('');
     try {
-      if (productId) {
-        await fetch(`${API}/cart/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productId,
-            quantity: 1,
-            variant: `${size}, color ${color}`,
-          }),
-        });
-      }
+      await cartApi.addItem({
+        storeId,
+        productId,
+        variantId,
+        quantity: qty,
+      });
+      setMsg('Added to cart');
       onAdded?.();
-    } catch {
-      /* offline / demo */
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || e?.message || 'Could not add to cart');
     } finally {
       setAdding(false);
     }
@@ -49,54 +80,61 @@ export default function ProductDetailScreen({
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.image} />
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.image} />
+        ) : (
+          <View style={styles.image} />
+        )}
         <Text style={styles.title}>{name}</Text>
-        <Text style={styles.price}>{formatCurrency(price, 'GHS')}</Text>
+        <Text style={styles.price}>{formatCurrency(unit, 'GHS')}</Text>
+        {description ? <Text style={styles.desc}>{description}</Text> : null}
 
-        <Text style={styles.label}>Size</Text>
+        {variants.length ? (
+          <>
+            <Text style={styles.label}>Variant</Text>
+            <View style={styles.row}>
+              {variants.map((v) => {
+                const active = variantId === v.id;
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => setVariantId(v.id)}
+                    style={[styles.sizeChip, active && styles.sizeActive]}
+                  >
+                    <Text style={[styles.sizeText, active && styles.sizeTextOn]}>{v.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        <Text style={styles.label}>Quantity</Text>
         <View style={styles.row}>
-          {SIZES.map((s) => {
-            const active = size === s;
-            return (
-              <Pressable
-                key={s}
-                onPress={() => setSize(s)}
-                style={[styles.sizeChip, active && styles.sizeActive]}
-              >
-                <Text style={[styles.sizeText, active && styles.sizeTextOn]}>{s}</Text>
-              </Pressable>
-            );
-          })}
+          <Pressable
+            style={styles.sizeChip}
+            onPress={() => setQty((q) => Math.max(1, q - 1))}
+          >
+            <Text style={styles.sizeText}>−</Text>
+          </Pressable>
+          <Text style={styles.qty}>{qty}</Text>
+          <Pressable style={styles.sizeChip} onPress={() => setQty((q) => q + 1)}>
+            <Text style={styles.sizeText}>+</Text>
+          </Pressable>
         </View>
 
-        <Text style={styles.label}>Color</Text>
-        <View style={styles.row}>
-          {SWATCHES.map((c, i) => (
-            <Pressable
-              key={c}
-              onPress={() => setColor(i)}
-              style={[
-                styles.swatch,
-                { backgroundColor: c },
-                color === i && styles.swatchOn,
-              ]}
-            />
-          ))}
-        </View>
+        <Pressable onPress={() => setWish((w) => !w)} style={styles.wish}>
+          <Text style={styles.wishIcon}>{wish ? '♥' : '♡'}</Text>
+          <Text style={styles.wishText}>{wish ? 'Saved' : 'Wishlist'}</Text>
+        </Pressable>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => setWish((w) => !w)}
-          style={[styles.wish, wish && styles.wishOn]}
-        >
-          <Text style={styles.wishIcon}>{wish ? '♥' : '♡'}</Text>
-        </Pressable>
-        <Pressable style={styles.cta} onPress={addToCart} disabled={adding}>
-          <View style={styles.ctaGlow} />
-          <Text style={styles.ctaText}>{adding ? 'Adding…' : 'Add to cart'}</Text>
-        </Pressable>
-      </View>
+      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+
+      <Pressable style={styles.cta} onPress={addToCart} disabled={adding}>
+        <View style={styles.ctaGlow} />
+        <Text style={styles.ctaText}>{adding ? 'Adding…' : 'Add to cart'}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -110,55 +148,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     marginBottom: spacing[4],
   },
-  title: { color: colors.pureWhite, fontSize: 26, fontWeight: '700' },
-  price: { color: colors.pureWhite, fontSize: 22, fontWeight: '700', marginTop: 6 },
-  label: { color: colors.textSecondary, marginTop: spacing[5], marginBottom: spacing[2], fontSize: 13 },
-  row: { flexDirection: 'row', gap: spacing[3], alignItems: 'center' },
+  title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700' },
+  price: { color: colors.success, fontSize: 20, fontWeight: '700', marginTop: 8 },
+  desc: { color: colors.textSecondary, marginTop: 10, lineHeight: 20 },
+  label: { color: colors.textSecondary, marginTop: spacing[5], marginBottom: spacing[2] },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], alignItems: 'center' },
   sizeChip: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceElevated,
+    minWidth: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  sizeActive: { backgroundColor: colors.electricViolet },
-  sizeText: { color: colors.textSecondary, fontWeight: '700' },
+  sizeActive: { borderColor: colors.motionBlue, backgroundColor: colors.surfaceElevated },
+  sizeText: { color: colors.textSecondary, fontWeight: '600' },
   sizeTextOn: { color: colors.pureWhite },
-  swatch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  swatchOn: { borderColor: colors.pureWhite },
-  footer: {
-    position: 'absolute',
-    left: spacing[4],
-    right: spacing[4],
-    bottom: spacing[5],
-    flexDirection: 'row',
-    gap: spacing[3],
-    alignItems: 'center',
-  },
-  wish: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  wishOn: { backgroundColor: 'rgba(106,0,255,0.25)' },
+  qty: { color: colors.pureWhite, fontWeight: '700', minWidth: 24, textAlign: 'center' },
+  wish: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing[5] },
   wishIcon: { color: colors.pureWhite, fontSize: 22 },
+  wishText: { color: colors.textSecondary },
+  msg: { color: colors.success, textAlign: 'center', marginBottom: 8 },
   cta: {
-    flex: 1,
-    height: 52,
-    borderRadius: 14,
+    margin: spacing[4],
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
     backgroundColor: colors.electricViolet,
   },
   ctaGlow: {

@@ -100,9 +100,13 @@ export default function IdentityLinkPage() {
 
   const approve = async () => {
     await axios
-      .post(`${API}/identity/${userId}/attest`, {}, { headers: headers() })
+      .post(
+        `${API}/kyc/attestation/publish`,
+        { userId, status: 'Verified', documentType: 'identity_review', verificationMethod: 'manual' },
+        { headers: headers() }
+      )
       .catch(() => undefined);
-    await axios.post(`${API}/kyc/attest`, { userId }, { headers: headers() }).catch(() => undefined);
+    await load();
   };
 
   const applyOverride = async () => {

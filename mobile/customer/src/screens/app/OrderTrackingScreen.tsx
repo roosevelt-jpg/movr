@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const SOCKET_URL = (process.env.EXPO_PUBLIC_SOCKET_URL || API.replace(/\/api\/v1\/?$/, '')) as string;
 
 const STEPS = [
   { key: 'confirmed', label: 'Order confirmed' },
@@ -13,7 +14,7 @@ const STEPS = [
 
 /**
  * Order tracking — map card + timeline.
- * Subscribes to Socket.io room delivery:{orderId} when available.
+ * Subscribes to Socket.io room delivery:{orderId} when delivery_mode is movr_courier.
  */
 export default function OrderTrackingScreen({
   orderId = '4821',
@@ -22,27 +23,62 @@ export default function OrderTrackingScreen({
   orderId?: string;
   storeName?: string;
 }) {
-  const [activeIndex, setActiveIndex] = useState(2);
-  const [eta, setEta] = useState('12 min away');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [eta, setEta] = useState('—');
   const [fromStore, setFromStore] = useState(storeName);
+  const [courierPos, setCourierPos] = useState<{ lat?: number; lng?: number } | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wire socket: join `delivery:${orderId}` and listen for delivery:location
+    let socket: any = null;
+    let cancelled = false;
+
+    const applyStatus = (status: string) => {
+      const s = String(status || '').toLowerCase();
+      if (s.includes('complet') || s.includes('deliver')) setActiveIndex(3);
+      else if (s.includes('out') || s.includes('courier')) setActiveIndex(2);
+      else if (s.includes('prepar') || s.includes('accept')) setActiveIndex(1);
+      else setActiveIndex(0);
+    };
+
     fetch(`${API}/orders/${orderId}`)
       .then((r) => r.json())
       .then((j) => {
+        if (cancelled) return;
         const o = j?.data;
         if (!o) return;
         if (o.store_name) setFromStore(o.store_name);
         if (o.eta_text) setEta(o.eta_text);
-        const status = String(o.status || '').toLowerCase();
-        if (status.includes('deliver') && !status.includes('out')) setActiveIndex(3);
-        else if (status.includes('out') || status.includes('courier')) setActiveIndex(2);
-        else if (status.includes('prepar')) setActiveIndex(1);
-        else if (status.includes('confirm') || status.includes('accept') || status.includes('paid'))
-          setActiveIndex(0);
+        setDeliveryMode(o.delivery_mode || null);
+        applyStatus(o.status);
+
+        if (o.delivery_mode === 'movr_courier' || !o.delivery_mode) {
+          // Dynamic require so screens package still loads without the dep in some hosts
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { io } = require('socket.io-client');
+            socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+            socket.emit('delivery:join', orderId);
+            socket.on('delivery:location', (data: any) => {
+              if (String(data?.orderId) !== String(orderId)) return;
+              setCourierPos({ lat: data.lat, lng: data.lng });
+              if (data.eta_text) setEta(data.eta_text);
+              if (data.status) applyStatus(data.status);
+            });
+          } catch {
+            /* socket.io-client optional */
+          }
+        }
       })
       .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      if (socket) {
+        socket.off('delivery:location');
+        socket.disconnect();
+      }
+    };
   }, [orderId]);
 
   return (
@@ -50,8 +86,16 @@ export default function OrderTrackingScreen({
       <View style={styles.map}>
         <View style={styles.mapGrid} />
         <View style={styles.etaPill}>
-          <Text style={styles.etaText}>🚚  {eta}</Text>
+          <Text style={styles.etaText}>
+            🚚  {eta}
+            {deliveryMode ? ` · ${deliveryMode}` : ''}
+          </Text>
         </View>
+        {courierPos?.lat != null ? (
+          <View style={styles.courierDot}>
+            <Text style={styles.courierTxt}>📍</Text>
+          </View>
+        ) : null}
       </View>
 
       <Text style={styles.title}>Order #{String(orderId).slice(0, 4).toUpperCase()}</Text>
@@ -97,8 +141,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.surfaceElevated,
     overflow: 'hidden',
-    marginBottom: spacing[5],
-    justifyContent: 'flex-start',
+    marginBottom: spacing[4],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mapGrid: {
     ...StyleSheet.absoluteFillObject,
@@ -107,26 +152,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   etaPill: {
-    alignSelf: 'flex-start',
-    margin: spacing[3],
-    backgroundColor: colors.jetBlack,
+    backgroundColor: colors.surface,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderWidth: 1,
     borderColor: colors.border,
   },
-  etaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 13 },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-  sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[5] },
-  timeline: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    gap: spacing[4],
-  },
+  etaText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
+  courierDot: { position: 'absolute', bottom: 24, left: '45%' },
+  courierTxt: { fontSize: 22 },
+  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
+  sub: { color: colors.textSecondary, marginTop: 6, marginBottom: spacing[5] },
+  timeline: { gap: spacing[4] },
   step: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   dot: {
     width: 28,
@@ -138,8 +176,8 @@ const styles = StyleSheet.create({
   dotDone: { backgroundColor: colors.success },
   dotCurrent: { backgroundColor: colors.motionBlue },
   dotPending: { backgroundColor: colors.border },
-  check: { color: colors.surface, fontWeight: '700' },
-  stepLabel: { fontSize: 16, fontWeight: '600' },
-  stepLabelOn: { color: colors.pureWhite },
+  check: { color: colors.jetBlack, fontWeight: '700' },
+  stepLabel: { fontSize: 15 },
+  stepLabelOn: { color: colors.pureWhite, fontWeight: '600' },
   stepLabelOff: { color: colors.textSecondary },
 });

@@ -10,14 +10,15 @@ import { formatCurrency } from '../../lib/currency';
 const MODULES = [
   { id: 'Ride', icon: Car },
   { id: 'Shop', icon: Heart },
-  { id: 'Deliver', icon: Package },
-  { id: 'Rentals', icon: KeyRound },
+  { id: 'Parcel', icon: Package },
+  { id: 'Rental', icon: KeyRound },
 ] as const;
 
 const SHORTCUTS = [
   { id: 'Home', icon: Home },
   { id: 'Work', icon: Briefcase },
   { id: 'Recent', icon: Clock },
+  { id: 'Favorites', icon: Heart },
 ] as const;
 
 /** Customer web dashboard — sidebar booking + map (mockup). */
@@ -42,6 +43,25 @@ const DashboardPage: React.FC = () => {
   const { data: storesData } = useQuery('featured-stores', () =>
     marketplaceApi.getStores({ limit: 4 })
   );
+  const { data: addressesData } = useQuery('saved-addresses', () => walletApi.getAddresses());
+
+  const savedAddresses: Array<{ label: string; address: string; lat?: number; lng?: number }> =
+    addressesData?.data?.data || [];
+
+  const applySaved = (label: string) => {
+    const row = savedAddresses.find((a) => a.label.toLowerCase() === label.toLowerCase());
+    if (row) {
+      setDropoffAddress(row.address);
+      if (row.lat != null && row.lng != null) {
+        setDropoffLocation({ latitude: Number(row.lat), longitude: Number(row.lng) });
+      }
+      setActiveModule('Ride');
+      toast.success(`Destination set to ${label}`);
+      return;
+    }
+    toast(`No saved “${label}” address yet — add one from Profile`, { icon: '📍' });
+    setActiveModule('Ride');
+  };
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -90,7 +110,16 @@ const DashboardPage: React.FC = () => {
             <button
               key={s.id}
               type="button"
-              className="inline-flex items-center gap-2 rounded-full bg-surface-elevated border border-border px-4 py-2 text-sm text-text-secondary"
+              onClick={() => {
+                if (s.id === 'Home' || s.id === 'Work') applySaved(s.id);
+                else if (s.id === 'Recent') navigate('/history');
+                else if (s.id === 'Favorites') {
+                  const fav = savedAddresses.find((a) => /fav/i.test(a.label));
+                  if (fav) applySaved(fav.label);
+                  else navigate('/marketplace');
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-surface-elevated border border-border px-4 py-2 text-sm text-text-secondary hover:text-pure-white"
             >
               <s.icon size={14} /> {s.id}
             </button>
@@ -116,6 +145,8 @@ const DashboardPage: React.FC = () => {
                   onClick={() => {
                     setActiveModule(m.id);
                     if (m.id === 'Shop') navigate('/marketplace');
+                    if (m.id === 'Parcel') navigate('/marketplace');
+                    if (m.id === 'Rental') toast('Rentals module — browse vehicles soon');
                   }}
                   className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold ${
                     active
@@ -129,7 +160,7 @@ const DashboardPage: React.FC = () => {
             })}
           </nav>
 
-          {activeModule === 'Ride' || activeModule === 'Deliver' ? (
+          {activeModule === 'Ride' || activeModule === 'Parcel' ? (
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-3 rounded-xl bg-surface-elevated border border-border px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0" />
@@ -183,7 +214,7 @@ const DashboardPage: React.FC = () => {
               >
                 {isRequesting
                   ? 'Requesting...'
-                  : activeModule === 'Deliver'
+                  : activeModule === 'Parcel'
                     ? 'Find a courier'
                     : 'Confirm pickup'}
               </button>

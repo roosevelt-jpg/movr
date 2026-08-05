@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.js",
   "dependencies": {
-    "@movr/design-system": "workspace:*"
+    "@movr/design-system": "workspace:*",
+    "socket.io-client": "^4.7.0"
   }
 }

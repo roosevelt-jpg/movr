@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
-
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+import { cartApi } from '../../services/api';
 
 type CartItem = {
   id: string;
@@ -17,17 +16,17 @@ type CartItem = {
 export default function CartScreen({ storeId }: { storeId?: string }) {
   const [coupon, setCoupon] = useState('');
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('delivery');
-  const [items, setItems] = useState<CartItem[]>([
-    { id: '1', name: 'Cotton shirt', variant: 'Size M, Blue', price: 120, qty: 1 },
-    { id: '2', name: 'Canvas sneakers', variant: 'Size 42', price: 210, qty: 1 },
-  ]);
+  const [items, setItems] = useState<CartItem[]>([]);
   const [deliveryFee, setDeliveryFee] = useState(15);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/cart`)
-      .then((r) => r.json())
-      .then((j) => {
+    setLoading(true);
+    cartApi
+      .get(storeId)
+      .then((res) => {
+        const j = res.data;
         const rows = j?.data?.items || j?.data?.lines || [];
         if (Array.isArray(rows) && rows.length) {
           setItems(
@@ -39,18 +38,30 @@ export default function CartScreen({ storeId }: { storeId?: string }) {
               qty: Number(r.quantity || r.qty || 1),
             }))
           );
+        } else {
+          setItems([]);
         }
         if (j?.data?.delivery_fee != null) setDeliveryFee(Number(j.data.delivery_fee));
       })
-      .catch(() => undefined);
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
   }, [storeId]);
 
-  const setQty = (id: string, delta: number) => {
+  const setQty = async (id: string, delta: number) => {
+    const row = items.find((i) => i.id === id);
+    if (!row) return;
+    const next = Math.max(0, row.qty + delta);
     setItems((prev) =>
       prev
-        .map((i) => (i.id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i))
+        .map((i) => (i.id === id ? { ...i, qty: next } : i))
         .filter((i) => i.qty > 0)
     );
+    try {
+      if (next === 0) await cartApi.removeItem(id);
+      else await cartApi.updateItem(id, next);
+    } catch {
+      /* optimistic UI */
+    }
   };
 
   const subtotal = useMemo(
@@ -62,27 +73,34 @@ export default function CartScreen({ storeId }: { storeId?: string }) {
 
   const checkout = async () => {
     setMessage('');
+    if (!storeId) {
+      setMessage('Missing store');
+      return;
+    }
     try {
-      const res = await fetch(`${API}/cart/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fulfillment,
-          coupon: coupon || undefined,
-          storeId,
-        }),
+      const res = await cartApi.checkout({
+        storeId,
+        fulfillmentType: fulfillment,
+        couponCode: coupon || undefined,
       });
-      const json = await res.json();
+      const json = res.data;
       if (json.status === 'error') setMessage(json.message || 'Checkout failed');
-      else setMessage(`Order placed · ${json.data?.id || 'ok'}`);
+      else {
+        setMessage(`Order placed · ${json.data?.order?.id || json.data?.id || 'ok'}`);
+        setItems([]);
+      }
     } catch (e: any) {
-      setMessage(e.message || 'Checkout failed');
+      setMessage(e?.response?.data?.message || e.message || 'Checkout failed');
     }
   };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Your cart</Text>
+      {loading ? <Text style={styles.empty}>Loading…</Text> : null}
+      {!loading && items.length === 0 ? (
+        <Text style={styles.empty}>Cart is empty</Text>
+      ) : null}
 
       {items.map((item) => (
         <View key={item.id} style={styles.item}>
@@ -119,34 +137,26 @@ export default function CartScreen({ storeId }: { storeId?: string }) {
       </View>
 
       <TextInput
-        value={coupon}
-        onChangeText={setCoupon}
+        style={styles.coupon}
         placeholder="Coupon code"
         placeholderTextColor={colors.textSecondary}
-        style={styles.input}
+        value={coupon}
+        onChangeText={setCoupon}
+        autoCapitalize="characters"
       />
 
-      <View style={styles.summary}>
-        <View style={styles.sumRow}>
-          <Text style={styles.muted}>Subtotal</Text>
-          <Text style={styles.muted}>{formatCurrency(subtotal, 'GHS')}</Text>
-        </View>
-        <View style={styles.sumRow}>
-          <Text style={styles.muted}>Delivery fee</Text>
-          <Text style={styles.muted}>{formatCurrency(fee, 'GHS')}</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.sumRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>{formatCurrency(total, 'GHS')}</Text>
-        </View>
+      <View style={styles.totals}>
+        <Text style={styles.totalLine}>Subtotal · {formatCurrency(subtotal, 'GHS')}</Text>
+        <Text style={styles.totalLine}>Delivery · {formatCurrency(fee, 'GHS')}</Text>
+        <Text style={styles.totalBold}>Total · {formatCurrency(total, 'GHS')}</Text>
       </View>
 
-      <Pressable style={styles.cta} onPress={checkout}>
+      {message ? <Text style={styles.msg}>{message}</Text> : null}
+
+      <Pressable style={styles.cta} onPress={checkout} disabled={!items.length}>
         <View style={styles.ctaGlow} />
-        <Text style={styles.ctaText}>Checkout · {formatCurrency(total, 'GHS')}</Text>
+        <Text style={styles.ctaText}>Checkout</Text>
       </Pressable>
-      {!!message && <Text style={styles.msg}>{message}</Text>}
     </ScrollView>
   );
 }
@@ -154,15 +164,11 @@ export default function CartScreen({ storeId }: { storeId?: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+  empty: { color: colors.textSecondary, marginBottom: spacing[4] },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[3],
     marginBottom: spacing[3],
   },
   thumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface },
@@ -188,47 +194,35 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: spacing[3],
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
   },
-  fulfillOn: { borderColor: colors.motionBlue },
-  fulfillText: { color: colors.textSecondary, fontWeight: '700' },
+  fulfillOn: { borderColor: colors.motionBlue, backgroundColor: colors.surfaceElevated },
+  fulfillText: { color: colors.textSecondary, fontWeight: '600' },
   fulfillTextOn: { color: colors.pureWhite },
-  input: {
-    backgroundColor: colors.surfaceElevated,
+  coupon: {
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    color: colors.pureWhite,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
-    marginBottom: spacing[3],
-  },
-  summary: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
+    color: colors.pureWhite,
     marginBottom: spacing[4],
   },
-  sumRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing[2] },
-  muted: { color: colors.textSecondary },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing[3] },
-  totalLabel: { color: colors.pureWhite, fontWeight: '700' },
-  totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
+  totals: { gap: 6, marginBottom: spacing[4] },
+  totalLine: { color: colors.textSecondary },
+  totalBold: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, marginTop: 4 },
+  msg: { color: colors.success, marginBottom: spacing[3] },
   cta: {
     borderRadius: radius.pill,
+    overflow: 'hidden',
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.electricViolet,
-    overflow: 'hidden',
   },
   ctaGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.motionBlue,
-    opacity: 0.4,
+    opacity: 0.45,
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-  msg: { color: colors.movrGreen, marginTop: spacing[3], textAlign: 'center' },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });

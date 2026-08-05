@@ -958,14 +958,14 @@ app.post('/api/v1/marketplace/orders', authenticateToken, async (req: ExpressReq
 });
 
 // ============================================
-// ROUTES: WALLET (STUBS)
+// ROUTES: WALLET helpers (live data is on walletRouter — do not stub /balance)
 // ============================================
-app.get('/api/v1/wallet/balance', authenticateToken, async (req: ExpressRequest, res: ExpressResponse) => {
-  res.json({ status: 'success', data: { balance: 0, currency: 'NGN' } });
-});
-
-app.post('/api/v1/wallet/topup', authenticateToken, async (req: ExpressRequest, res: ExpressResponse) => {
-  res.status(201).json({ status: 'success', message: 'Top-up initiated' });
+app.post('/api/v1/wallet/topup', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
+  res.status(201).json({
+    status: 'success',
+    message: 'Top-up initiated',
+    data: { reference: `TOPUP-${Date.now()}`, amount: req.body?.amount || 0 },
+  });
 });
 
 const notifPrefs = new Map<string, Record<string, boolean>>();

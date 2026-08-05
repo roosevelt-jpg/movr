@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import MerchantShell from '../../layouts/MerchantShell';
+import { VerifiedBadgeWeb } from '@movr/design-system/components/VerifiedBadge';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
 
-/** Merchant account settings — business + notifications. */
+/** Merchant account settings — business + notifications + KYC attestation badge. */
 export default function MerchantSettingsPage() {
   const [business, setBusiness] = useState({
     email: 'owner@boutique22.com',
@@ -14,11 +15,14 @@ export default function MerchantSettingsPage() {
     payout: 'GCB Bank · ****3390',
   });
   const [alerts, setAlerts] = useState({ newOrders: true, dailySummary: true });
+  const [attestation, setAttestation] = useState<{ status?: string; explorerUrl?: string } | null>(
+    null
+  );
 
   useEffect(() => {
     axios
       .get(`${API}/merchant/me`, { headers: headers() })
-      .then((res) => {
+      .then(async (res) => {
         const m = res.data?.data;
         if (!m) return;
         setBusiness((b) => ({
@@ -26,6 +30,22 @@ export default function MerchantSettingsPage() {
           reg: m.registration_number || m.reg_number || b.reg,
           payout: m.payout_account || b.payout,
         }));
+        const uid = m.user_id;
+        if (!uid) return;
+        try {
+          const a = await axios.get(`${API}/kyc/attestation/${uid}`, { headers: headers() });
+          const row = a.data?.data;
+          if (!row) return;
+          const chain = String(row.chain || 'polygon-amoy');
+          const explorer = row.tx_hash
+            ? chain.includes('amoy')
+              ? `https://amoy.polygonscan.com/tx/${row.tx_hash}`
+              : `https://polygonscan.com/tx/${row.tx_hash}`
+            : undefined;
+          setAttestation({ status: row.status || row.attestationStatus, explorerUrl: explorer });
+        } catch {
+          /* none yet */
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -39,7 +59,10 @@ export default function MerchantSettingsPage() {
 
   return (
     <MerchantShell activePath="/merchant/settings">
-      <h1 className="text-3xl font-bold mb-8">Account settings</h1>
+      <div className="flex flex-wrap items-center gap-3 mb-8">
+        <h1 className="text-3xl font-bold">Account settings</h1>
+        <VerifiedBadgeWeb status={attestation?.status} explorerUrl={attestation?.explorerUrl} />
+      </div>
 
       <p className="text-xs tracking-wider text-text-secondary mb-2">BUSINESS</p>
       <div className="mb-10 max-w-xl">
@@ -63,7 +86,7 @@ export default function MerchantSettingsPage() {
           className="w-full flex justify-between gap-4 py-4 border-b border-border text-left"
           onClick={() => setAlerts((a) => ({ ...a, dailySummary: !a.dailySummary }))}
         >
-          <span>Daily sales summary</span>
+          <span>Daily summary</span>
           <span className="text-text-secondary">{alerts.dailySummary ? 'On' : 'Off'}</span>
         </button>
       </div>

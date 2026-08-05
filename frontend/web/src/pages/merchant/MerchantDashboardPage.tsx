@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import OrderTrackingWidget from '../../components/OrderTrackingWidget';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
@@ -192,11 +193,13 @@ export default function MerchantDashboardPage() {
       </div>
 
       {selected && tracking ? (
-        <div className="mt-6 rounded-2xl bg-surface-elevated border border-border p-4">
-          <h2 className="font-semibold mb-2">Tracking · {tracking.room}</h2>
-          <p className="text-text-secondary text-sm">
-            Mode: {tracking.deliveryMode || 'unset'} · Courier: {tracking.courierId || 'none'}
-          </p>
+        <div className="mt-6">
+          <OrderTrackingWidget
+            orderId={String(selected.id)}
+            room={tracking.room}
+            deliveryMode={tracking.deliveryMode}
+            courierId={tracking.courierId}
+          />
         </div>
       ) : null}
     </MerchantShell>
