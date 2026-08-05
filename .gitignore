@@ -16,3 +16,7 @@ backend/uploads/
 node_modules
 .next/
 .DS_Store
+# Runtime logs
+backend/*.log
+*.log
+
