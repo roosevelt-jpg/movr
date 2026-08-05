@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 /** Create account — email and/or phone + password. */
 const RegisterPage: React.FC = () => {
@@ -32,8 +33,32 @@ const RegisterPage: React.FC = () => {
         city: 'Accra',
         userType: 'customer',
       });
-      toast.success('Account created');
-      navigate('/verify-otp', { state: { phone: phone.trim() || email.trim() } });
+      const identifier = phone.trim() || email.trim();
+      try {
+        const otpBody = identifier.includes('@')
+          ? { email: identifier, purpose: 'signup' }
+          : { phone: identifier, purpose: 'signup' };
+        const otpRes = await axios.post(
+          `${process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1'}/auth/resend-otp`,
+          otpBody
+        );
+        toast.success(
+          otpRes.data?.data?.devCode
+            ? `Account created · code ${otpRes.data.data.devCode}`
+            : 'Account created · check your code'
+        );
+        navigate('/verify-otp', {
+          state: {
+            phone: identifier,
+            identifier,
+            mode: 'signup',
+            devCode: otpRes.data?.data?.devCode,
+          },
+        });
+      } catch {
+        toast.success('Account created');
+        navigate('/verify-otp', { state: { phone: identifier, identifier, mode: 'signup' } });
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {

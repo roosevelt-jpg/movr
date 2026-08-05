@@ -593,37 +593,233 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
   }
 });
 
-const otpStore = new Map<string, { code: string; expires: number }>();
+const otpStore = new Map<
+  string,
+  { code: string; expires: number; userId?: string; purpose: 'reset' | 'signup' }
+>();
+
+function normalizeAuthIdentifier(raw: string) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  if (value.includes('@')) return value.toLowerCase();
+  return value.replace(/[\s\-()]/g, '');
+}
+
+function otpLookupKeys(raw: string) {
+  const normalized = normalizeAuthIdentifier(raw);
+  const keys = new Set<string>([String(raw || '').trim(), normalized].filter(Boolean));
+  return [...keys];
+}
+
+async function findUserForPasswordReset(identifier: string) {
+  const raw = String(identifier || '').trim();
+  if (!raw) return null;
+  if (raw.includes('@')) {
+    const r = await authDb.query(
+      `SELECT id, email, phone FROM users WHERE lower(email) = lower($1) AND is_active = TRUE LIMIT 1`,
+      [raw]
+    );
+    return r.rows[0] || null;
+  }
+  const phone = normalizeAuthIdentifier(raw);
+  const r = await authDb.query(
+    `SELECT id, email, phone FROM users
+     WHERE phone = $1
+        OR regexp_replace(COALESCE(phone, ''), '[^0-9+]', '', 'g') = $2
+     LIMIT 1`,
+    [raw, phone]
+  );
+  return r.rows[0] || null;
+}
 
 app.post('/api/v1/auth/forgot-password', async (req: ExpressRequest, res: ExpressResponse) => {
-  const phone = String(req.body.phone || req.body.email || '');
-  const code = String(Math.floor(10000 + Math.random() * 90000));
-  otpStore.set(phone, { code, expires: Date.now() + 10 * 60 * 1000 });
-  logger.info(`Password reset OTP for ${phone}: ${code}`);
-  res.json({ status: 'success', message: 'Reset code sent', data: { phone } });
+  try {
+    const identifier = String(req.body.phone || req.body.email || req.body.identifier || '').trim();
+    if (!identifier) {
+      return res.status(400).json({ status: 'error', message: 'Email or phone is required' });
+    }
+
+    const code = String(Math.floor(10000 + Math.random() * 90000));
+    const user = await findUserForPasswordReset(identifier).catch(() => null);
+    const storeKey = normalizeAuthIdentifier(identifier);
+
+    otpStore.set(storeKey, {
+      code,
+      expires: Date.now() + 10 * 60 * 1000,
+      userId: user?.id,
+      purpose: 'reset',
+    });
+    // Also index under original phone string if different
+    if (identifier !== storeKey) {
+      otpStore.set(identifier, otpStore.get(storeKey)!);
+    }
+
+    logger.info(`Password reset OTP for ${identifier}: ${code}`);
+
+    const payload: any = {
+      status: 'success',
+      message: user
+        ? 'Reset code sent'
+        : 'If an account exists for that email or phone, a reset code was sent',
+      data: {
+        identifier: storeKey,
+        phone: storeKey,
+        expiresInSeconds: 600,
+      },
+    };
+
+    // Local/dev: expose code so E2E works without SMS/email provider
+    if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
+      payload.data.devCode = code;
+    }
+
+    res.json(payload);
+  } catch (error: any) {
+    logger.error('Forgot password error:', error);
+    res.status(500).json({ status: 'error', message: error.message || 'Could not send reset code' });
+  }
 });
 
 app.post('/api/v1/auth/resend-otp', async (req: ExpressRequest, res: ExpressResponse) => {
-  const phone = String(req.body.phone || '');
-  const code = String(Math.floor(10000 + Math.random() * 90000));
-  otpStore.set(phone, { code, expires: Date.now() + 10 * 60 * 1000 });
-  logger.info(`Resend OTP for ${phone}: ${code}`);
-  res.json({ status: 'success', message: 'Code resent', data: { phone } });
+  try {
+    const identifier = String(req.body.phone || req.body.email || req.body.identifier || '').trim();
+    const purpose = req.body.purpose === 'reset' ? 'reset' : 'signup';
+    if (!identifier) {
+      return res.status(400).json({ status: 'error', message: 'Email or phone is required' });
+    }
+
+    const code = String(Math.floor(10000 + Math.random() * 90000));
+    const storeKey = normalizeAuthIdentifier(identifier);
+    let userId: string | undefined;
+    if (purpose === 'reset') {
+      const user = await findUserForPasswordReset(identifier).catch(() => null);
+      userId = user?.id;
+    }
+
+    const entry = {
+      code,
+      expires: Date.now() + 10 * 60 * 1000,
+      userId,
+      purpose: purpose as 'reset' | 'signup',
+    };
+    otpStore.set(storeKey, entry);
+    if (identifier !== storeKey) otpStore.set(identifier, entry);
+
+    logger.info(`Resend OTP (${purpose}) for ${identifier}: ${code}`);
+    const data: any = { identifier: storeKey, phone: storeKey, expiresInSeconds: 600 };
+    if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
+      data.devCode = code;
+    }
+    res.json({ status: 'success', message: 'Code resent', data });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Could not resend code' });
+  }
 });
 
 app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResponse) => {
-  const phone = String(req.body.phone || '');
-  const code = String(req.body.code || '');
-  const entry = otpStore.get(phone);
-  if (entry && entry.expires > Date.now() && entry.code === code) {
-    otpStore.delete(phone);
-    return res.json({ status: 'success', message: 'Verified', data: { verified: true } });
+  try {
+    const identifier = String(req.body.phone || req.body.email || req.body.identifier || '').trim();
+    const code = String(req.body.code || '').trim();
+    const purpose = req.body.purpose === 'reset' ? 'reset' : String(req.body.purpose || 'signup');
+
+    if (!identifier || !code) {
+      return res.status(400).json({ status: 'error', message: 'Code and email/phone are required' });
+    }
+
+    let entry: { code: string; expires: number; userId?: string; purpose: 'reset' | 'signup' } | undefined;
+    for (const key of otpLookupKeys(identifier)) {
+      const found = otpStore.get(key);
+      if (found) {
+        entry = found;
+        break;
+      }
+    }
+
+    const valid =
+      entry &&
+      entry.expires > Date.now() &&
+      entry.code === code &&
+      (purpose !== 'reset' || entry.purpose === 'reset');
+
+    if (!valid) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired code' });
+    }
+
+    // Consume OTP
+    for (const key of otpLookupKeys(identifier)) otpStore.delete(key);
+
+    if (purpose === 'reset' || entry!.purpose === 'reset') {
+      if (!entry!.userId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No account found for that email or phone',
+        });
+      }
+      const resetToken = jwt.sign(
+        { id: entry!.userId, purpose: 'password_reset' },
+        process.env.JWT_SECRET || 'secret',
+        { expiresIn: '15m' }
+      );
+      return res.json({
+        status: 'success',
+        message: 'Code verified',
+        data: { verified: true, resetToken, purpose: 'reset' },
+      });
+    }
+
+    res.json({ status: 'success', message: 'Verified', data: { verified: true, purpose: 'signup' } });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Verification failed' });
   }
-  // Accept demo codes in non-production / when no OTP was stored
-  if (code.length >= 4) {
-    return res.json({ status: 'success', message: 'Verified', data: { verified: true } });
+});
+
+app.post('/api/v1/auth/reset-password', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { resetToken, password, newPassword } = req.body;
+    const nextPassword = String(newPassword || password || '');
+    if (!resetToken || !nextPassword) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Reset token and new password are required',
+      });
+    }
+    if (nextPassword.length < 8) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Password must be at least 8 characters',
+      });
+    }
+
+    let payload: any;
+    try {
+      payload = jwt.verify(resetToken, process.env.JWT_SECRET || 'secret');
+    } catch {
+      return res.status(401).json({ status: 'error', message: 'Reset link expired. Request a new code.' });
+    }
+
+    if (payload?.purpose !== 'password_reset' || !payload?.id) {
+      return res.status(401).json({ status: 'error', message: 'Invalid reset token' });
+    }
+
+    const hash = await bcrypt.hash(nextPassword, 10);
+    const updated = await authDb.query(
+      `UPDATE users SET password = $1 WHERE id = $2 AND COALESCE(is_active, TRUE) = TRUE
+       RETURNING id, email, phone`,
+      [hash, payload.id]
+    );
+    if (!updated.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Account not found' });
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Password updated. You can sign in now.',
+      data: { email: updated.rows[0].email, phone: updated.rows[0].phone },
+    });
+  } catch (error: any) {
+    logger.error('Reset password error:', error);
+    res.status(500).json({ status: 'error', message: error.message || 'Could not reset password' });
   }
-  res.status(400).json({ status: 'error', message: 'Invalid code' });
 });
 
 // ============================================
