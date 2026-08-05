@@ -15,6 +15,7 @@ import { RewardsEngineService } from '../services/rewards-engine.service';
 import { SettlementService } from '../services/settlement.service';
 import { InboxService } from '../services/inbox.service';
 import { KycAttestationService } from '../services/kyc-attestation.service';
+import identityVerification from '../services/identity-verification.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -43,6 +44,66 @@ driverRouter.get(
     try {
       const data = await performance.getPerformance(req.user!.id);
       res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.get(
+  '/earnings/today',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const driverId = req.user!.id;
+      const today = await db.query(
+        `SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)), 0)::float AS amount,
+                COUNT(*)::int AS trips
+         FROM rides
+         WHERE driver_id = $1
+           AND status = 'completed'
+           AND completed_at >= date_trunc('day', NOW())`,
+        [driverId]
+      ).catch(() => ({ rows: [{ amount: 0, trips: 0 }] }));
+
+      const week = await db.query(
+        `SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)), 0)::float AS amount
+         FROM rides
+         WHERE driver_id = $1
+           AND status = 'completed'
+           AND completed_at >= date_trunc('week', NOW())`,
+        [driverId]
+      ).catch(() => ({ rows: [{ amount: 0 }] }));
+
+      const user = await db.query(
+        `SELECT first_name, last_name FROM users WHERE id = $1`,
+        [driverId]
+      ).catch(() => ({ rows: [] }));
+
+      const recent = await db.query(
+        `SELECT id,
+                COALESCE(pickup_address, 'Pickup') || ' → ' || COALESCE(dropoff_address, 'Dropoff') AS route,
+                to_char(COALESCE(completed_at, created_at), 'HH12:MI AM') AS time,
+                COALESCE(actual_fare, estimated_fare, 0)::float AS amount
+         FROM rides
+         WHERE driver_id = $1 AND status = 'completed'
+         ORDER BY COALESCE(completed_at, created_at) DESC
+         LIMIT 5`,
+        [driverId]
+      ).catch(() => ({ rows: [] }));
+
+      const u = user.rows[0];
+      res.json({
+        status: 'success',
+        data: {
+          amount: Number(today.rows[0]?.amount || 0),
+          trips: Number(today.rows[0]?.trips || 0),
+          week: Number(week.rows[0]?.amount || 0),
+          name: u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : undefined,
+          recent: recent.rows,
+        },
+      });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -207,6 +268,29 @@ subscriptionsRouter.post(
 );
 
 subscriptionsRouter.get(
+  '/me',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.getActiveSubscription(req.user!.id);
+      const row = result.rows[0] || null;
+      res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      // Fallback direct query if helper missing columns
+      try {
+        const row = await db.query(
+          `SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
+          [req.user!.id]
+        );
+        res.json({ status: 'success', data: row.rows[0] || null });
+      } catch (e: any) {
+        res.status(500).json({ status: 'error', message: e.message || error.message });
+      }
+    }
+  }
+);
+
+subscriptionsRouter.get(
   '/active',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
@@ -307,6 +391,19 @@ rentalsRouter.post(
           return res.status(400).json({ status: 'error', message: 'License upload required' });
         }
 
+        // Reuse identity document-check pipeline (Phase 15)
+        let licenseVerified = false;
+        try {
+          const check = await identityVerification.verifyMerchantDocument({
+            merchantId: req.user!.id,
+            documentType: 'drivers_license',
+            fileUrl: licenseUploadUrl,
+          });
+          licenseVerified = !!check.verified;
+        } catch {
+          licenseVerified = false;
+        }
+
         depositHold = await payments.initializePreauthorization({
           amount: depositAmount,
           currency: pricing.rows[0].currency_code,
@@ -319,12 +416,13 @@ rentalsRouter.post(
         await db.query(
           `INSERT INTO self_drive_requirements
              (rental_id, license_upload_url, deposit_amount, deposit_status, license_verified)
-           VALUES ($1,$2,$3,$4,FALSE)`,
+           VALUES ($1,$2,$3,$4,$5)`,
           [
             rental.rows[0].id,
             licenseUploadUrl,
             depositAmount,
             depositHold.success ? 'held' : 'pending',
+            licenseVerified,
           ]
         );
 

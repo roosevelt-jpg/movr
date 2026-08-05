@@ -49,7 +49,9 @@ export class RewardsEngineService {
       userId,
       eventType,
       String(metadata.description || eventType),
-      Number(rule.points_amount)
+      metadata.overridePoints != null
+        ? Number(metadata.overridePoints)
+        : Number(rule.points_amount)
     );
 
     if (Number(rule.dvt_amount) > 0) {
@@ -71,7 +73,10 @@ export class RewardsEngineService {
 
     return {
       awarded: true,
-      points: rule.points_amount,
+      points:
+        metadata.overridePoints != null
+          ? Number(metadata.overridePoints)
+          : rule.points_amount,
       dvt: rule.dvt_amount,
       ledger: pointsRow,
       metadata,

@@ -6,12 +6,14 @@ import { formatCurrency } from '../lib/currency';
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Vehicle types & pricing table — multi-country, edit + add. */
+/** Vehicle types & pricing table — multi-country ride fares + rental rates. */
 export default function VehiclePricingPage() {
   const [rows, setRows] = useState<any[]>([]);
+  const [rentalRows, setRentalRows] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState('');
+  const [rentalEdit, setRentalEdit] = useState<any>(null);
   const [form, setForm] = useState({
     baseFare: '',
     perKmRate: '',
@@ -28,29 +30,44 @@ export default function VehiclePricingPage() {
     const list = res.data.data || [];
     if (!list.length) {
       setRows([]);
-      return;
+    } else {
+      const enriched = await Promise.all(
+        list.map(async (t: any) => {
+          try {
+            const p = await axios.get(`${API}/admin/vehicle-types/${t.id}/pricing`, {
+              headers: headers(),
+            });
+            const price =
+              (p.data.data || []).find((x: any) => x.country_code === 'GH') || p.data.data?.[0];
+            return {
+              id: t.id,
+              name: t.name,
+              base_fare: Number(price?.base_fare ?? 0),
+              per_km_rate: Number(price?.per_km_rate ?? 0),
+              per_minute_rate: Number(price?.per_minute_rate ?? 0),
+              minimum_fare: Number(price?.minimum_fare ?? 0),
+            };
+          } catch {
+            return {
+              id: t.id,
+              name: t.name,
+              base_fare: 0,
+              per_km_rate: 0,
+              per_minute_rate: 0,
+              minimum_fare: 0,
+            };
+          }
+        })
+      );
+      setRows(enriched);
     }
-    const enriched = await Promise.all(
-      list.map(async (t: any) => {
-        try {
-          const p = await axios.get(`${API}/admin/vehicle-types/${t.id}/pricing`, {
-            headers: headers(),
-          });
-          const price = (p.data.data || []).find((x: any) => x.country_code === 'GH') || p.data.data?.[0];
-          return {
-            id: t.id,
-            name: t.name,
-            base_fare: Number(price?.base_fare ?? 0),
-            per_km_rate: Number(price?.per_km_rate ?? 0),
-            per_minute_rate: Number(price?.per_minute_rate ?? 0),
-            minimum_fare: Number(price?.minimum_fare ?? 0),
-          };
-        } catch {
-          return { id: t.id, name: t.name, base_fare: 0, per_km_rate: 0, per_minute_rate: 0, minimum_fare: 0 };
-        }
-      })
-    );
-    setRows(enriched);
+
+    try {
+      const rp = await axios.get(`${API}/admin/rental-pricing`, { headers: headers() });
+      setRentalRows(rp.data.data || []);
+    } catch {
+      setRentalRows([]);
+    }
   };
 
   useEffect(() => {
@@ -214,6 +231,85 @@ export default function VehiclePricingPage() {
           </div>
         </div>
       )}
+
+      <h2 style={{ marginTop: 32, marginBottom: 12 }}>Rental rates (hourly / daily)</h2>
+      <div style={styles.tableWrap}>
+        <div style={{ ...styles.thead, gridTemplateColumns: '1fr 1fr 1fr 1fr 0.6fr' }}>
+          <span>Vehicle</span>
+          <span>Type</span>
+          <span>Unit</span>
+          <span>Rate</span>
+          <span />
+        </div>
+        {rentalRows.length === 0 ? (
+          <div style={styles.empty}>No rental pricing rows</div>
+        ) : (
+          rentalRows.map((r) => (
+            <div
+              key={r.id}
+              style={{ ...styles.row, gridTemplateColumns: '1fr 1fr 1fr 1fr 0.6fr' }}
+            >
+              <span style={{ fontWeight: 600 }}>{r.vehicle_type_id}</span>
+              <span>{r.rental_type}</span>
+              <span>{r.rate_unit}</span>
+              <span>{money(Number(r.rate_amount), r.currency_code || 'GHS')}</span>
+              <button
+                style={styles.edit}
+                onClick={() =>
+                  setRentalEdit({
+                    ...r,
+                    rateAmount: String(r.rate_amount),
+                  })
+                }
+              >
+                Edit
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {rentalEdit ? (
+        <div style={styles.panel}>
+          <h2 style={{ marginTop: 0 }}>
+            Edit rental · {rentalEdit.vehicle_type_id} / {rentalEdit.rental_type} /{' '}
+            {rentalEdit.rate_unit}
+          </h2>
+          <input
+            style={styles.input}
+            placeholder="Rate amount"
+            value={rentalEdit.rateAmount}
+            onChange={(e) => setRentalEdit({ ...rentalEdit, rateAmount: e.target.value })}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              style={styles.addBtn}
+              onClick={async () => {
+                await axios.put(
+                  `${API}/admin/rental-pricing`,
+                  {
+                    vehicleTypeId: rentalEdit.vehicle_type_id,
+                    rentalType: rentalEdit.rental_type,
+                    rateUnit: rentalEdit.rate_unit,
+                    rateAmount: Number(rentalEdit.rateAmount),
+                    currencyCode: rentalEdit.currency_code || 'GHS',
+                    minDuration: rentalEdit.min_duration || 1,
+                    maxDuration: rentalEdit.max_duration || 30,
+                  },
+                  { headers: headers() }
+                );
+                setRentalEdit(null);
+                await load();
+              }}
+            >
+              Save rental rate
+            </button>
+            <button style={styles.ghost} onClick={() => setRentalEdit(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
     </AdminShell>
   );
 }

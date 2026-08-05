@@ -1,6 +1,6 @@
 import { DatabaseService } from './database.service';
 import { TokenService } from './token.service';
-import { PointsService } from './points.service';
+import { RewardsEngineService } from './rewards-engine.service';
 import getLogger from '../utils/logger';
 
 /**
@@ -10,11 +10,11 @@ import getLogger from '../utils/logger';
 export class StakingService {
   private logger = getLogger('staking');
   private tokens: TokenService;
-  private points: PointsService;
+  private rewards: RewardsEngineService;
 
   constructor(private db: DatabaseService) {
     this.tokens = new TokenService(db);
-    this.points = new PointsService(db);
+    this.rewards = new RewardsEngineService(db);
   }
 
   isEnabled() {
@@ -181,7 +181,12 @@ export class StakingService {
       const daily = (Number(row.amount) * Number(row.base_apy_pct)) / 100 / 365;
       const pts = Math.max(1, Math.round(daily));
       if (pts > 0) {
-        await this.points.award(userId, 'staking', 'Public staking accrual', pts);
+        await this.rewards.emitActivityEvent(userId, 'stake_created', {
+          description: 'Public staking accrual',
+          overridePoints: pts,
+          ref: `stake-accrual-${userId}`,
+        });
+        // Prefer rule amount; if rule inactive/zero, award via points conversion fallback already in engine
         awarded += pts;
       }
     }

@@ -306,6 +306,15 @@ export class MatchingEngineService {
               } catch {
                 /* staking tables may be absent */
               }
+              // Phase 13 — performance tier matching weight
+              try {
+                const { DriverPerformanceService } = require('./driver-performance.service');
+                const perf = new DriverPerformanceService(this.db);
+                const perfWeight = await perf.getMatchingWeight(row.id);
+                priorityWeight *= perfWeight || 1;
+              } catch {
+                /* metrics may be absent */
+              }
               return {
                 ...row,
                 priorityWeight,

@@ -112,6 +112,17 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
 
     const result = await db.updateRideStatus(id, 'cancelled');
 
+    try {
+      const driverId = result.rows[0]?.driver_id;
+      if (driverId) {
+        const { DriverPerformanceService } = require('../services/driver-performance.service');
+        const perf = new DriverPerformanceService(db);
+        await perf.recalculateMetrics(driverId);
+      }
+    } catch {
+      /* non-blocking */
+    }
+
     realtime.broadcastToRide(id, 'ride:cancelled', {
       rideId: id,
       timestamp: Date.now()
@@ -252,6 +263,14 @@ router.put('/:id/accept', authenticateToken, requireDriver, async (req, res) => 
     await matching.assignRideToDriver(id, driverId!);
     const result = await db.updateRideStatus(id, 'accepted');
 
+    try {
+      const { DriverPerformanceService } = require('../services/driver-performance.service');
+      const perf = new DriverPerformanceService(db);
+      await perf.recalculateMetrics(driverId!);
+    } catch {
+      /* non-blocking */
+    }
+
     realtime.broadcastToRide(id, 'ride:accepted', {
       driverId,
       timestamp: Date.now()
@@ -373,6 +392,17 @@ router.put('/:id/complete', authenticateToken, requireDriver, async (req, res) =
       }
     } catch (e) {
       console.warn('points/referral hook failed', e);
+    }
+
+    // Phase 13 — driver performance metrics
+    try {
+      if (driverId || result.rows[0]?.driver_id) {
+        const { DriverPerformanceService } = require('../services/driver-performance.service');
+        const perf = new DriverPerformanceService(db);
+        await perf.recalculateMetrics(driverId || result.rows[0].driver_id);
+      }
+    } catch (e) {
+      console.warn('performance recalculate failed', e);
     }
 
     realtime.broadcastToRide(id, 'ride:completed', {

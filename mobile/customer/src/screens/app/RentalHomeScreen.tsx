@@ -1,44 +1,101 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
 import { colors, spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 const VEHICLES = [
-  { id: 'sedan', name: 'Sedan', meta: '5 seats · Automatic', icon: '🚘', daily: 280, hourly: 45 },
-  { id: 'suv', name: 'SUV', meta: '7 seats · Automatic', icon: '🚙', daily: 420, hourly: 70 },
-  { id: 'luxury', name: 'Luxury', meta: '4 seats · Chauffeur available', icon: '✦', daily: 950, hourly: 150 },
+  { id: 'standard', name: 'Sedan', meta: '5 seats · Automatic', icon: '🚘' },
+  { id: 'suv', name: 'SUV', meta: '7 seats · Automatic', icon: '🚙' },
 ];
 
-/** Rentals — self-drive / chauffeur + hourly/daily vehicle cards. */
+/** Rentals — chauffeur/self-drive (flag-gated), hourly/daily, license + deposit. */
 export default function RentalHomeScreen() {
-  const [rentalType, setRentalType] = useState<'chauffeur' | 'self_drive'>('self_drive');
+  const [rentalType, setRentalType] = useState<'chauffeur' | 'self_drive'>('chauffeur');
   const [rateUnit, setRateUnit] = useState<'hourly' | 'daily'>('daily');
-  const [selected, setSelected] = useState('sedan');
-  const [selfDriveOn, setSelfDriveOn] = useState(true);
+  const [duration, setDuration] = useState('1');
+  const [selected, setSelected] = useState('standard');
+  const [selfDriveOn, setSelfDriveOn] = useState(false);
   const [pricing, setPricing] = useState<any[]>([]);
+  const [licenseUrl, setLicenseUrl] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/rentals/pricing`)
       .then((r) => r.json())
       .then((j) => setPricing(j.data || []))
       .catch(() => undefined);
-    fetch(`${API}/rentals/self-drive-available`)
+    fetch(`${API}/rentals/self-drive-available`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((j) => setSelfDriveOn(j.data?.enabled !== false))
-      .catch(() => undefined);
+      .then((j) => {
+        const on = j.data?.enabled === true;
+        setSelfDriveOn(on);
+        if (!on) setRentalType('chauffeur');
+      })
+      .catch(() => setSelfDriveOn(false));
   }, []);
 
-  const priceFor = (v: (typeof VEHICLES)[0]) => {
+  const unitPrice = useMemo(() => {
     const row = pricing.find(
       (p) =>
-        String(p.vehicle_type_id || '').includes(v.id) &&
+        p.vehicle_type_id === selected &&
         p.rental_type === rentalType &&
         p.rate_unit === rateUnit
     );
-    if (row) return Number(row.rate_amount);
-    return rateUnit === 'daily' ? v.daily : v.hourly;
+    return Number(row?.rate_amount || 0);
+  }, [pricing, selected, rentalType, rateUnit]);
+
+  const days = Math.max(1, Number(duration) || 1);
+  const total = unitPrice * days;
+  const deposit = rentalType === 'self_drive' ? Math.max(100, total * 0.2) : 0;
+
+  const book = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      if (rentalType === 'self_drive' && !licenseUrl.trim()) {
+        setMsg('License upload URL required for self-drive');
+        setBusy(false);
+        return;
+      }
+      const res = await fetch(`${API}/rentals/book`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          vehicleTypeId: selected,
+          rentalType,
+          rateUnit,
+          duration: days,
+          licenseUploadUrl: licenseUrl || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.status === 'error') {
+        setMsg(json.message || 'Booking failed');
+      } else {
+        setMsg(
+          `Booked · ${formatCurrency(Number(json.data?.rental?.total_amount || total), 'GHS')}${
+            deposit ? ` · deposit hold ${formatCurrency(deposit, 'GHS')}` : ''
+          }`
+        );
+      }
+    } catch (e: any) {
+      setMsg(e.message || 'Booking failed');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -46,21 +103,31 @@ export default function RentalHomeScreen() {
       <Text style={styles.title}>Rentals</Text>
 
       <View style={styles.segment}>
-        <Pressable
-          style={[styles.segBtn, rentalType === 'self_drive' && styles.segActive]}
-          onPress={() => selfDriveOn && setRentalType('self_drive')}
-        >
-          {rentalType === 'self_drive' ? <View style={styles.segGlow} /> : null}
-          <Text style={[styles.segText, rentalType === 'self_drive' && styles.segTextOn]}>Self-drive</Text>
-        </Pressable>
+        {selfDriveOn ? (
+          <Pressable
+            style={[styles.segBtn, rentalType === 'self_drive' && styles.segActive]}
+            onPress={() => setRentalType('self_drive')}
+          >
+            {rentalType === 'self_drive' ? <View style={styles.segGlow} /> : null}
+            <Text style={[styles.segText, rentalType === 'self_drive' && styles.segTextOn]}>
+              Self-drive
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           style={[styles.segBtn, rentalType === 'chauffeur' && styles.segActive]}
           onPress={() => setRentalType('chauffeur')}
         >
           {rentalType === 'chauffeur' ? <View style={styles.segGlow} /> : null}
-          <Text style={[styles.segText, rentalType === 'chauffeur' && styles.segTextOn]}>Chauffeur</Text>
+          <Text style={[styles.segText, rentalType === 'chauffeur' && styles.segTextOn]}>
+            Chauffeur
+          </Text>
         </Pressable>
       </View>
+
+      {!selfDriveOn ? (
+        <Text style={styles.flagHint}>Self-drive is rolling out gradually in your area</Text>
+      ) : null}
 
       <View style={styles.rateRow}>
         {(['hourly', 'daily'] as const).map((u) => (
@@ -76,8 +143,27 @@ export default function RentalHomeScreen() {
         ))}
       </View>
 
+      <View style={styles.durationRow}>
+        <Text style={styles.durationLabel}>Duration ({rateUnit === 'daily' ? 'days' : 'hours'})</Text>
+        <TextInput
+          style={styles.durationInput}
+          keyboardType="number-pad"
+          value={duration}
+          onChangeText={setDuration}
+        />
+      </View>
+
       {VEHICLES.map((v) => {
         const on = selected === v.id;
+        const price =
+          Number(
+            pricing.find(
+              (p) =>
+                p.vehicle_type_id === v.id &&
+                p.rental_type === rentalType &&
+                p.rate_unit === rateUnit
+            )?.rate_amount || 0
+          ) || unitPrice;
         return (
           <Pressable
             key={v.id}
@@ -92,19 +178,44 @@ export default function RentalHomeScreen() {
               <Text style={styles.cardMeta}>{v.meta}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.price}>{formatCurrency(priceFor(v), 'GHS')}</Text>
+              <Text style={styles.price}>{formatCurrency(price, 'GHS')}</Text>
               <Text style={styles.per}>{rateUnit === 'daily' ? 'per day' : 'per hour'}</Text>
             </View>
           </Pressable>
         );
       })}
 
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>Estimated total</Text>
+        <Text style={styles.totalValue}>{formatCurrency(total, 'GHS')}</Text>
+        {deposit > 0 ? (
+          <Text style={styles.deposit}>Refundable deposit hold · {formatCurrency(deposit, 'GHS')}</Text>
+        ) : null}
+      </View>
+
       {rentalType === 'self_drive' ? (
         <View style={styles.banner}>
           <Text style={styles.bannerIcon}>🪪</Text>
-          <Text style={styles.bannerText}>License upload + deposit required for self-drive</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerText}>License upload + deposit required</Text>
+            <TextInput
+              style={styles.licenseInput}
+              placeholder="License image URL (after upload)"
+              placeholderTextColor={colors.textSecondary}
+              value={licenseUrl}
+              onChangeText={setLicenseUrl}
+              autoCapitalize="none"
+            />
+          </View>
         </View>
       ) : null}
+
+      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+
+      <Pressable style={styles.cta} onPress={book} disabled={busy || !unitPrice}>
+        <View style={styles.ctaGlow} />
+        <Text style={styles.ctaText}>{busy ? 'Booking…' : 'Confirm rental'}</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -134,7 +245,8 @@ const styles = StyleSheet.create({
   },
   segText: { color: colors.textSecondary, fontWeight: '600', zIndex: 1 },
   segTextOn: { color: colors.pureWhite },
-  rateRow: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[4] },
+  flagHint: { color: colors.textSecondary, marginBottom: spacing[3], fontSize: 12 },
+  rateRow: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[3] },
   rateChip: {
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
@@ -145,6 +257,23 @@ const styles = StyleSheet.create({
   rateChipOn: { borderColor: colors.motionBlue },
   rateText: { color: colors.textSecondary, fontWeight: '600' },
   rateTextOn: { color: colors.pureWhite },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing[4],
+  },
+  durationLabel: { color: colors.textSecondary },
+  durationInput: {
+    width: 72,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    color: colors.pureWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -169,9 +298,20 @@ const styles = StyleSheet.create({
   cardMeta: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
   price: { color: colors.pureWhite, fontWeight: '700' },
   per: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  totalCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.md,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  totalLabel: { color: colors.textSecondary },
+  totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 22, marginTop: 4 },
+  deposit: { color: colors.warning, marginTop: 6, fontSize: 13 },
   banner: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing[3],
     marginTop: spacing[2],
     padding: spacing[4],
@@ -179,7 +319,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,184,0,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,184,0,0.35)',
+    marginBottom: spacing[3],
   },
-  bannerIcon: { fontSize: 18 },
-  bannerText: { color: colors.warning, flex: 1, fontWeight: '600', fontSize: 13 },
+  bannerIcon: { fontSize: 18, marginTop: 2 },
+  bannerText: { color: colors.warning, fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  licenseInput: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,0,0.35)',
+    borderRadius: radius.sm,
+    color: colors.pureWhite,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  msg: { color: colors.success, marginBottom: spacing[3] },
+  cta: {
+    borderRadius: radius.pill,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.electricViolet,
+    overflow: 'hidden',
+  },
+  ctaGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.motionBlue,
+    opacity: 0.45,
+  },
+  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
 });

@@ -430,6 +430,52 @@ adminVehicleRouter.patch('/vehicle-types/:id/pricing', async (req: AuthRequest, 
   res.json({ status: 'success', data: row.rows[0] });
 });
 
+/** Phase 15 — admin-editable rental hourly/daily rates */
+adminVehicleRouter.get('/rental-pricing', async (_req, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT * FROM rental_pricing ORDER BY vehicle_type_id, rental_type, rate_unit`
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+adminVehicleRouter.put('/rental-pricing', async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      vehicleTypeId,
+      rentalType,
+      rateUnit,
+      rateAmount,
+      currencyCode = 'GHS',
+      minDuration = 1,
+      maxDuration = 30,
+    } = req.body;
+    if (!vehicleTypeId || !rentalType || !rateUnit || rateAmount == null) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'vehicleTypeId, rentalType, rateUnit, rateAmount required',
+      });
+    }
+    const row = await db.query(
+      `INSERT INTO rental_pricing (
+         vehicle_type_id, rental_type, rate_unit, rate_amount, currency_code, min_duration, max_duration
+       ) VALUES ($1,$2::rental_type,$3::rental_rate_unit,$4,$5,$6,$7)
+       ON CONFLICT (vehicle_type_id, rental_type, rate_unit, currency_code) DO UPDATE SET
+         rate_amount = EXCLUDED.rate_amount,
+         min_duration = EXCLUDED.min_duration,
+         max_duration = EXCLUDED.max_duration
+       RETURNING *`,
+      [vehicleTypeId, rentalType, rateUnit, rateAmount, currencyCode, minDuration, maxDuration]
+    );
+    res.json({ status: 'success', data: row.rows[0] });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 // --- Admin channel funnel ---
 adminChannelsRouter.get(
   '/funnel',
