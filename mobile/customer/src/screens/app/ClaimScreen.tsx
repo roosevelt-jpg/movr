@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const CLAIM_DAPP = process.env.EXPO_PUBLIC_CLAIM_DAPP_URL || 'http://localhost:5174/claim';
 
 /** Phase 8 — Claim screen */
 export default function ClaimScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [eligibility, setEligibility] = useState<any>(null);
   const [msg, setMsg] = useState('');
 
@@ -51,7 +55,8 @@ export default function ClaimScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
   sub: { color: colors.textSecondary, marginTop: spacing[4] },
@@ -65,3 +70,4 @@ const styles = StyleSheet.create({
   btnText: { color: colors.pureWhite, fontWeight: '700' },
   msg: { color: colors.textSecondary, marginTop: spacing[3] },
 });
+}

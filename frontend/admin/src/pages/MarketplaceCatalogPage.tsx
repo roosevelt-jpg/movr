@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import AdminShell from '../layouts/AdminShell';
 import DataTable, { DataTableColumn } from '../components/DataTable';
 import FilterBar from '../components/FilterBar';
+import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({
@@ -30,7 +31,7 @@ export default function MarketplaceCatalogPage() {
   const [stores, setStores] = useState<any[]>([]);
   const [storeId, setStoreId] = useState('');
   const [banners, setBanners] = useState<any[]>([]);
-  const [catForm, setCatForm] = useState({ name: '', slug: '', sortOrder: '0' });
+  const [catForm, setCatForm] = useState({ name: '', slug: '', sortOrder: '0', iconUrl: '' });
 
   const loadCategories = async () => {
     const res = await axios.get(`${API}/admin/marketplace/categories`, { headers: headers() });
@@ -72,10 +73,11 @@ export default function MarketplaceCatalogPage() {
           name: catForm.name,
           slug: catForm.slug || catForm.name.toLowerCase().replace(/\s+/g, '-'),
           sortOrder: Number(catForm.sortOrder) || 0,
+          iconUrl: catForm.iconUrl || undefined,
         },
         { headers: headers() }
       );
-      setCatForm({ name: '', slug: '', sortOrder: '0' });
+      setCatForm({ name: '', slug: '', sortOrder: '0', iconUrl: '' });
       toast.success('Category created');
       await loadCategories();
     } catch (err: any) {
@@ -84,12 +86,30 @@ export default function MarketplaceCatalogPage() {
   };
 
   const toggleCategory = async (c: any) => {
-    await axios.patch(
-      `${API}/admin/marketplace/categories/${c.id}`,
-      { isActive: !c.is_active },
-      { headers: headers() }
-    );
-    await loadCategories();
+    try {
+      await axios.patch(
+        `${API}/admin/marketplace/categories/${c.id}`,
+        { isActive: !c.is_active },
+        { headers: headers() }
+      );
+      await loadCategories();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const toggleBanner = async (b: any) => {
+    if (!storeId) return;
+    try {
+      await axios.patch(
+        `${API}/admin/marketplace/stores/${storeId}/banners/${b.id}`,
+        { isActive: !b.is_active },
+        { headers: headers() }
+      );
+      await loadBanners();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    }
   };
 
   const addBanner = async (file?: File | null) => {
@@ -122,15 +142,12 @@ export default function MarketplaceCatalogPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (c) => (c.is_active ? 'Active' : 'Off'),
-    },
-    {
-      key: 'actions',
-      header: '',
       render: (c) => (
-        <button type="button" className="text-motion-blue" onClick={() => toggleCategory(c)}>
-          Toggle
-        </button>
+        <OnOffButton
+          on={!!c.is_active}
+          onClick={() => toggleCategory(c)}
+          title={c.is_active ? 'Turn off' : 'Turn on'}
+        />
       ),
     },
   ];
@@ -146,8 +163,14 @@ export default function MarketplaceCatalogPage() {
     { key: 'title', header: 'Title', accessor: (b) => b.title || '—' },
     {
       key: 'active',
-      header: 'Active',
-      accessor: (b) => (b.is_active ? 'Yes' : 'No'),
+      header: 'Status',
+      render: (b) => (
+        <OnOffButton
+          on={!!b.is_active}
+          onClick={() => toggleBanner(b)}
+          title={b.is_active ? 'Turn off' : 'Turn on'}
+        />
+      ),
     },
     {
       key: 'actions',
@@ -210,6 +233,25 @@ export default function MarketplaceCatalogPage() {
               value={catForm.sortOrder}
               onChange={(e) => setCatForm({ ...catForm, sortOrder: e.target.value })}
             />
+            <label className="rounded-md bg-surface-elevated border border-border px-admin-3 py-admin-2 cursor-pointer text-admin-sm">
+              {catForm.iconUrl ? 'Icon uploaded' : 'Upload icon'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  try {
+                    const url = await uploadImage(file);
+                    setCatForm((f) => ({ ...f, iconUrl: url }));
+                  } catch (err: any) {
+                    toast.error(err.message || 'Icon upload failed');
+                  }
+                }}
+              />
+            </label>
             <button type="submit" className="rounded-md bg-motion-blue px-admin-3 py-admin-2">
               Add category
             </button>

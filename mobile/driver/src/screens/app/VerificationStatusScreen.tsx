@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { VerifiedBadge } from '@movr/design-system/components/VerifiedBadge';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -15,6 +16,9 @@ export default function VerificationStatusScreen({
   onReupload?: (docKey: string) => void;
   userId?: string;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [docs, setDocs] = useState<Doc[]>([
     { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
     { key: 'driving_license', label: 'Driving license', status: 'in_review' },
@@ -115,7 +119,8 @@ export default function VerificationStatusScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   header: { alignItems: 'center', marginBottom: spacing[6], marginTop: spacing[4] },
   clock: {
@@ -159,3 +164,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

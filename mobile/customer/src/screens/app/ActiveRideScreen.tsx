@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking, TextInput, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import RecordingNoticeModal from './RecordingNoticeModal';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -25,6 +26,9 @@ export default function ActiveRideScreen({
   rideId?: string;
   onComplete?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [proxy, setProxy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatBody, setChatBody] = useState('');
@@ -187,7 +191,8 @@ export default function ActiveRideScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   map: {
     flex: 1,
@@ -254,3 +259,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700' },
 });
+}

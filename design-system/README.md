@@ -9,7 +9,22 @@ Single source of truth for brand tokens across web, admin, and mobile.
 - `tokens.css` — CSS custom properties
 - `tailwind.preset.js` — Tailwind preset that **imports** `tokens.json` (do not hardcode hex in app configs)
 
-### Brand colors
+## Light / dark mode
+
+Apps support **Auto / Light / Dark** via `data-theme` on `<html>` (web/admin) and `ThemeProvider` (mobile).
+
+- Dark is the brand default; light remaps canvas / surface / text / border tokens
+- Brand accents (`electricViolet`, `motionBlue`, `movrGreen`, gradient) stay fixed
+- Marketing heroes stay dark via `.movr-hero` / `[data-force-dark]`
+- Preference key: `movr-theme` (`system` | `light` | `dark`)
+
+Wrap mobile roots with:
+
+```tsx
+import { ThemeProvider } from '@movr/design-system/ThemeProvider';
+```
+
+### Brand colors (dark canvas aliases)
 
 | Token | Hex | Use |
 |---|---|---|

@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 /** Redeem points — catalog + redeem CTA. */
 export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [balance, setBalance] = useState(0);
   const [catalog, setCatalog] = useState<{ id: string; label: string; points: number }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -87,7 +91,8 @@ export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) 
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   back: { color: colors.textSecondary, marginBottom: spacing[3] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
@@ -117,3 +122,4 @@ const styles = StyleSheet.create({
   btnText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
   msg: { color: colors.success, textAlign: 'center', marginTop: spacing[3] },
 });
+}

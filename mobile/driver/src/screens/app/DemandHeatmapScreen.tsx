@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 /** Demand heatmap — surge nearby for drivers. */
 export default function DemandHeatmapScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [surge, setSurge] = useState(1.4);
   const [zone, setZone] = useState('Osu & East Legon');
   const [level, setLevel] = useState('High demand');
@@ -42,7 +46,8 @@ export default function DemandHeatmapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: {
     color: colors.pureWhite,
@@ -108,3 +113,4 @@ const styles = StyleSheet.create({
   zone: { color: colors.textSecondary, fontSize: 15 },
   level: { color: colors.error, fontWeight: '700' },
 });
+}

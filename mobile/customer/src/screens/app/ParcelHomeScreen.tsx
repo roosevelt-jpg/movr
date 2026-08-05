@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -24,6 +25,9 @@ export default function ParcelHomeScreen({
   activeTab?: (typeof TABS)[number];
   onTabChange?: (t: (typeof TABS)[number]) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [tier, setTier] = useState<'standard' | 'express'>('standard');
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
@@ -149,7 +153,8 @@ export default function ParcelHomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   tabs: { flexDirection: 'row', gap: spacing[5], marginBottom: spacing[5] },
   tab: { paddingBottom: 8 },
@@ -214,3 +219,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

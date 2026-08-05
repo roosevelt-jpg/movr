@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import ActiveRideRecordingPanel from './ActiveRideRecordingPanel';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -37,6 +38,9 @@ export default function ActiveRideScreen({
   rideId?: string;
   onArrived?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [ride, setRide] = useState<any>({
     customerName: 'Rider',
     pickupAddress: 'Pickup',
@@ -210,7 +214,8 @@ export default function ActiveRideScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   map: {
     flex: 1,
@@ -315,3 +320,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

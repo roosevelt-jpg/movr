@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -10,6 +11,9 @@ export default function ForgotPasswordScreen({
 }: {
   onSent?: (phone: string) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
@@ -56,7 +60,8 @@ export default function ForgotPasswordScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 80 },
   lock: { fontSize: 36, textAlign: 'center', marginBottom: 16, color: colors.motionBlue },
   title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', textAlign: 'center' },
@@ -95,3 +100,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

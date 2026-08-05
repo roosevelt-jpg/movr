@@ -16,6 +16,7 @@ import { SettlementService } from '../services/settlement.service';
 import { InboxService } from '../services/inbox.service';
 import { KycAttestationService } from '../services/kyc-attestation.service';
 import identityVerification from '../services/identity-verification.service';
+import { assertDirectUploadUrl } from '../utils/media-url';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -137,10 +138,22 @@ driverRouter.get(
   requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
-      const row = await db.query(
-        `SELECT * FROM driver_vehicles WHERE user_id = $1 OR driver_id = $1 ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
-        [req.user!.id]
-      ).catch(() => ({ rows: [] }));
+      const row = await db
+        .query(
+          `SELECT * FROM driver_vehicles
+           WHERE driver_user_id = $1 OR user_id = $1
+           ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+           LIMIT 1`,
+          [req.user!.id]
+        )
+        .catch(() =>
+          db
+            .query(
+              `SELECT * FROM driver_vehicles WHERE driver_user_id = $1 LIMIT 1`,
+              [req.user!.id]
+            )
+            .catch(() => ({ rows: [] }))
+        );
       const v = row.rows[0];
       if (!v) {
         return res.json({ status: 'success', data: null });
@@ -168,30 +181,56 @@ driverRouter.patch(
   requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { vehicle_type, make_model, plate_number } = req.body;
+      const { vehicle_type, make_model, plate_number, photo_url } = req.body;
+      assertDirectUploadUrl(photo_url, 'photo_url');
       const existing = await db
-        .query(`SELECT id FROM driver_vehicles WHERE user_id = $1 LIMIT 1`, [req.user!.id])
-        .catch(() => ({ rows: [] }));
+        .query(
+          `SELECT id FROM driver_vehicles WHERE driver_user_id = $1 OR user_id = $1 LIMIT 1`,
+          [req.user!.id]
+        )
+        .catch(() =>
+          db
+            .query(`SELECT id FROM driver_vehicles WHERE driver_user_id = $1 LIMIT 1`, [
+              req.user!.id,
+            ])
+            .catch(() => ({ rows: [] }))
+        );
+
       if (existing.rows[0]) {
         await db.query(
           `UPDATE driver_vehicles SET
              vehicle_type = COALESCE($2, vehicle_type),
              make_model = COALESCE($3, make_model),
              plate_number = COALESCE($4, plate_number),
+             photo_url = COALESCE($5, photo_url),
              updated_at = NOW()
            WHERE id = $1`,
-          [existing.rows[0].id, vehicle_type || null, make_model || null, plate_number || null]
+          [
+            existing.rows[0].id,
+            vehicle_type || null,
+            make_model || null,
+            plate_number || null,
+            photo_url || null,
+          ]
         );
       } else {
+        const vt = await db
+          .query(
+            `SELECT id FROM vehicle_types WHERE code IN ('sedan', 'standard') ORDER BY code LIMIT 1`
+          )
+          .catch(() => ({ rows: [] }));
         await db
           .query(
-            `INSERT INTO driver_vehicles (user_id, vehicle_type, make_model, plate_number, verified)
-             VALUES ($1,$2,$3,$4,true)`,
+            `INSERT INTO driver_vehicles (
+               driver_user_id, vehicle_type_id, vehicle_type, make_model, plate_number, photo_url, verified
+             ) VALUES ($1,$2,$3,$4,$5,$6,true)`,
             [
               req.user!.id,
+              vt.rows[0]?.id || null,
               vehicle_type || 'Sedan',
-              make_model || 'Toyota Corolla',
-              plate_number || 'GR 4471-22',
+              make_model || null,
+              plate_number || null,
+              photo_url || null,
             ]
           )
           .catch(() => undefined);
@@ -200,8 +239,9 @@ driverRouter.patch(
         status: 'success',
         data: {
           vehicle_type: vehicle_type || 'Sedan',
-          make_model: make_model || 'Toyota Corolla',
-          plate_number: plate_number || 'GR 4471-22',
+          make_model: make_model || null,
+          plate_number: plate_number || null,
+          photo_url: photo_url || null,
           registration_status: 'Verified',
         },
       });
@@ -210,8 +250,9 @@ driverRouter.patch(
         status: 'success',
         data: {
           vehicle_type: req.body.vehicle_type || 'Sedan',
-          make_model: req.body.make_model || 'Toyota Corolla',
-          plate_number: req.body.plate_number || 'GR 4471-22',
+          make_model: req.body.make_model || null,
+          plate_number: req.body.plate_number || null,
+          photo_url: req.body.photo_url || null,
           registration_status: 'Verified',
         },
       });

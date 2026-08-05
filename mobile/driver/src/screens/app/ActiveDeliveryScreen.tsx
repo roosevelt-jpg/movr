@@ -8,7 +8,9 @@ import {
   PanResponder,
   Alert,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
+import { pickAndUploadImage } from '../../lib/upload';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -32,8 +34,12 @@ export default function ActiveDeliveryScreen({
   orderLabel?: string;
   onDone?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [photoTaken, setPhotoTaken] = useState(false);
+  const [proofUrl, setProofUrl] = useState('');
   const [signed, setSigned] = useState(false);
   const [strokes, setStrokes] = useState<{ x: number; y: number }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -96,15 +102,17 @@ export default function ActiveDeliveryScreen({
     setBusy(true);
     setMsg('');
     try {
-      // Placeholder photo as tiny PNG data URL (1x1) — real apps use ImagePicker / camera
-      const proofBase64 =
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      if (!proofUrl) {
+        setMsg('Upload a proof photo first');
+        setBusy(false);
+        return;
+      }
 
       await fetch(`${API}/deliveries/${deliveryId}/proof`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          proofBase64,
+          proofOfDeliveryUrl: proofUrl,
           signatureBase64: signatureDataUrl(),
         }),
       });
@@ -137,13 +145,22 @@ export default function ActiveDeliveryScreen({
         <Text style={styles.cardTitle}>Proof of delivery photo</Text>
         <Pressable
           style={[styles.photoBox, photoTaken && styles.doneBox]}
-          onPress={() => {
-            setPhotoTaken(true);
-            Alert.alert('Photo', 'Proof photo captured (camera hook-up in Expo build)');
+          onPress={async () => {
+            try {
+              const url = await pickAndUploadImage({ accept: 'image/*' });
+              setProofUrl(url);
+              setPhotoTaken(true);
+              setMsg('Proof photo uploaded');
+            } catch (e: any) {
+              setMsg(e.message || 'Photo upload failed');
+              Alert.alert('Upload', e.message || 'Photo upload failed');
+            }
           }}
         >
           <Text style={styles.photoIcon}>{photoTaken ? '✓' : '📷'}</Text>
-          <Text style={styles.hint}>{photoTaken ? 'Photo ready' : 'Tap to capture'}</Text>
+          <Text style={styles.hint}>
+            {photoTaken ? 'Photo uploaded · tap to replace' : 'Tap to upload proof photo'}
+          </Text>
         </Pressable>
       </View>
 
@@ -196,7 +213,8 @@ export default function ActiveDeliveryScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
   sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[5] },
@@ -280,3 +298,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

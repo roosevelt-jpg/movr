@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -31,6 +32,9 @@ const BREAKDOWN_ORDER = ['Rides', 'Orders', 'Referrals', 'Staking'];
 
 /** Pre-launch points — total, activity bars, estimated DVT at TGE. */
 export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [balance, setBalance] = useState(0);
   const [estimate, setEstimate] = useState<{ estimatedDvt?: number; conversionRate?: number }>({});
   const [byActivity, setByActivity] = useState<any[]>([]);
@@ -119,7 +123,8 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   hero: {
@@ -187,3 +192,4 @@ const styles = StyleSheet.create({
   },
   redeemText: { color: colors.pureWhite, fontWeight: '700' },
 });
+}

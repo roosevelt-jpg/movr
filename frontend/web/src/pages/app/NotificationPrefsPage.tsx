@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OnOffButton from '../../components/OnOffButton';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -91,18 +92,11 @@ export default function NotificationPrefsPage() {
               className="flex items-center justify-between py-4 border-b border-border"
             >
               <span className="font-medium">{row.label}</span>
-              <button
-                type="button"
-                aria-label={row.label}
+              <OnOffButton
+                on={!!prefs[row.key]}
                 onClick={() => toggle(row.key)}
-                className={`w-12 h-7 rounded-full p-0.5 flex ${
-                  prefs[row.key]
-                    ? 'bg-movr-gradient justify-end'
-                    : 'bg-border justify-start'
-                }`}
-              >
-                <span className="w-6 h-6 rounded-full bg-white block" />
-              </button>
+                title={row.label}
+              />
             </div>
           ))}
         </div>

@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
+import { pickAndUploadImage } from '../../lib/upload';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -22,6 +24,9 @@ const VEHICLES = [
 
 /** Rentals — chauffeur/self-drive (flag-gated), hourly/daily, license + deposit. */
 export default function RentalHomeScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [rentalType, setRentalType] = useState<'chauffeur' | 'self_drive'>('chauffeur');
   const [rateUnit, setRateUnit] = useState<'hourly' | 'daily'>('daily');
   const [duration, setDuration] = useState('1');
@@ -29,6 +34,7 @@ export default function RentalHomeScreen() {
   const [selfDriveOn, setSelfDriveOn] = useState(false);
   const [pricing, setPricing] = useState<any[]>([]);
   const [licenseUrl, setLicenseUrl] = useState('');
+  const [uploadingLicense, setUploadingLicense] = useState(false);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -66,7 +72,7 @@ export default function RentalHomeScreen() {
     setMsg('');
     try {
       if (rentalType === 'self_drive' && !licenseUrl.trim()) {
-        setMsg('License upload URL required for self-drive');
+        setMsg('Upload your license photo to continue (file upload required)');
         setBusy(false);
         return;
       }
@@ -198,14 +204,31 @@ export default function RentalHomeScreen() {
           <Text style={styles.bannerIcon}>🪪</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.bannerText}>License upload + deposit required</Text>
-            <TextInput
-              style={styles.licenseInput}
-              placeholder="License image URL (after upload)"
-              placeholderTextColor={colors.textSecondary}
-              value={licenseUrl}
-              onChangeText={setLicenseUrl}
-              autoCapitalize="none"
-            />
+            <Pressable
+              style={styles.licenseBtn}
+              disabled={uploadingLicense}
+              onPress={async () => {
+                setUploadingLicense(true);
+                setMsg('');
+                try {
+                  const url = await pickAndUploadImage({ accept: 'image/*' });
+                  setLicenseUrl(url);
+                  setMsg('License uploaded');
+                } catch (e: any) {
+                  setMsg(e.message || 'License upload failed');
+                } finally {
+                  setUploadingLicense(false);
+                }
+              }}
+            >
+              <Text style={styles.licenseBtnText}>
+                {uploadingLicense
+                  ? 'Uploading…'
+                  : licenseUrl
+                    ? 'License uploaded · tap to replace'
+                    : 'Upload license photo'}
+              </Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -220,7 +243,8 @@ export default function RentalHomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   segment: {
@@ -323,6 +347,16 @@ const styles = StyleSheet.create({
   },
   bannerIcon: { fontSize: 18, marginTop: 2 },
   bannerText: { color: colors.warning, fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  licenseBtn: {
+    marginTop: spacing[2],
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[3],
+  },
+  licenseBtnText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
   licenseInput: {
     borderWidth: 1,
     borderColor: 'rgba(255,184,0,0.35)',
@@ -347,3 +381,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
 });
+}

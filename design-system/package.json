@@ -7,6 +7,7 @@
   "exports": {
     ".": "./theme.ts",
     "./theme": "./theme.ts",
+    "./ThemeProvider": "./ThemeProvider.tsx",
     "./format": "./format.ts",
     "./tokens.json": "./tokens.json",
     "./tokens.css": "./tokens.css",

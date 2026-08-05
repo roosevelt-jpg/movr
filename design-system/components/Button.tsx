@@ -2,12 +2,12 @@ import React from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   View,
   ViewStyle,
 } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing } from '../theme';
+import { useThemeColors } from '../ThemeProvider';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
@@ -28,6 +28,7 @@ export function Button({
   disabled,
   style,
 }: ButtonProps) {
+  const colors = useThemeColors();
   const isPrimary = variant === 'primary';
   const isGhost = variant === 'ghost';
 
@@ -36,68 +37,55 @@ export function Button({
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
-        styles.base,
-        isPrimary && styles.primary,
-        variant === 'secondary' && styles.secondary,
-        isGhost && styles.ghost,
-        (disabled || loading) && styles.disabled,
-        pressed && styles.pressed,
+        {
+          minHeight: 48,
+          paddingHorizontal: spacing[5],
+          borderRadius: radius.pill,
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        },
+        isPrimary && { backgroundColor: colors.electricViolet },
+        variant === 'secondary' && {
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          borderColor: colors.textPrimary,
+        },
+        isGhost && { backgroundColor: 'transparent' },
+        (disabled || loading) && { opacity: 0.5 },
+        pressed && { opacity: 0.85 },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={colors.pureWhite} />
+        <ActivityIndicator color="#FFFFFF" />
       ) : (
         <Text
           style={[
-            styles.label,
-            variant === 'secondary' && styles.labelSecondary,
-            isGhost && styles.labelGhost,
+            { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+            variant === 'secondary' && { color: colors.textPrimary },
+            isGhost && { color: colors.motionBlue },
           ]}
         >
           {label}
         </Text>
       )}
-      {/* Primary uses brand gradient in native apps via LinearGradient wrapper when available */}
-      {isPrimary ? <View pointerEvents="none" style={styles.gradientHint} /> : null}
+      {isPrimary ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            backgroundColor: colors.motionBlue,
+            opacity: 0.25,
+          }}
+        />
+      ) : null}
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    minHeight: 48,
-    paddingHorizontal: spacing[5],
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  primary: {
-    backgroundColor: colors.electricViolet,
-  },
-  secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.pureWhite,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.85 },
-  label: {
-    color: colors.pureWhite,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  labelSecondary: { color: colors.pureWhite },
-  labelGhost: { color: colors.motionBlue },
-  gradientHint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.25,
-  },
-});
 
 export default Button;

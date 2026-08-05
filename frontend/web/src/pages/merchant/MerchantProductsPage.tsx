@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 import { mediaUrl, uploadCatalogImage } from '../../lib/media';
+import OnOffButton from '../../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const token = () => localStorage.getItem('movr_merchant_token') || '';
@@ -288,17 +289,12 @@ export default function MerchantProductsPage() {
               </span>
               <span className="text-text-secondary">{p.category_name || '—'}</span>
               <span className="text-text-secondary">{formatMoney(Number(p.price))}</span>
-              <button type="button" onClick={() => toggleStock(p)}>
-                <span
-                  className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    p.in_stock !== false
-                      ? 'bg-movr-green/30 text-success'
-                      : 'bg-error/20 text-error'
-                  }`}
-                >
-                  {p.in_stock !== false ? 'In stock' : 'Out of stock'}
-                </span>
-              </button>
+              <OnOffButton
+                on={p.in_stock !== false}
+                onClick={() => toggleStock(p)}
+                onLabel="In stock"
+                offLabel="Out of stock"
+              />
               <div className="flex gap-3 justify-end">
                 <button type="button" className="text-motion-blue" onClick={() => startEdit(p)}>
                   Edit

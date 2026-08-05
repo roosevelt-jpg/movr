@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -17,6 +18,9 @@ function authHeaders(): Record<string, string> {
 
 /** Driver subscription — fiat vs DVT, staking + performance discounts. */
 export default function SubscriptionScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [planId, setPlanId] = useState('');
   const [plans, setPlans] = useState<any[]>([]);
   const [method, setMethod] = useState<'fiat' | 'dvt'>('fiat');
@@ -190,7 +194,8 @@ export default function SubscriptionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   planCard: {
@@ -272,3 +277,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
 });
+}

@@ -21,7 +21,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import MovrLogoMark from '../components/MovrLogoMark';
-import { colors } from '@movr/design-system/theme';
+import { useTheme } from '../theme/ThemeProvider';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: Home, match: ['/dashboard'] },
@@ -53,6 +53,7 @@ function formatDateTime(d: Date) {
 
 const AppLayout: React.FC = () => {
   const { user, logout, setUser } = useAuthStore();
+  const { mode, cyclePreference } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -109,30 +110,14 @@ const AppLayout: React.FC = () => {
 
     setUploading(true);
     try {
-      try {
-        const res = await usersApi.uploadAvatar(file);
-        const url = res.data?.data?.avatarUrl || res.data?.data?.avatar_url || res.data?.url;
-        if (url) {
-          setUser({ ...user, avatarUrl: url });
-          toast.success('Profile photo updated');
-          setProfileOpen(false);
-          return;
-        }
-      } catch {
-        // Fall back to local preview if API upload is unavailable
-      }
-
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('Could not read file'));
-        reader.readAsDataURL(file);
-      });
-      setUser({ ...user, avatarUrl: dataUrl });
+      const res = await usersApi.uploadAvatar(file);
+      const url = res.data?.data?.avatarUrl || res.data?.data?.avatar_url || res.data?.url;
+      if (!url) throw new Error('Upload did not return a URL');
+      setUser({ ...user, avatarUrl: url });
       toast.success('Profile photo updated');
       setProfileOpen(false);
     } catch (err: any) {
-      toast.error(err?.message || 'Upload failed');
+      toast.error(err?.response?.data?.message || err?.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -236,7 +221,7 @@ const AppLayout: React.FC = () => {
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              className="md:hidden p-2 -ml-2 text-pure-white shrink-0"
+              className="md:hidden p-2 -ml-2 text-text-primary shrink-0"
               onClick={() => setIsMenuOpen(true)}
               aria-label="Open menu"
             >
@@ -244,14 +229,12 @@ const AppLayout: React.FC = () => {
             </button>
             <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0">
               <MovrLogoMark className="w-8 h-8" />
-              <span className="font-black" style={{ color: colors.pureWhite }}>
-                MOVR
-              </span>
+              <span className="font-black text-text-primary">MOVR</span>
             </Link>
 
             {/* Live date & time on every dashboard page */}
             <div className="hidden sm:flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-medium text-pure-white truncate">{date}</span>
+              <span className="text-sm font-medium text-text-primary truncate">{date}</span>
               <span className="text-xs text-text-secondary tabular-nums">{time}</span>
             </div>
             <div className="sm:hidden flex flex-col leading-tight min-w-0">
@@ -259,6 +242,15 @@ const AppLayout: React.FC = () => {
             </div>
           </div>
 
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={cyclePreference}
+              className="hidden sm:inline-flex rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary"
+              title="Cycle appearance"
+            >
+              {mode === 'light' ? 'Light' : 'Dark'}
+            </button>
           <div className="relative shrink-0" ref={dropdownRef}>
             <button
               type="button"
@@ -269,7 +261,7 @@ const AppLayout: React.FC = () => {
             >
               <Avatar />
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-semibold text-pure-white leading-tight">
+                <p className="text-sm font-semibold text-text-primary leading-tight">
                   {user?.firstName || 'User'}
                 </p>
                 <p className="text-xs text-text-secondary capitalize">{user?.userType || 'customer'}</p>
@@ -335,6 +327,7 @@ const AppLayout: React.FC = () => {
               className="hidden"
               onChange={onAvatarSelected}
             />
+          </div>
           </div>
         </header>
 

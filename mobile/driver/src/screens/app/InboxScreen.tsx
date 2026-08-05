@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatLocalTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -24,6 +25,9 @@ const TABS = [
 
 /** Driver inbox — shared pattern with customer InboxScreen (Phase 19). */
 export default function InboxScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [category, setCategory] = useState<string | undefined>();
   const [messages, setMessages] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
@@ -95,7 +99,8 @@ export default function InboxScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack },
   header: {
     flexDirection: 'row',
@@ -117,3 +122,4 @@ const styles = StyleSheet.create({
   msgBody: { color: colors.textSecondary, marginTop: 4 },
   msgWhen: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
 });
+}

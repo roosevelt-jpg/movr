@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -224,12 +225,9 @@ export default function PricingEnginePage() {
       {factors.map((f) => (
         <div key={f.id} style={styles.row}>
           <span>
-            {f.factor_type} · zone {String(f.zone_id || 'global').slice(0, 8)} ·{' '}
-            {f.is_active ? 'ON' : 'OFF'}
+            {f.factor_type} · zone {String(f.zone_id || 'global').slice(0, 8)}
           </span>
-          <button style={styles.btn} onClick={() => toggle(f.id, !f.is_active)}>
-            {f.is_active ? 'Disable' : 'Enable'}
-          </button>
+          <OnOffButton on={!!f.is_active} onClick={() => toggle(f.id, !f.is_active)} />
         </div>
       ))}
 

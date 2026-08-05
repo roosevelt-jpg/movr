@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -40,6 +41,9 @@ export default function HomeScreen({
   dropoffLng?: number;
   onSelectType?: (code: string) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [loading, setLoading] = useState(true);
   const [options, setOptions] = useState<VehicleOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -157,7 +161,8 @@ export default function HomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { paddingVertical: spacing[3] },
   title: { color: colors.pureWhite, fontSize: 16, fontWeight: '700' },
   sub: { color: colors.textSecondary, marginTop: spacing[1], marginBottom: spacing[2], fontSize: 13 },
@@ -189,3 +194,4 @@ const styles = StyleSheet.create({
   meta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   price: { color: colors.pureWhite, fontWeight: '700' },
 });
+}

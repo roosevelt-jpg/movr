@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -14,6 +15,9 @@ export default function LoginScreen({
   onForgot?: () => void;
   onCreate?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
@@ -98,7 +102,8 @@ export default function LoginScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 72 },
   brand: { color: colors.pureWhite, fontSize: 32, fontWeight: '800', textAlign: 'center' },
   sub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 36 },
@@ -135,3 +140,4 @@ const styles = StyleSheet.create({
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
   footer: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[5] },
 });
+}

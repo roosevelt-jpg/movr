@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { ThemeProvider } from './theme/ThemeProvider';
 import AdminLiveMapPage from './pages/AdminLiveMapPage';
 import PricingEnginePage from './pages/PricingEnginePage';
 import FinanceDashboardPage from './pages/FinanceDashboardPage';
@@ -19,6 +20,7 @@ import KycQueuePage from './pages/KycQueuePage';
 import SmsChannelPage from './pages/SmsChannelPage';
 import FeatureFlagsPage from './pages/FeatureFlagsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
+import AdminSettingsPage from './pages/AdminSettingsPage';
 import CmsPagesPage from './pages/CmsPagesPage';
 import MarketplaceCatalogPage from './pages/MarketplaceCatalogPage';
 import MerchantsOversightPage from './pages/MerchantsOversightPage';
@@ -35,9 +37,18 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 /** Admin ops console — mockup routes + existing tools. */
 const App: React.FC = () => {
   return (
+    <ThemeProvider>
     <BrowserRouter basename="/admin">
       <Routes>
         <Route path="/login" element={<AdminLoginPage />} />
+        <Route
+          path="/settings"
+          element={
+            <RequireAdmin>
+              <AdminSettingsPage />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="/"
           element={
@@ -226,6 +237,7 @@ const App: React.FC = () => {
       </Routes>
       <Toaster position="top-right" />
     </BrowserRouter>
+    </ThemeProvider>
   );
 };
 

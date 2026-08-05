@@ -24,6 +24,7 @@ export default function VehiclePricingPage() {
     name: '',
     code: '',
     category: 'sedan',
+    iconUrl: '',
     effectiveFrom: '',
     scheduleMode: 'now' as 'now' | 'later',
   });
@@ -94,6 +95,7 @@ export default function VehiclePricingPage() {
       name: t.name || '',
       code: '',
       category: 'sedan',
+      iconUrl: '',
       effectiveFrom: '',
       scheduleMode: 'now',
     });
@@ -129,6 +131,7 @@ export default function VehiclePricingPage() {
         name: form.name || 'New type',
         code: form.code || `type_${Date.now()}`,
         category: form.category || 'sedan',
+        iconUrl: form.iconUrl || undefined,
         reason: 'Admin create vehicle type',
       },
       { headers: headers() }
@@ -168,6 +171,7 @@ export default function VehiclePricingPage() {
               name: '',
               code: '',
               category: 'sedan',
+              iconUrl: '',
               effectiveFrom: '',
               scheduleMode: 'now',
             });
@@ -239,6 +243,32 @@ export default function VehiclePricingPage() {
                   </option>
                 ))}
               </select>
+              <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Icon (direct upload)
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'block', marginTop: 6 }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    try {
+                      const { uploadCatalogImage } = await import('../lib/media');
+                      const url = await uploadCatalogImage(
+                        file,
+                        localStorage.getItem('movr_admin_token') || ''
+                      );
+                      setForm((f) => ({ ...f, iconUrl: url }));
+                    } catch (err: any) {
+                      setError(err.message || 'Icon upload failed');
+                    }
+                  }}
+                />
+              </label>
+              {form.iconUrl ? (
+                <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Icon: {form.iconUrl}</p>
+              ) : null}
             </>
           ) : (
             <>

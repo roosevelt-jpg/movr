@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -24,6 +25,9 @@ export default function TripHistoryScreen({
   /** Keep false by default so empty state can show; set true for demos. */
   showDemoWhenEmpty?: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -105,7 +109,8 @@ export default function TripHistoryScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.jetBlack,
@@ -168,3 +173,4 @@ const styles = StyleSheet.create({
   when: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
   amount: { color: colors.pureWhite, fontWeight: '600' },
 });
+}

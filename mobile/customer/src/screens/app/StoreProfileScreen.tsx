@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -22,6 +23,9 @@ export default function StoreProfileScreen({
   onOpenProduct?: (productId: string) => void;
   onAddToCart?: (product: any) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [store, setStore] = useState<any>({
     name: 'Boutique 22',
     category: 'Fashion',
@@ -111,7 +115,8 @@ export default function StoreProfileScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   banner: {
     height: 140,
@@ -148,3 +153,4 @@ const styles = StyleSheet.create({
   },
   addText: { color: colors.pureWhite, fontWeight: '700', fontSize: 12 },
 });
+}

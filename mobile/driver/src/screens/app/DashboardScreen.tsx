@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useTheme, useThemeColors } from '@movr/design-system/ThemeProvider';
+import type { ThemePreference } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 import PerformanceScreen from './PerformanceScreen';
 import { initMobileSentry } from '../../sentry';
@@ -26,6 +28,10 @@ export default function DashboardScreen({
   onDemand?: () => void;
   onVehicle?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+  const { preference, mode, setPreference } = useTheme();
+
   const [tab, setTab] = useState<'earnings' | 'performance'>('earnings');
   const [online, setOnline] = useState(true);
   const [today, setToday] = useState(0);
@@ -109,6 +115,20 @@ export default function DashboardScreen({
         <View style={styles.avatar} />
       </View>
 
+      <View style={styles.themeRow}>
+        {(['system', 'light', 'dark'] as ThemePreference[]).map((p) => (
+          <Pressable
+            key={p}
+            onPress={() => setPreference(p)}
+            style={[styles.themeChip, preference === p && styles.themeChipOn]}
+          >
+            <Text style={[styles.themeChipText, preference === p && styles.themeChipTextOn]}>
+              {p === 'system' ? `Auto (${mode})` : p === 'light' ? 'Light' : 'Dark'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       <View style={styles.toggle}>
         <Pressable
           style={[styles.toggleBtn, online && styles.toggleOn]}
@@ -181,7 +201,8 @@ export default function DashboardScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   tabs: { flexDirection: 'row', gap: spacing[5], marginBottom: spacing[4], paddingHorizontal: spacing[4], paddingTop: spacing[4] },
   tab: { paddingBottom: 8 },
@@ -223,6 +244,22 @@ const styles = StyleSheet.create({
   toggleOffActive: { backgroundColor: colors.border },
   toggleText: { color: colors.textSecondary, fontWeight: '700' },
   toggleTextOn: { color: colors.pureWhite },
+  themeRow: { flexDirection: 'row', gap: 8, marginBottom: spacing[3] },
+  themeChip: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  themeChipOn: {
+    borderColor: colors.motionBlue,
+    backgroundColor: 'rgba(0, 85, 255, 0.12)',
+  },
+  themeChipText: { color: colors.textSecondary, fontWeight: '600', fontSize: 11 },
+  themeChipTextOn: { color: colors.textPrimary },
   earnCard: {
     borderRadius: radius.lg,
     padding: spacing[5],
@@ -291,3 +328,4 @@ const styles = StyleSheet.create({
   tripTime: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   tripAmt: { color: colors.success, fontWeight: '700' },
 });
+}

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import MerchantShell from '../../layouts/MerchantShell';
 import { VerifiedBadgeWeb } from '@movr/design-system/components/VerifiedBadge';
+import { ThemeToggle } from '../../theme/ThemeProvider';
+import OnOffButton from '../../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
@@ -52,7 +54,7 @@ export default function MerchantSettingsPage() {
 
   const Row = ({ label, value }: { label: string; value: string }) => (
     <div className="flex justify-between gap-4 py-4 border-b border-border">
-      <span className="text-pure-white">{label}</span>
+      <span className="text-text-primary">{label}</span>
       <span className="text-text-secondary text-right">{value}</span>
     </div>
   );
@@ -64,6 +66,11 @@ export default function MerchantSettingsPage() {
         <VerifiedBadgeWeb status={attestation?.status} explorerUrl={attestation?.explorerUrl} />
       </div>
 
+      <p className="text-xs tracking-wider text-text-secondary mb-2">APPEARANCE</p>
+      <div className="mb-10 max-w-xl rounded-2xl border border-border bg-surface-elevated p-4">
+        <ThemeToggle />
+      </div>
+
       <p className="text-xs tracking-wider text-text-secondary mb-2">BUSINESS</p>
       <div className="mb-10 max-w-xl">
         <Row label="Business email" value={business.email} />
@@ -73,22 +80,20 @@ export default function MerchantSettingsPage() {
 
       <p className="text-xs tracking-wider text-text-secondary mb-2">NOTIFICATIONS</p>
       <div className="mb-10 max-w-xl">
-        <button
-          type="button"
-          className="w-full flex justify-between gap-4 py-4 border-b border-border text-left"
-          onClick={() => setAlerts((a) => ({ ...a, newOrders: !a.newOrders }))}
-        >
+        <div className="flex justify-between items-center gap-4 py-4 border-b border-border">
           <span>New order alerts</span>
-          <span className="text-text-secondary">{alerts.newOrders ? 'On' : 'Off'}</span>
-        </button>
-        <button
-          type="button"
-          className="w-full flex justify-between gap-4 py-4 border-b border-border text-left"
-          onClick={() => setAlerts((a) => ({ ...a, dailySummary: !a.dailySummary }))}
-        >
+          <OnOffButton
+            on={alerts.newOrders}
+            onClick={() => setAlerts((a) => ({ ...a, newOrders: !a.newOrders }))}
+          />
+        </div>
+        <div className="flex justify-between items-center gap-4 py-4 border-b border-border">
           <span>Daily summary</span>
-          <span className="text-text-secondary">{alerts.dailySummary ? 'On' : 'Off'}</span>
-        </button>
+          <OnOffButton
+            on={alerts.dailySummary}
+            onClick={() => setAlerts((a) => ({ ...a, dailySummary: !a.dailySummary }))}
+          />
+        </div>
       </div>
 
       <Link to="/merchant/store" className="text-sm text-motion-blue hover:underline">

@@ -8,7 +8,8 @@ import {
   FlatList,
   ScrollView,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -24,6 +25,9 @@ function authHeaders(): Record<string, string> {
 
 /** Send money — recipient, amount, FX quote cards (cross-border transfer APIs). */
 export default function SendMoneyScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [to, setTo] = useState('+233201234567');
   const [amount, setAmount] = useState('500');
   const [currency, setCurrency] = useState('GHS');
@@ -178,7 +182,8 @@ export default function SendMoneyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   card: {
@@ -242,3 +247,4 @@ const styles = StyleSheet.create({
   },
   histLabel: { color: colors.pureWhite, flex: 1, marginRight: 8 },
 });
+}

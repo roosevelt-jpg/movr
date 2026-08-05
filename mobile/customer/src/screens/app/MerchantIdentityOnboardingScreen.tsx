@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
+import { pickAndUploadImage } from '../../lib/upload';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -22,11 +24,16 @@ const COUNTRIES = [
 
 /** Merchant identity onboarding — Country of ID + national ID + business docs (Phase 26). */
 export default function MerchantIdentityOnboardingScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [country, setCountry] = useState('GH');
   const [fields, setFields] = useState<any>(null);
   const [idNumber, setIdNumber] = useState('');
   const [fullName, setFullName] = useState('');
   const [bizReg, setBizReg] = useState('');
+  const [docUrl, setDocUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState('');
 
   useEffect(() => {
@@ -36,7 +43,25 @@ export default function MerchantIdentityOnboardingScreen() {
       .catch(() => undefined);
   }, [country]);
 
+  const uploadDoc = async () => {
+    setUploading(true);
+    setResult('');
+    try {
+      const url = await pickAndUploadImage({ accept: 'image/*,application/pdf' });
+      setDocUrl(url);
+      setResult('Document uploaded');
+    } catch (e: any) {
+      setResult(e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const submit = async () => {
+    if (!docUrl) {
+      setResult('Upload a national ID / business document photo first');
+      return;
+    }
     const res = await fetch(`${API}/merchant/kyc`, {
       method: 'POST',
       headers: authHeaders(),
@@ -46,6 +71,7 @@ export default function MerchantIdentityOnboardingScreen() {
         documentNumber: idNumber,
         fullName,
         businessRegistrationNumber: bizReg,
+        fileUrl: docUrl,
         ocrConfirmed: true,
       }),
     });
@@ -97,6 +123,11 @@ export default function MerchantIdentityOnboardingScreen() {
         placeholder="Business registration number"
         placeholderTextColor={colors.textSecondary}
       />
+      <Pressable style={styles.upload} onPress={uploadDoc} disabled={uploading}>
+        <Text style={styles.btnText}>
+          {uploading ? 'Uploading…' : docUrl ? 'Document uploaded · tap to replace' : 'Upload ID / certificate'}
+        </Text>
+      </Pressable>
       <Pressable style={styles.btn} onPress={submit}>
         <Text style={styles.btnText}>Submit KYC</Text>
       </Pressable>
@@ -105,7 +136,8 @@ export default function MerchantIdentityOnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
   sub: { color: colors.textSecondary, marginVertical: spacing[3] },
@@ -135,6 +167,14 @@ const styles = StyleSheet.create({
     padding: spacing[3],
     alignItems: 'center',
   },
+  upload: {
+    marginTop: spacing[2],
+    backgroundColor: colors.motionBlue,
+    borderRadius: radius.md,
+    padding: spacing[3],
+    alignItems: 'center',
+  },
   btnText: { color: colors.pureWhite, fontWeight: '700' },
   result: { color: colors.warning, marginTop: spacing[3] },
 });
+}

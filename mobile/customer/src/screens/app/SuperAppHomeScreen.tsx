@@ -8,7 +8,8 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { useWallet } from '../../context/WalletContext';
 import HomeScreen from './HomeScreen';
 import ShopHomeScreen from './ShopHomeScreen';
@@ -45,6 +46,9 @@ export default function SuperAppHomeScreen({
   onOpenStore?: (storeId: string) => void;
   onOpenRecent?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [active, setActive] = useState<Module>('Ride');
   const [mounted, setMounted] = useState<Record<Module, boolean>>({
     Ride: true,
@@ -246,7 +250,8 @@ export default function SuperAppHomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, paddingHorizontal: spacing[4], paddingTop: spacing[3] },
   backRow: { paddingVertical: spacing[2] },
   backText: { color: colors.motionBlue, fontWeight: '600' },
@@ -356,3 +361,4 @@ const styles = StyleSheet.create({
   fieldText: { color: colors.pureWhite, fontSize: 15, flex: 1 },
   fieldInput: { color: colors.pureWhite, fontSize: 15, flex: 1, padding: 0 },
 });
+}

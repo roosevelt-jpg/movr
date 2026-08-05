@@ -162,6 +162,8 @@ const { uploadsRouter, UPLOAD_ROOT } = require('./routes/uploads.routes');
 const { categoriesRouter, adminCatalogRouter } = require('./routes/catalog.routes');
 app.use('/uploads', express.static(UPLOAD_ROOT));
 app.use('/api/v1/uploads', uploadsRouter);
+app.use('/api/v1', uploadsRouter); // exposes POST /api/v1/users/avatar
+
 app.use('/api/v1/categories', categoriesRouter);
 app.use('/api/v1/admin/marketplace', adminCatalogRouter);
 app.use('/api/v1/stores', storesRouter);

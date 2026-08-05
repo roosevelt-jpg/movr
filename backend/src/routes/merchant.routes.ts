@@ -13,6 +13,7 @@ import { MatchingEngineService } from '../services/matching-engine.service';
 import identityVerification from '../services/identity-verification.service';
 import { KycAttestationService } from '../services/kyc-attestation.service';
 import { InboxService } from '../services/inbox.service';
+import { assertDirectUploadUrl } from '../utils/media-url';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -396,6 +397,7 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
   try {
     const merchant = await getMerchantForUser(req.user!.id);
     const { storeId, name, description, price, currency, imageUrl, categoryId } = req.body;
+    assertDirectUploadUrl(imageUrl, 'imageUrl');
     const store = await db.query(
       `SELECT id FROM stores WHERE id = $1 AND merchant_id = $2`,
       [storeId, merchant.id]
@@ -418,6 +420,7 @@ merchantRouter.patch('/products/:id', authenticateToken, requireMerchant, async 
   try {
     const merchant = await getMerchantForUser(req.user!.id);
     const { name, description, price, currency, imageUrl, categoryId, inStock } = req.body;
+    assertDirectUploadUrl(imageUrl, 'imageUrl');
     const product = await db.query(
       `UPDATE products p SET
          name = COALESCE($1, p.name),
@@ -514,6 +517,7 @@ merchantRouter.post(
       if (!imageUrl) {
         return res.status(400).json({ status: 'error', message: 'imageUrl is required' });
       }
+      assertDirectUploadUrl(imageUrl, 'imageUrl');
       const banner = await db.query(
         `INSERT INTO store_banners (store_id, title, image_url, link_url, sort_order, is_active, created_by)
          VALUES ($1,$2,$3,$4,$5,COALESCE($6,TRUE),$7) RETURNING *`,
@@ -545,6 +549,7 @@ merchantRouter.patch(
         return res.status(404).json({ status: 'error', message: 'Store not found' });
       }
       const { title, imageUrl, linkUrl, sortOrder, isActive } = req.body;
+      assertDirectUploadUrl(imageUrl, 'imageUrl');
       const banner = await db.query(
         `UPDATE store_banners SET
            title = COALESCE($1, title),

@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MOVR Admin</title>
+    <script>
+      (function () {
+        try {
+          var k = 'movr-theme';
+          var p = localStorage.getItem(k) || 'system';
+          var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var m = p === 'light' || p === 'dark' ? p : dark ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', m);
+          document.documentElement.style.colorScheme = m;
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

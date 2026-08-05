@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 import { cartApi, storesApi } from '../../services/api';
 
@@ -20,6 +21,9 @@ export default function ProductDetailScreen({
   price?: number;
   onAdded?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [name, setName] = useState(nameProp);
   const [price, setPrice] = useState(priceProp);
   const [description, setDescription] = useState('');
@@ -139,7 +143,8 @@ export default function ProductDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack },
   scroll: { padding: spacing[4], paddingBottom: 100 },
   image: {
@@ -186,3 +191,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

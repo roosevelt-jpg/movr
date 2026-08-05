@@ -7,6 +7,7 @@ import {
 import { DatabaseService } from '../services/database.service';
 import { MarketplaceService } from '../services/marketplace.service';
 import { PaymentService } from '../services/payment.service';
+import { assertDirectUploadUrl } from '../utils/media-url';
 
 const db = new DatabaseService();
 const marketplace = new MarketplaceService(db, new PaymentService(db));
@@ -38,6 +39,7 @@ adminCatalogRouter.get('/categories', async (_req: AuthRequest, res: Response) =
 adminCatalogRouter.post('/categories', async (req: AuthRequest, res: Response) => {
   try {
     const { name, slug, iconUrl, sortOrder, isActive } = req.body;
+    assertDirectUploadUrl(iconUrl, 'iconUrl');
     if (!name || !slug) {
       return res.status(400).json({ status: 'error', message: 'name and slug required' });
     }
@@ -55,6 +57,7 @@ adminCatalogRouter.post('/categories', async (req: AuthRequest, res: Response) =
 adminCatalogRouter.patch('/categories/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, slug, iconUrl, sortOrder, isActive } = req.body;
+    assertDirectUploadUrl(iconUrl, 'iconUrl');
     const row = await db.query(
       `UPDATE product_categories SET
          name = COALESCE($1, name),
@@ -131,6 +134,7 @@ adminCatalogRouter.post('/stores/:id/banners', async (req: AuthRequest, res: Res
     if (!imageUrl) {
       return res.status(400).json({ status: 'error', message: 'imageUrl is required' });
     }
+    assertDirectUploadUrl(imageUrl, 'imageUrl');
     const banner = await db.query(
       `INSERT INTO store_banners (store_id, title, image_url, link_url, sort_order, is_active, created_by)
        VALUES ($1,$2,$3,$4,$5,COALESCE($6,TRUE),$7) RETURNING *`,
@@ -155,6 +159,7 @@ adminCatalogRouter.patch(
   async (req: AuthRequest, res: Response) => {
     try {
       const { title, imageUrl, linkUrl, sortOrder, isActive } = req.body;
+      assertDirectUploadUrl(imageUrl, 'imageUrl');
       const banner = await db.query(
         `UPDATE store_banners SET
            title = COALESCE($1, title),

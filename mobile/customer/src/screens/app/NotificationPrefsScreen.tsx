@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, ScrollView, Pressable } from 'react-native';
-import { colors, spacing } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -43,6 +44,9 @@ const SECTIONS: { title: string; keys: { key: keyof Prefs; label: string }[] }[]
 
 /** Notification preference toggles. */
 export default function NotificationPrefsScreen({ onBack }: { onBack?: () => void }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT);
 
   useEffect(() => {
@@ -97,7 +101,8 @@ export default function NotificationPrefsScreen({ onBack }: { onBack?: () => voi
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   back: { color: colors.textSecondary, marginBottom: spacing[3] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[6] },
@@ -117,3 +122,4 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   label: { color: colors.pureWhite, fontSize: 16, fontWeight: '500' },
 });
+}

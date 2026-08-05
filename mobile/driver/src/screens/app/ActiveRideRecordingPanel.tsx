@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -40,6 +41,9 @@ export default function ActiveRideRecordingPanel({
   tripActive?: boolean;
   tripEnded?: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
@@ -176,7 +180,8 @@ export async function acknowledgeRecordingNotice(rideId: string) {
   });
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   panel: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -195,3 +200,4 @@ const styles = StyleSheet.create({
   meta: { color: colors.textSecondary, marginTop: spacing[2], fontSize: 12 },
   note: { color: colors.movrGreen, marginTop: spacing[2], fontSize: 13 },
 });
+}

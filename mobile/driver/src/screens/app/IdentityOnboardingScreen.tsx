@@ -7,7 +7,9 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
+import { pickAndUploadImage } from '../../lib/upload';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -33,6 +35,9 @@ type DocStatus = 'uploaded' | 'required' | 'pending' | 'confirmed';
  * Driver identity onboarding — Country of ID → capture → OCR confirm → submit (Phase 26).
  */
 export default function IdentityOnboardingScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [country, setCountry] = useState('GH');
   const [fields, setFields] = useState<any>(null);
   const [idNumber, setIdNumber] = useState('');
@@ -42,13 +47,14 @@ export default function IdentityOnboardingScreen() {
   const [vehicleReg, setVehicleReg] = useState('');
   const [result, setResult] = useState('');
   const [step, setStep] = useState<'docs' | 'ocr' | 'done'>('docs');
-  const [docs, setDocs] = useState<{ key: string; label: string; status: DocStatus }[]>([
+  const [docs, setDocs] = useState<{ key: string; label: string; status: DocStatus; fileUrl?: string }[]>([
     { key: 'ghana_card', label: 'Ghana Card', status: 'required' },
     { key: 'driving_license', label: 'Driving license', status: 'required' },
     { key: 'vehicle_registration', label: 'Vehicle registration', status: 'required' },
   ]);
   const [activeUpload, setActiveUpload] = useState('ghana_card');
   const [recordingConsent, setRecordingConsent] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/identity/id-fields/${country}`)
@@ -73,33 +79,44 @@ export default function IdentityOnboardingScreen() {
   }, [country]);
 
   const markUploaded = async (key: string) => {
-    setDocs((prev) =>
-      prev.map((d) => (d.key === key ? { ...d, status: 'uploaded' as DocStatus } : d))
-    );
-    // OCR preview for confirm/correct
-    const res = await fetch(`${API}/identity/ocr-preview`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        countryCode: country,
-        documentType: key,
-        idNumber,
-        fullName,
-        dateOfBirth,
-        licenseNumber,
-        vehicleRegistration: vehicleReg,
-      }),
-    }).catch(() => null);
-    const json = res ? await res.json() : null;
-    if (json?.data?.extracted) {
-      const e = json.data.extracted;
-      if (e.idNumber) setIdNumber(e.idNumber);
-      if (e.fullName) setFullName(e.fullName);
-      if (e.dateOfBirth) setDateOfBirth(e.dateOfBirth);
-      if (e.licenseNumber) setLicenseNumber(e.licenseNumber);
-      if (e.vehicleRegistration) setVehicleReg(e.vehicleRegistration);
+    setUploading(true);
+    setResult('');
+    try {
+      const fileUrl = await pickAndUploadImage({ accept: 'image/*,application/pdf' });
+      setDocs((prev) =>
+        prev.map((d) =>
+          d.key === key ? { ...d, status: 'uploaded' as DocStatus, fileUrl } : d
+        )
+      );
+      const res = await fetch(`${API}/identity/ocr-preview`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          countryCode: country,
+          documentType: key,
+          fileUrl,
+          idNumber,
+          fullName,
+          dateOfBirth,
+          licenseNumber,
+          vehicleRegistration: vehicleReg,
+        }),
+      }).catch(() => null);
+      const json = res ? await res.json() : null;
+      if (json?.data?.extracted) {
+        const e = json.data.extracted;
+        if (e.idNumber) setIdNumber(e.idNumber);
+        if (e.fullName) setFullName(e.fullName);
+        if (e.dateOfBirth) setDateOfBirth(e.dateOfBirth);
+        if (e.licenseNumber) setLicenseNumber(e.licenseNumber);
+        if (e.vehicleRegistration) setVehicleReg(e.vehicleRegistration);
+      }
+      setStep('ocr');
+    } catch (e: any) {
+      setResult(e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
     }
-    setStep('ocr');
   };
 
   const confirmOcr = () => {
@@ -151,7 +168,12 @@ export default function IdentityOnboardingScreen() {
         idNumber,
         licenseNumber,
         vehicleRegistration: vehicleReg,
-        documents: docs.map((d) => ({ type: d.key, status: d.status, number: idNumber })),
+        documents: docs.map((d) => ({
+          type: d.key,
+          status: d.status,
+          number: idNumber,
+          fileUrl: d.fileUrl,
+        })),
         ocrConfirmed: true,
       }),
     }).catch(() => undefined);
@@ -192,8 +214,14 @@ export default function IdentityOnboardingScreen() {
       ))}
 
       {step === 'docs' && activeDoc && activeDoc.status === 'required' ? (
-        <Pressable style={styles.upload} onPress={() => markUploaded(activeDoc.key)}>
-          <Text style={styles.uploadText}>Capture / upload {activeDoc.label}</Text>
+        <Pressable
+          style={styles.upload}
+          onPress={() => markUploaded(activeDoc.key)}
+          disabled={uploading}
+        >
+          <Text style={styles.uploadText}>
+            {uploading ? 'Uploading…' : `Capture / upload ${activeDoc.label}`}
+          </Text>
         </Pressable>
       ) : null}
 
@@ -262,7 +290,8 @@ export default function IdentityOnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
   sub: { color: colors.textSecondary, marginTop: spacing[2], marginBottom: spacing[4] },
@@ -342,3 +371,4 @@ const styles = StyleSheet.create({
   },
   result: { color: colors.warning, marginTop: spacing[3] },
 });
+}

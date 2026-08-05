@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -38,6 +39,9 @@ function Ring({
 
 /** Driver performance — tier badge, metric rings, progress to next tier. */
 export default function PerformanceScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -114,7 +118,8 @@ export default function PerformanceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
   tierRow: {
@@ -187,3 +192,4 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+}

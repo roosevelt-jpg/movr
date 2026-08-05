@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
 import { useWallet } from '../../context/WalletContext';
 
@@ -16,6 +17,9 @@ export default function WalletScreen({
   onTopUp?: () => void;
   onRedeem?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const { balance: ctxBalance, rewardsBalance, transactions, currency, refresh, dvtBalance, refreshDvt } =
     useWallet();
   const [balance, setBalance] = useState(0);
@@ -109,7 +113,8 @@ export default function WalletScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   balanceCard: {
@@ -182,3 +187,4 @@ const styles = StyleSheet.create({
   badgeReward: { backgroundColor: 'rgba(106,0,255,0.35)' },
   badgeText: { color: colors.pureWhite, fontSize: 11, fontWeight: '600' },
 });
+}

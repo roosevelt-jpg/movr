@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 /** Phase 5B — mobile Token screen */
 export default function TokenScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [balance, setBalance] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
@@ -71,7 +75,8 @@ export default function TokenScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
   balance: { color: colors.pureWhite, fontSize: 40, fontWeight: '700', marginVertical: spacing[2] },
@@ -104,3 +109,4 @@ const styles = StyleSheet.create({
   rowLabel: { color: colors.textSecondary },
   rowValue: { color: colors.pureWhite, fontWeight: '600' },
 });
+}

@@ -3,6 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { mediaUrl, uploadCatalogImage } from '../../lib/media';
+import OnOffButton from '../../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const token = () => localStorage.getItem('movr_merchant_token') || '';
@@ -262,13 +263,11 @@ export default function MerchantStoreEditorPage() {
                     <p className="font-medium truncate">{b.title || 'Untitled'}</p>
                     <p className="text-xs text-text-secondary truncate">{b.link_url || '—'}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="text-sm text-motion-blue"
+                  <OnOffButton
+                    on={!!b.is_active}
                     onClick={() => toggleBanner(b)}
-                  >
-                    {b.is_active ? 'Active' : 'Inactive'}
-                  </button>
+                    title={b.is_active ? 'Turn off' : 'Turn on'}
+                  />
                   <button
                     type="button"
                     className="text-sm text-error"

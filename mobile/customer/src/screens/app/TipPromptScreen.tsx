@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -30,6 +31,9 @@ export default function TipPromptScreen({
   onSkip?: () => void;
   onDone?: (amount: number) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [amount, setAmount] = useState(5);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -96,7 +100,8 @@ export default function TipPromptScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4], justifyContent: 'center' },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', textAlign: 'center' },
   sub: {
@@ -134,3 +139,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+}

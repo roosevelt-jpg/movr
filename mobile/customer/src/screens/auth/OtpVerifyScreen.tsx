@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -12,6 +13,9 @@ export default function OtpVerifyScreen({
   phone?: string;
   onVerified?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [digits, setDigits] = useState(['4', '8', '2', '', '']);
   const [seconds, setSeconds] = useState(42);
   const [loading, setLoading] = useState(false);
@@ -95,7 +99,8 @@ export default function OtpVerifyScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 80 },
   icon: { fontSize: 36, textAlign: 'center', marginBottom: 16, color: colors.motionBlue },
   title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', textAlign: 'center' },
@@ -130,3 +135,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

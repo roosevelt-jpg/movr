@@ -12,6 +12,7 @@ html {
 body {
   @apply font-sans antialiased bg-jet-black text-text-primary;
   font-feature-settings: "rlig" 1, "calt" 1;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 input,
@@ -38,11 +39,11 @@ select {
 
 /* Brand utility classes (token-backed) */
 .btn-primary {
-  @apply px-6 py-2.5 text-pure-white font-semibold rounded-pill bg-movr-gradient shadow-active-glow disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply px-6 py-2.5 text-brand-white font-semibold rounded-pill bg-movr-gradient shadow-active-glow disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .btn-secondary {
-  @apply px-6 py-2.5 text-pure-white font-semibold rounded-pill border border-pure-white/70 bg-transparent hover:bg-pure-white/5;
+  @apply px-6 py-2.5 text-text-primary font-semibold rounded-pill border border-border bg-transparent hover:bg-surface-elevated;
 }
 
 .input-base {
@@ -73,9 +74,9 @@ select {
   @apply bg-movr-gradient bg-clip-text text-transparent;
 }
 
-/* Marketing hero only (Phase 0B) — not for in-app surfaces */
+/* Marketing hero only (Phase 0B) — always dark brand canvas */
 .movr-hero {
-  @apply relative overflow-hidden bg-jet-black;
+  @apply relative overflow-hidden bg-brand-jet text-brand-white;
 }
 
 .movr-hero-shimmer {

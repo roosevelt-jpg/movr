@@ -10,8 +10,9 @@ body,
   min-height: 100%;
   margin: 0;
   background: var(--jet-black);
-  color: var(--pure-white);
+  color: var(--text-primary);
   font-family: Poppins, Montserrat, system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 a {

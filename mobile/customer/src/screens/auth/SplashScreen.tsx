@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { initMobileSentry } from '../../sentry';
 
 initMobileSentry('customer');
 
 /** Brand splash — Movr / Move. Shop. Deliver. */
 export default function SplashScreen({ onDone }: { onDone?: () => void }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   useEffect(() => {
     const t = setTimeout(() => onDone?.(), 1600);
     return () => clearTimeout(t);
@@ -20,7 +23,8 @@ export default function SplashScreen({ onDone }: { onDone?: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.jetBlack,
@@ -30,3 +34,4 @@ const styles = StyleSheet.create({
   brand: { color: colors.pureWhite, fontSize: 42, fontWeight: '800', letterSpacing: -0.5 },
   tag: { color: colors.textSecondary, fontSize: 16, marginTop: 10, fontWeight: '400' },
 });
+}

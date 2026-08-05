@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -29,6 +30,9 @@ export default function RecordingNoticeModal({
   rideId: string;
   onAcknowledged: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,7 +80,8 @@ export default function RecordingNoticeModal({
 
 export { NOTICE as RECORDING_NOTICE_COPY };
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.72)',
@@ -110,3 +115,4 @@ const styles = StyleSheet.create({
   },
   btnText: { color: colors.pureWhite, fontWeight: '700' },
 });
+}

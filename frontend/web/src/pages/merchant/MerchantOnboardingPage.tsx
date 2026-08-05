@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Check, Upload } from 'lucide-react';
+import { uploadCatalogImage } from '../../lib/media';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
@@ -22,8 +23,25 @@ export default function MerchantOnboardingPage() {
     registrationNumber: 'BN-2024-88213',
   });
   const [loading, setLoading] = useState(false);
+  const [uploadingCert, setUploadingCert] = useState(false);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const onCertSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingCert(true);
+    try {
+      // Register may not have token yet — upload after register in finish(), or use temp local preview.
+      // Prefer direct upload when a merchant token already exists; otherwise stash File for finish().
+      (window as any).__MOVR_PENDING_CERT__ = file;
+      set('documentUrl', '');
+      toast.success(`Selected ${file.name} — will upload on submit`);
+    } finally {
+      setUploadingCert(false);
+    }
+  };
 
   const finish = async () => {
     if (!form.email.trim() && !form.phone.trim()) {
@@ -37,18 +55,30 @@ export default function MerchantOnboardingPage() {
       localStorage.setItem('movr_merchant_token', token);
       localStorage.setItem('movr_merchant', JSON.stringify(res.data.data.merchant));
 
-      if (form.documentUrl || form.registrationNumber) {
-        await axios.post(
-          `${API}/merchant/kyc`,
-          {
-            documentType: 'business_registration',
-            documentNumber: form.registrationNumber,
-            fileUrl: form.documentUrl || `upload://cert/${form.registrationNumber}`,
-            businessRegistrationNumber: form.registrationNumber,
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      let fileUrl = form.documentUrl;
+      const pending: File | undefined = (window as any).__MOVR_PENDING_CERT__;
+      if (pending) {
+        fileUrl = await uploadCatalogImage(pending, token);
+        delete (window as any).__MOVR_PENDING_CERT__;
+        set('documentUrl', fileUrl);
       }
+
+      if (!fileUrl) {
+        toast.error('Upload a registration certificate file to continue');
+        setLoading(false);
+        return;
+      }
+
+      await axios.post(
+        `${API}/merchant/kyc`,
+        {
+          documentType: 'business_registration',
+          documentNumber: form.registrationNumber,
+          fileUrl,
+          businessRegistrationNumber: form.registrationNumber,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
       toast.success('Storefront created');
       navigate('/merchant/dashboard');
@@ -156,21 +186,22 @@ export default function MerchantOnboardingPage() {
                 onChange={(e) => set('registrationNumber', e.target.value)}
               />
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                set(
-                  'documentUrl',
-                  form.documentUrl || `https://uploads.movr.local/certs/${Date.now()}.pdf`
-                )
-              }
-              className="w-full rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated py-10 flex flex-col items-center gap-2 text-text-secondary hover:border-electric-violet"
-            >
+            <label className="w-full rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated py-10 flex flex-col items-center gap-2 text-text-secondary hover:border-electric-violet cursor-pointer">
               <Upload size={22} />
               <span>
-                {form.documentUrl ? 'Certificate attached' : 'Upload registration certificate'}
+                {uploadingCert
+                  ? 'Preparing…'
+                  : form.documentUrl || (typeof window !== 'undefined' && (window as any).__MOVR_PENDING_CERT__)
+                    ? 'Certificate selected · tap to replace'
+                    : 'Upload registration certificate'}
               </span>
-            </button>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={onCertSelected}
+              />
+            </label>
             <div className="flex gap-3">
               <button
                 type="button"

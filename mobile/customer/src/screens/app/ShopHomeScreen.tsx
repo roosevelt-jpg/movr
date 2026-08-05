@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -19,6 +20,9 @@ export default function ShopHomeScreen({
 }: {
   onOpenStore?: (storeId: string) => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [category, setCategory] = useState('All');
   const [stores, setStores] = useState<any[]>(FALLBACK_STORES);
 
@@ -102,7 +106,8 @@ export default function ShopHomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, paddingHorizontal: spacing[4], paddingTop: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[3] },
   chips: { gap: spacing[2], paddingBottom: spacing[4] },
@@ -142,3 +147,4 @@ const styles = StyleSheet.create({
   cardMeta: { color: colors.warning, marginTop: 6, fontSize: 13, fontWeight: '600' },
   empty: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[6] },
 });
+}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import AdminShell from '../layouts/AdminShell';
+import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -80,18 +81,11 @@ export default function FeatureFlagsPage() {
               </div>
               <div style={styles.rollout}>{f.rolloutLabel}</div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  aria-label={`Toggle ${f.label}`}
+                <OnOffButton
+                  on={!!f.enabled}
                   onClick={() => toggle(f.key, !f.enabled)}
-                  style={{
-                    ...styles.toggle,
-                    background: f.enabled ? 'var(--electric-violet)' : 'var(--border)',
-                    justifyContent: f.enabled ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  <span style={styles.knob} />
-                </button>
+                  title={`${f.label}: ${f.enabled ? 'on' : 'off'}`}
+                />
               </div>
             </div>
           ))
@@ -122,20 +116,4 @@ const styles: Record<string, React.CSSProperties> = {
   label: { fontWeight: 600, fontSize: 16 },
   phase: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 },
   rollout: { color: 'var(--text-secondary)' },
-  toggle: {
-    width: 48,
-    height: 28,
-    borderRadius: 999,
-    border: 'none',
-    padding: 3,
-    display: 'flex',
-    cursor: 'pointer',
-  },
-  knob: {
-    width: 22,
-    height: 22,
-    borderRadius: '50%',
-    background: 'var(--pure-white)',
-    display: 'block',
-  },
 };

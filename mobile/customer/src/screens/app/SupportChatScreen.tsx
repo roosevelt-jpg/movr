@@ -9,7 +9,8 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -17,6 +18,9 @@ type Msg = { id: string; from: 'user' | 'support'; text: string };
 
 /** In-app Movr Support chat — refunds / ride issues. */
 export default function SupportChatScreen({ onBack }: { onBack?: () => void }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const listRef = useRef<FlatList>(null);
@@ -105,7 +109,8 @@ export default function SupportChatScreen({ onBack }: { onBack?: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack },
   header: {
     flexDirection: 'row',
@@ -154,3 +159,4 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
 });
+}

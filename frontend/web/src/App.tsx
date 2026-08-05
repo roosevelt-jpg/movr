@@ -3,6 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from 'react-query';
+import { ThemeProvider } from './theme/ThemeProvider';
 
 // Stores
 import { useAuthStore } from './store/auth.store';
@@ -92,6 +93,7 @@ const App: React.FC = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
       <Router>
         <Routes>
           {/* Public Routes */}
@@ -171,6 +173,7 @@ const App: React.FC = () => {
         </Routes>
       </Router>
       <Toaster position="top-right" />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

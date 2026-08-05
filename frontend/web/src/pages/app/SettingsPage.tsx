@@ -2,8 +2,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import { Bell, Lock, HelpCircle, LogOut, ChevronRight } from 'lucide-react';
+import { ThemeToggle } from '../../theme/ThemeProvider';
 
-/** Settings — dark list aligned with profile support section. */
+/** Settings — appearance + account. */
 const SettingsPage: React.FC = () => {
   const { logout } = useAuthStore();
   const navigate = useNavigate();
@@ -15,8 +16,13 @@ const SettingsPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
+    <div className="min-h-screen bg-jet-black text-text-primary font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
       <h1 className="text-3xl font-bold mb-6">Settings</h1>
+
+      <div className="rounded-2xl bg-surface-elevated border border-border p-4 mb-4">
+        <ThemeToggle />
+      </div>
+
       <div className="rounded-2xl bg-surface-elevated border border-border divide-y divide-border">
         {items.map((item) => (
           <button

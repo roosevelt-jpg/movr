@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 import { cartApi } from '../../services/api';
 
@@ -14,6 +15,9 @@ type CartItem = {
 
 /** Cart + checkout — qty controls, delivery/pickup, totals (POST /cart/checkout). */
 export default function CartScreen({ storeId }: { storeId?: string }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [coupon, setCoupon] = useState('');
   const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('delivery');
   const [items, setItems] = useState<CartItem[]>([]);
@@ -161,7 +165,8 @@ export default function CartScreen({ storeId }: { storeId?: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
   title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   empty: { color: colors.textSecondary, marginBottom: spacing[4] },
@@ -226,3 +231,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
+}

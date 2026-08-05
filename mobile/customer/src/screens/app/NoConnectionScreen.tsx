@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 /**
  * Offline / no connection overlay — Retry rechecks NetInfo-like status.
@@ -13,6 +14,9 @@ export default function NoConnectionScreen({
   onRetry?: () => void;
   visible?: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [checking, setChecking] = useState(false);
 
   const check = useCallback(async () => {
@@ -54,7 +58,8 @@ export default function NoConnectionScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.jetBlack,
@@ -90,3 +95,4 @@ const styles = StyleSheet.create({
   retryText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
   alt: { color: colors.motionBlue, fontWeight: '600' },
 });
+}

@@ -9,7 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { colors, spacing, radius } from '@movr/design-system/theme';
+import { spacing, radius } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -20,6 +21,9 @@ type Msg = { id: string; from: 'user' | 'movr'; text: string };
  * Posts to SMS webhook when available.
  */
 export default function SmsConversationScreen() {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [messages, setMessages] = useState<Msg[]>([
     {
       id: '0',
@@ -119,7 +123,8 @@ export default function SmsConversationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.jetBlack },
   header: {
     textAlign: 'center',
@@ -173,3 +178,4 @@ const styles = StyleSheet.create({
   },
   sendText: { color: colors.pureWhite, fontWeight: '700' },
 });
+}

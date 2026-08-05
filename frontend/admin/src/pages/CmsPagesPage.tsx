@@ -280,16 +280,36 @@ function SectionEditor({
                   set({ cards });
                 }}
               />
-              <Field
-                label="Image URL"
-                value={card.imageUrl || ''}
-                disabled={disabled}
-                onChange={(v) => {
-                  const cards = [...(p.cards || [])];
-                  cards[i] = { ...card, imageUrl: v };
-                  set({ cards });
-                }}
-              />
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Story image (direct upload)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={disabled}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    try {
+                      const { uploadCatalogImage } = await import('../lib/media');
+                      const token = localStorage.getItem('movr_admin_token') || '';
+                      const url = await uploadCatalogImage(file, token);
+                      const cards = [...(p.cards || [])];
+                      cards[i] = { ...card, imageUrl: url };
+                      set({ cards });
+                    } catch (err: any) {
+                      alert(err.message || 'Upload failed');
+                    }
+                  }}
+                />
+                {card.imageUrl ? (
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>
+                    Uploaded: {card.imageUrl}
+                  </p>
+                ) : null}
+              </div>
               {(card.stats || []).map((stat: any, si: number) => (
                 <div key={si} style={styles.row2}>
                   <Field

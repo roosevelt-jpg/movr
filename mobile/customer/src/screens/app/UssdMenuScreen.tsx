@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
-import { colors, spacing } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -30,6 +31,9 @@ export default function UssdMenuScreen({
   onPlaces?: () => void;
   onHelp?: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = makeStyles(colors);
+
   const [input, setInput] = useState('');
   const [log, setLog] = useState<string[]>([MENU]);
 
@@ -105,7 +109,8 @@ export default function UssdMenuScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: any) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.movrGreen },
   term: { flex: 1 },
   mono: {
@@ -137,3 +142,4 @@ const styles = StyleSheet.create({
   },
   sendText: { color: colors.success, fontWeight: '700' },
 });
+}

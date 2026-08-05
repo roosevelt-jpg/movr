@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -103,16 +104,12 @@ export default function RewardsRulesPage() {
               </span>
               <span style={{ color: 'var(--text-secondary)' }}>0 (on hold)</span>
               <span>
-                <button
-                  type="button"
-                  style={{
-                    ...styles.badge,
-                    ...(r.active ? styles.active : styles.paused),
-                  }}
+                <OnOffButton
+                  on={!!r.active}
                   onClick={() => toggle(r.event_type, !r.active)}
-                >
-                  {r.active ? 'Active' : 'Paused'}
-                </button>
+                  onLabel="On"
+                  offLabel="Off"
+                />
               </span>
               <span>
                 {editing === r.event_type ? (

@@ -14,6 +14,7 @@ import { ChannelSessionService } from '../services/channel-session.service';
 import { IvrBookingService } from '../services/ivr-booking.service';
 import { RedisService } from '../services/redis.service';
 import getLogger from '../utils/logger';
+import { assertDirectUploadUrl } from '../utils/media-url';
 
 const db = new DatabaseService();
 const matching = new MatchingEngineService(db, null, { broadcastToDrivers: () => undefined } as any);
@@ -540,6 +541,11 @@ adminVehicleRouter.get('/vehicle-types', async (_req, res: Response) => {
 });
 
 adminVehicleRouter.post('/vehicle-types', async (req: AuthRequest, res: Response) => {
+  try {
+    assertDirectUploadUrl(req.body.iconUrl, 'iconUrl');
+  } catch (e: any) {
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
   const row = await db.query(
     `INSERT INTO vehicle_types (name, code, category, passenger_capacity, icon_url, is_active, sort_order)
      VALUES ($1,$2,$3::vehicle_category,$4,$5,TRUE,$6) RETURNING *`,
@@ -565,6 +571,11 @@ adminVehicleRouter.post('/vehicle-types', async (req: AuthRequest, res: Response
 });
 
 adminVehicleRouter.patch('/vehicle-types/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    assertDirectUploadUrl(req.body.iconUrl, 'iconUrl');
+  } catch (e: any) {
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
   const before = await db.query(`SELECT * FROM vehicle_types WHERE id = $1`, [req.params.id]);
   const row = await db.query(
     `UPDATE vehicle_types SET

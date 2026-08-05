@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Moon, Sun } from 'lucide-react';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -10,6 +11,9 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('admin@movr.app');
   const [password, setPassword] = useState('Admin123!');
   const [loading, setLoading] = useState(false);
+  const [themeMode, setThemeMode] = useState(
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
+  );
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +48,7 @@ export default function AdminLoginPage() {
       style={{
         minHeight: '100vh',
         background: 'var(--jet-black)',
-        color: 'var(--pure-white)',
+        color: 'var(--text-primary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -102,7 +106,7 @@ export default function AdminLoginPage() {
             borderRadius: 999,
             padding: '14px 0',
             fontWeight: 700,
-            color: 'var(--pure-white)',
+            color: 'var(--brand-white)',
             cursor: 'pointer',
             background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
           }}
@@ -110,7 +114,35 @@ export default function AdminLoginPage() {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
 
-        <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+          <button
+            type="button"
+            aria-label="Toggle theme"
+            onClick={() => {
+              const current = document.documentElement.getAttribute('data-theme') || 'dark';
+              const next = current === 'light' ? 'dark' : 'light';
+              localStorage.setItem('movr-theme', next);
+              document.documentElement.setAttribute('data-theme', next);
+              document.documentElement.style.colorScheme = next;
+              setThemeMode(next);
+            }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--text-primary)',
+              display: 'grid',
+              placeItems: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            {themeMode === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+        </div>
+
+        <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           Use seeded admin credentials from db:seed
         </p>
       </form>
@@ -121,11 +153,11 @@ export default function AdminLoginPage() {
 const inputStyle: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
-  background: 'var(--surface-elevated)',
+  background: 'var(--surface)',
   border: '1px solid var(--border)',
   borderRadius: 10,
   padding: '12px 14px',
-  color: 'var(--pure-white)',
+  color: 'var(--text-primary)',
   fontSize: 15,
   outline: 'none',
 };
