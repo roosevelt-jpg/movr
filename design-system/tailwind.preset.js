@@ -1,25 +1,36 @@
 /**
  * Shared Tailwind preset — colors bind to CSS variables so light/dark
  * (`data-theme` on <html>) remaps every utility without per-page rewrites.
+ * Opacity modifiers (e.g. bg-success/20) use color-mix against the CSS var.
  */
 const tokens = require('./tokens.json');
 
+const withAlpha = (cssVar) => {
+  return ({ opacityValue }) => {
+    if (opacityValue !== undefined) {
+      const pct = Math.round(Number(opacityValue) * 1000) / 10;
+      return `color-mix(in srgb, var(${cssVar}) ${pct}%, transparent)`;
+    }
+    return `var(${cssVar})`;
+  };
+};
+
 const colors = {
-  'jet-black': 'var(--jet-black)',
-  'pure-white': 'var(--pure-white)',
-  'electric-violet': 'var(--electric-violet)',
-  'motion-blue': 'var(--motion-blue)',
-  'movr-green': 'var(--movr-green)',
-  surface: 'var(--surface)',
-  'surface-elevated': 'var(--surface-elevated)',
-  success: 'var(--success)',
-  error: 'var(--error)',
-  warning: 'var(--warning)',
-  'text-primary': 'var(--text-primary)',
-  'text-secondary': 'var(--text-secondary)',
-  border: 'var(--border)',
-  'brand-jet': 'var(--brand-jet)',
-  'brand-white': 'var(--brand-white)',
+  'jet-black': withAlpha('--jet-black'),
+  'pure-white': withAlpha('--pure-white'),
+  'electric-violet': withAlpha('--electric-violet'),
+  'motion-blue': withAlpha('--motion-blue'),
+  'movr-green': withAlpha('--movr-green'),
+  surface: withAlpha('--surface'),
+  'surface-elevated': withAlpha('--surface-elevated'),
+  success: withAlpha('--success'),
+  error: withAlpha('--error'),
+  warning: withAlpha('--warning'),
+  'text-primary': withAlpha('--text-primary'),
+  'text-secondary': withAlpha('--text-secondary'),
+  border: withAlpha('--border'),
+  'brand-jet': withAlpha('--brand-jet'),
+  'brand-white': withAlpha('--brand-white'),
 };
 
 const spacing = Object.fromEntries(

@@ -99,7 +99,7 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
   const mediaSrc = (url: string) => {
     if (!url) return '';
     if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
-    if (url.startsWith('/uploads')) {
+    if (url.startsWith('/uploads') || url.startsWith('/assets')) {
       try {
         return new URL(url, new URL(API).origin).toString();
       } catch {

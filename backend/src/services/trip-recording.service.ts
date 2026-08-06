@@ -4,12 +4,19 @@ import path from 'path';
 import { DatabaseService } from './database.service';
 import { IntegrationsService } from './integrations.service';
 import getLogger from '../utils/logger';
+import {
+  ASSETS_ROOT,
+  cloudAssetKey,
+  ensureAssetDirs,
+  publicAssetUrl,
+} from '../utils/asset-storage';
 
-const LOCAL_RECORDING_ROOT = path.resolve(__dirname, '../../uploads/trip-recordings');
+const LOCAL_RECORDING_ROOT = path.join(ASSETS_ROOT, 'videos', 'trip-recordings');
 
 /**
  * Phase 28 — local record + async upload (not live stream).
  * Enabled via TRIP_RECORDING_ENABLED / feature_flags.trip_recording.
+ * Files always land under backend/assets/videos/trip-recordings.
  */
 export class TripRecordingService {
   private logger = getLogger('trip-recording');
@@ -18,9 +25,7 @@ export class TripRecordingService {
 
   constructor(private db: DatabaseService) {
     this.integrations = new IntegrationsService(db);
-    if (!fs.existsSync(LOCAL_RECORDING_ROOT)) {
-      fs.mkdirSync(LOCAL_RECORDING_ROOT, { recursive: true });
-    }
+    ensureAssetDirs();
   }
 
   async isEnabled(): Promise<boolean> {
@@ -144,7 +149,7 @@ export class TripRecordingService {
     );
     if (!rec.rows[0]) throw new Error('No recording for ride');
 
-    const key = `trip-recordings/${rideId}/${rec.rows[0].id}.mp4`;
+    const key = cloudAssetKey('videos', 'trip-recordings', rideId, `${rec.rows[0].id}.mp4`);
 
     await this.db.query(
       `UPDATE trip_recordings SET status = 'uploading', cloud_storage_key = $1 WHERE id = $2`,
@@ -159,7 +164,7 @@ export class TripRecordingService {
         expiresInSeconds: 3600,
         chunked: false,
         local: true,
-        resumeHint: 'PUT raw video body to upload-body (local storage fallback when S3 unset)',
+        resumeHint: 'PUT raw video body to upload-body (stored under backend/assets/videos/trip-recordings)',
       };
     }
 
@@ -190,15 +195,22 @@ export class TripRecordingService {
       [rideId]
     );
     if (!rec.rows[0]) throw new Error('No recording for ride');
+    if (!fs.existsSync(LOCAL_RECORDING_ROOT)) {
+      fs.mkdirSync(LOCAL_RECORDING_ROOT, { recursive: true });
+    }
     const filename = `${rec.rows[0].id}.mp4`;
     const full = path.join(LOCAL_RECORDING_ROOT, filename);
     fs.writeFileSync(full, buffer);
-    const key = `local:${filename}`;
+    const key = cloudAssetKey('videos', 'trip-recordings', filename);
     await this.db.query(
       `UPDATE trip_recordings SET cloud_storage_key = $1, status = 'uploading' WHERE id = $2`,
       [key, rec.rows[0].id]
     );
-    return { key, bytes: buffer.length, path: `/uploads/trip-recordings/${filename}` };
+    return {
+      key,
+      bytes: buffer.length,
+      path: publicAssetUrl(`videos/trip-recordings/${filename}`),
+    };
   }
 
   async completeUpload(rideId: string, localDurationSeconds?: number) {
@@ -330,12 +342,35 @@ export class TripRecordingService {
 
     if (key.startsWith('local:')) {
       const filename = key.slice('local:'.length);
-      url = `${this.apiPublicBase()}/uploads/trip-recordings/${filename}`;
+      url = `${this.apiPublicBase()}${publicAssetUrl(`videos/trip-recordings/${filename}`)}`;
+    } else if (key.startsWith('assets/')) {
+      if (!(await this.hasS3Credentials())) {
+        const localRel = key.replace(/^assets\//, '');
+        const localFile = path.join(ASSETS_ROOT, localRel);
+        if (fs.existsSync(localFile)) {
+          url = `${this.apiPublicBase()}${publicAssetUrl(localRel)}`;
+        } else {
+          const basename = path.basename(key);
+          const fallback = path.join(LOCAL_RECORDING_ROOT, basename);
+          if (!fs.existsSync(fallback)) throw new Error('Local recording file missing');
+          url = `${this.apiPublicBase()}${publicAssetUrl(`videos/trip-recordings/${basename}`)}`;
+        }
+      } else {
+        const bucket = await this.bucketName();
+        const s3 = await this.s3Client();
+        url = s3.getSignedUrl('getObject', {
+          Bucket: bucket,
+          Key: key,
+          Expires: 300,
+          ResponseContentDisposition: 'inline',
+          ResponseContentType: 'video/mp4',
+        });
+      }
     } else if (!(await this.hasS3Credentials())) {
       const basename = path.basename(key);
       const localFile = path.join(LOCAL_RECORDING_ROOT, basename);
       if (fs.existsSync(localFile)) {
-        url = `${this.apiPublicBase()}/uploads/trip-recordings/${basename}`;
+        url = `${this.apiPublicBase()}${publicAssetUrl(`videos/trip-recordings/${basename}`)}`;
       } else {
         throw new Error('Local recording file missing');
       }
@@ -344,7 +379,7 @@ export class TripRecordingService {
       const s3 = await this.s3Client();
       url = s3.getSignedUrl('getObject', {
         Bucket: bucket,
-        Key: key,
+        Key: key.startsWith('assets/') ? key : cloudAssetKey(key),
         Expires: 300,
         ResponseContentDisposition: 'inline',
         ResponseContentType: 'video/mp4',
@@ -390,9 +425,15 @@ export class TripRecordingService {
           if (key.startsWith('local:')) {
             const full = path.join(LOCAL_RECORDING_ROOT, key.slice('local:'.length));
             if (fs.existsSync(full)) fs.unlinkSync(full);
+          } else if (key.startsWith('assets/') && !(s3 && bucket)) {
+            const full = path.join(ASSETS_ROOT, key.replace(/^assets\//, ''));
+            if (fs.existsSync(full)) fs.unlinkSync(full);
           } else if (s3 && bucket) {
             await s3
-              .deleteObject({ Bucket: bucket, Key: key })
+              .deleteObject({
+                Bucket: bucket,
+                Key: key.startsWith('assets/') ? key : cloudAssetKey(key),
+              })
               .promise()
               .catch(() => undefined);
           } else {

@@ -33,7 +33,7 @@ const NAV = [
 function mediaUrl(url?: string | null) {
   if (!url) return '';
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
-  if (url.startsWith('/uploads')) {
+  if (url.startsWith('/uploads') || url.startsWith('/assets')) {
     try {
       if (API.startsWith('http')) return new URL(url, new URL(API).origin).toString();
       return `${window.location.origin}${url}`;

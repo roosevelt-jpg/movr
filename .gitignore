@@ -9,7 +9,10 @@ __v0_jsx-dev-runtime.ts
 # Environment variables
 .env*.local
 
-# Uploaded catalog media (local disk)
+# Uploaded media (local disk — always under assets/)
+backend/assets/**
+!backend/assets/README.md
+# Legacy upload dir (read-only compatibility)
 backend/uploads/
 
 # Common ignores

@@ -1,8 +1,8 @@
-/** Resolve relative /uploads URLs against API origin in local/dev. */
+/** Resolve relative /assets or legacy /uploads URLs against API origin in local/dev. */
 export function mediaUrl(url?: string | null): string {
   if (!url) return '';
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
-  if (url.startsWith('/uploads')) {
+  if (url.startsWith('/assets') || url.startsWith('/uploads')) {
     const api = process.env.REACT_APP_API_URL || '';
     if (api.startsWith('http')) {
       try {

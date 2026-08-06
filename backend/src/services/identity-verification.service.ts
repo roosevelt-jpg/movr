@@ -1,4 +1,5 @@
 // backend/src/services/identity-verification.service.ts
+import path from 'path';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
@@ -44,28 +45,44 @@ class IdentityVerificationService {
   }
 
   /**
-   * Upload identity document to secure storage
+   * Upload identity document to assets storage (S3 under assets/…, else local backend/assets).
    */
   async uploadIdentityDocument(driverId: string, documentType: string, file: Buffer): Promise<string> {
     try {
-      const key = `movr-identity-docs/${driverId}/${documentType}/${uuidv4()}.jpg`;
+      const { cloudAssetKey, saveAssetBuffer } = await import('../utils/asset-storage');
+      const key = cloudAssetKey(
+        'images',
+        'identity',
+        driverId,
+        documentType,
+        `${uuidv4()}.jpg`
+      );
 
-      const params = {
-        Bucket: process.env.AWS_S3_BUCKET || 'movr-documents',
-        Key: key,
-        Body: file,
-        ContentType: 'image/jpeg',
-        ServerSideEncryption: 'AES256',
-        Metadata: {
-          driverId,
-          documentType,
-          uploadedAt: new Date().toISOString(),
-        },
-      };
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+        const params = {
+          Bucket: process.env.AWS_S3_BUCKET || 'movr-documents',
+          Key: key,
+          Body: file,
+          ContentType: 'image/jpeg',
+          ServerSideEncryption: 'AES256' as const,
+          Metadata: {
+            driverId,
+            documentType,
+            uploadedAt: new Date().toISOString(),
+          },
+        };
+        const result = await this.s3.upload(params).promise();
+        logger.info('Document uploaded', { location: result.Location, key });
+        return result.Location;
+      }
 
-      const result = await this.s3.upload(params).promise();
-      logger.info('Document uploaded', { location: result.Location });
-      return result.Location;
+      const saved = saveAssetBuffer(file, {
+        mime: 'image/jpeg',
+        filename: path.basename(key),
+        subdir: path.posix.join('identity', driverId, documentType),
+      });
+      logger.info('Document saved to assets', { url: saved.url });
+      return saved.url;
     } catch (error) {
       console.error('❌ Document upload failed:', error);
       throw error;

@@ -1,5 +1,3 @@
-import path from 'path';
-import fs from 'fs';
 import multer from 'multer';
 import { Router, Response } from 'express';
 import {
@@ -11,24 +9,18 @@ import {
 import { DatabaseService } from '../services/database.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 import { RewardsEngineService } from '../services/rewards-engine.service';
-import { UPLOAD_ROOT } from './uploads.routes';
+import {
+  assetUrlFromMulterFile,
+  multerAssetStorage,
+  saveAssetBuffer,
+} from '../utils/asset-storage';
 
 const db = new DatabaseService();
 const matching = new MatchingEngineService(db, null, { broadcastToDrivers: () => undefined } as any);
 const rewards = new RewardsEngineService(db);
 
-if (!fs.existsSync(UPLOAD_ROOT)) {
-  fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
-}
-
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_ROOT),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-      cb(null, `pod-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
-    },
-  }),
+  storage: multerAssetStorage({ filenamePrefix: 'pod-' }),
   limits: { fileSize: 8 * 1024 * 1024 },
 });
 
@@ -149,21 +141,23 @@ deliveriesRouter.post(
       let receiverSignatureUrl =
         req.body.receiverSignatureUrl || req.body.receiver_signature_url || null;
 
-      if (proofFile) proofOfDeliveryUrl = `/uploads/${proofFile.filename}`;
-      if (sigFile) receiverSignatureUrl = `/uploads/${sigFile.filename}`;
+      if (proofFile) proofOfDeliveryUrl = assetUrlFromMulterFile(proofFile);
+      if (sigFile) receiverSignatureUrl = assetUrlFromMulterFile(sigFile);
 
-      // Accept base64 data URLs written to disk
+      // Accept base64 data URLs written to assets/
       if (typeof req.body.proofBase64 === 'string' && req.body.proofBase64.startsWith('data:')) {
         const buf = Buffer.from(req.body.proofBase64.split(',')[1] || '', 'base64');
-        const name = `pod-${Date.now()}.jpg`;
-        fs.writeFileSync(path.join(UPLOAD_ROOT, name), buf);
-        proofOfDeliveryUrl = `/uploads/${name}`;
+        proofOfDeliveryUrl = saveAssetBuffer(buf, {
+          mime: 'image/jpeg',
+          filename: `pod-${Date.now()}.jpg`,
+        }).url;
       }
       if (typeof req.body.signatureBase64 === 'string' && req.body.signatureBase64.startsWith('data:')) {
         const buf = Buffer.from(req.body.signatureBase64.split(',')[1] || '', 'base64');
-        const name = `sig-${Date.now()}.png`;
-        fs.writeFileSync(path.join(UPLOAD_ROOT, name), buf);
-        receiverSignatureUrl = `/uploads/${name}`;
+        receiverSignatureUrl = saveAssetBuffer(buf, {
+          mime: 'image/png',
+          filename: `sig-${Date.now()}.png`,
+        }).url;
       }
 
       const result = await db.query(

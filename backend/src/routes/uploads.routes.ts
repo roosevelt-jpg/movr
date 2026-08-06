@@ -1,38 +1,33 @@
 import path from 'path';
-import fs from 'fs';
 import multer from 'multer';
 import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken, requireRole } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
+import {
+  ASSETS_ROOT,
+  assetUrlFromMulterFile,
+  multerAssetStorage,
+} from '../utils/asset-storage';
 
-const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
 const ALLOWED = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
   'application/pdf',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
 ]);
 
-if (!fs.existsSync(UPLOAD_ROOT)) {
-  fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_ROOT),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const safe = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
-    cb(null, safe);
-  },
-});
-
 const upload = multer({
-  storage,
-  limits: { fileSize: 12 * 1024 * 1024 },
+  storage: multerAssetStorage(),
+  limits: { fileSize: 80 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED.has(file.mimetype)) {
-      return cb(new Error('Only JPEG, PNG, WebP, GIF, or PDF files are allowed'));
+      return cb(
+        new Error('Only JPEG, PNG, WebP, GIF, PDF, MP4, WebM, or QuickTime files are allowed')
+      );
     }
     cb(null, true);
   },
@@ -48,7 +43,7 @@ function fileFromRequest(req: AuthRequest) {
   return (req as any).file as Express.Multer.File | undefined;
 }
 
-/** POST /api/v1/uploads — authenticated direct file upload (field: file | avatar | document) */
+/** POST /api/v1/uploads — authenticated direct file upload → backend/assets/{images|videos|documents} */
 uploadsRouter.post(
   '/',
   authenticateToken,
@@ -60,11 +55,13 @@ uploadsRouter.post(
       if (!file) {
         return res.status(400).json({ status: 'error', message: 'file is required (multipart)' });
       }
-      const url = `/uploads/${file.filename}`;
+      const url = assetUrlFromMulterFile(file);
+      const rel = path.relative(ASSETS_ROOT, file.path).split(path.sep).join('/');
       res.status(201).json({
         status: 'success',
         data: {
           url,
+          path: rel,
           filename: file.filename,
           size: file.size,
           mimeType: file.mimetype,
@@ -90,7 +87,7 @@ uploadsRouter.post(
       if (!String(file.mimetype).startsWith('image/')) {
         return res.status(400).json({ status: 'error', message: 'Avatar must be an image' });
       }
-      const url = `/uploads/${file.filename}`;
+      const url = assetUrlFromMulterFile(file);
       await db.query(`UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [
         url,
         req.user!.id,
@@ -105,4 +102,4 @@ uploadsRouter.post(
   }
 );
 
-export { UPLOAD_ROOT };
+export { ASSETS_ROOT, ASSETS_ROOT as UPLOAD_ROOT };

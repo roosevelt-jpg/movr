@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import MerchantShell from '../../layouts/MerchantShell';
-import { VerifiedBadgeWeb } from '@movr/design-system/components/VerifiedBadge';
+import { VerifiedBadgeWeb } from '@movr/design-system/components/VerifiedBadgeWeb';
 import { ThemeToggle } from '../../theme/ThemeProvider';
 import OnOffButton from '../../components/OnOffButton';
 

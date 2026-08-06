@@ -158,9 +158,12 @@ app.use('/api/v1/wallet', walletRouter);
 
 const { storesRouter, cartRouter, ordersRouter } = require('./routes/stores.routes');
 const { merchantRouter } = require('./routes/merchant.routes');
-const { uploadsRouter, UPLOAD_ROOT } = require('./routes/uploads.routes');
+const { uploadsRouter, UPLOAD_ROOT, ASSETS_ROOT } = require('./routes/uploads.routes');
+const { LEGACY_UPLOADS_ROOT } = require('./utils/asset-storage');
 const { categoriesRouter, adminCatalogRouter } = require('./routes/catalog.routes');
-app.use('/uploads', express.static(UPLOAD_ROOT));
+app.use('/assets', express.static(ASSETS_ROOT || UPLOAD_ROOT));
+app.use('/uploads', express.static(LEGACY_UPLOADS_ROOT));
+app.use('/uploads', express.static(ASSETS_ROOT || UPLOAD_ROOT));
 app.use('/api/v1/uploads', uploadsRouter);
 app.use('/api/v1', uploadsRouter); // exposes POST /api/v1/users/avatar
 
