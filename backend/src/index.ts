@@ -1634,10 +1634,33 @@ app.get('/api/v1/public/locales', async (_req: ExpressRequest, res: ExpressRespo
        WHERE is_active = TRUE
        ORDER BY sort_order ASC, country_name ASC`
     );
-    res.json({
-      status: 'success',
-      data: rows.rows.length ? rows.rows : fallback,
-    });
+    if (rows.rows.length) {
+      return res.json({ status: 'success', data: rows.rows });
+    }
+
+    // Derive from countries table when site_locales is empty
+    const countries = await authDb.query(
+      `SELECT code AS country_code, name AS country_name
+       FROM countries
+       WHERE is_active = TRUE
+       ORDER BY name ASC`
+    );
+    if (countries.rows.length) {
+      return res.json({
+        status: 'success',
+        data: countries.rows.map((c: any, i: number) => ({
+          country_code: c.country_code,
+          country_name: c.country_name,
+          language_code: 'en',
+          language_label: 'English',
+          display_label: `${c.country_name} - English`,
+          is_default: c.country_code === 'GH',
+          sort_order: i + 1,
+        })),
+      });
+    }
+
+    res.json({ status: 'success', data: fallback });
   } catch {
     res.json({ status: 'success', data: fallback });
   }

@@ -7,12 +7,14 @@ import {
   MessageCircle,
   Smartphone,
   Send as TelegramIcon,
-  Headset,
+  Headphones,
   Star,
   Trophy,
 } from 'lucide-react';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 import { useAuthStore } from '../../store/auth.store';
+import { useCmsPage } from '../../services/cms';
+import { resolveCmsHeroMedia } from '../../brand/assets';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -242,16 +244,30 @@ export default function MovrAiPage() {
     { id: 'telegram', label: 'Telegram', icon: <TelegramIcon size={16} /> },
   ];
 
+  const { page: aiCms } = useCmsPage('ai');
+  const bannerSection = aiCms?.sections?.find((s) => s.type === 'hero' || s.type === 'choice_hero');
+  const bannerMedia = resolveCmsHeroMedia(bannerSection?.payload || {}, 'ai');
+  const bannerUrl = bannerMedia.imageUrl || '/brand/ride-sedan.png';
+
   return (
     <div className="bg-surface text-text-primary flex-1 flex flex-col">
-      <div className="mkt-shell w-full max-w-5xl mx-auto flex-1 flex flex-col py-8 sm:py-10 px-4 gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="relative overflow-hidden border-b border-border">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-35"
+          style={{ backgroundImage: `url(${bannerUrl})` }}
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/90 to-surface/70" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[#6A00FF] via-[#0055FF] to-[#3F7048]" aria-hidden />
+        <div className="mkt-shell relative w-full max-w-5xl mx-auto py-8 sm:py-10 px-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-movr-gradient text-white">
               <Sparkles size={22} />
             </span>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">Movr AI</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">
+                {bannerSection?.payload?.headline || 'Movr AI'}
+              </h1>
               <p className="text-sm text-success flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />
                 {escalated ? 'Live agent connected' : 'Online · multi-channel bookings'}
@@ -276,7 +292,9 @@ export default function MovrAiPage() {
             ))}
           </div>
         </div>
+      </div>
 
+      <div className="mkt-shell w-full max-w-5xl mx-auto flex-1 flex flex-col py-6 sm:py-8 px-4 gap-6">
         <div className="grid lg:grid-cols-[1fr_280px] gap-5 items-start">
           <div className="rounded-2xl border border-border bg-surface-elevated overflow-hidden flex flex-col min-h-[32rem]">
             {channel !== 'in_app' ? (
@@ -303,7 +321,7 @@ export default function MovrAiPage() {
                 >
                   {m.from === 'agent' ? (
                     <p className="text-[11px] uppercase tracking-wide text-success flex items-center gap-1">
-                      <Headset size={12} /> Live agent
+                      <Headphones size={12} /> Live agent
                     </p>
                   ) : null}
                   <p
@@ -399,7 +417,7 @@ export default function MovrAiPage() {
                 className="shrink-0 h-12 px-3 rounded-full border border-border text-text-secondary hover:text-text-primary hidden sm:inline-flex items-center gap-1.5 text-xs font-medium"
                 title="Talk to a live agent"
               >
-                <Headset size={16} />
+                <Headphones size={16} />
                 Agent
               </button>
               <button

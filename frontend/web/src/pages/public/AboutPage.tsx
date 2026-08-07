@@ -1,6 +1,9 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useCmsPage } from '../../services/cms';
 import { CmsSections } from '../../cms/sections';
+import { BrandHeroBanner } from '../../brand/BrandHeroBanner';
+import { BRAND } from '../../brand/assets';
 
 /** About page — CMS slug `about`. */
 export default function AboutPage() {
@@ -16,12 +19,17 @@ export default function AboutPage() {
 
   if (error || !page?.sections?.length) {
     return (
-      <div className="bg-surface text-text-primary mkt-shell py-20">
-        <p className="mkt-eyebrow">About Movr</p>
-        <h1 className="mkt-display mt-4">Move. Shop. Deliver.</h1>
-        <p className="mt-6 text-white/60 max-w-2xl leading-relaxed">
-          We connect riders, drivers, and merchants across African cities on one platform.
-        </p>
+      <div className="bg-surface text-text-primary">
+        <BrandHeroBanner
+          imageUrl={BRAND.rideSedan}
+          eyebrow="About Movr"
+          headline="Move. Shop. Deliver."
+          subhead="We connect riders, drivers, and merchants across African cities on one platform."
+        >
+          <Link to="/download" className="mkt-btn-primary inline-flex">
+            Get the app
+          </Link>
+        </BrandHeroBanner>
       </div>
     );
   }

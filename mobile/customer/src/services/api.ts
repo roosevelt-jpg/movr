@@ -38,4 +38,25 @@ export const ordersApi = {
   get: (id: string) => api.get(`/orders/${id}`),
 };
 
+/** Movr AI — multi-domain chat, channels, rankings, live-agent escalate */
+export const aiApi = {
+  channels: () => api.get('/ai/channels'),
+  rankings: (type: 'stores' | 'drivers' | 'riders' = 'stores', limit = 10) =>
+    api.get('/ai/rankings', { params: { type, limit } }),
+  chat: (body: {
+    message: string;
+    sessionId?: string;
+    countryCode?: string;
+    lat?: number;
+    lng?: number;
+  }) => api.post('/ai/chat', body),
+  escalate: (body: {
+    transcript?: Array<{ role?: string; content?: string; from?: string; text?: string }>;
+    subject?: string;
+    channel?: string;
+    email?: string;
+    name?: string;
+  }) => api.post('/ai/escalate', body),
+};
+
 export default api;

@@ -46,18 +46,27 @@ export default function DownloadAppPage() {
   }
 
   return (
-    <div className="bg-surface text-text-primary flex flex-col flex-1 mkt-hero">
-      <main className="mkt-shell flex-1 flex flex-col items-center justify-center py-20 sm:py-28 text-center">
-        <p className="mkt-eyebrow">Get the app</p>
-        <h1 className="mkt-display mt-5 max-w-3xl">Take Movr with you.</h1>
-        <p className="mt-5 text-lg text-white/55 max-w-xl">
-          Book rides, shop local stores, send parcels, and manage your wallet — on iOS and Android.
-        </p>
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
-          <StoreBadgeButton store="ios" href={links.ios_url} label="App Store" />
-          <StoreBadgeButton store="android" href={links.android_url} label="Google Play" />
-        </div>
-      </main>
+    <div className="bg-surface text-text-primary flex flex-col flex-1">
+      <section className="mkt-hero relative min-h-[52vh] flex flex-col justify-end">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-60"
+          style={{ backgroundImage: 'url(/brand/movr-wordmark.png)' }}
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/90" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-[#6A00FF] via-[#0055FF] to-[#3F7048]" aria-hidden />
+        <main className="mkt-shell relative flex-1 flex flex-col items-center justify-center py-20 sm:py-28 text-center">
+          <p className="mkt-eyebrow">Get the app</p>
+          <h1 className="mkt-display mt-5 max-w-3xl">Take Movr with you.</h1>
+          <p className="mt-5 text-lg text-white/70 max-w-xl">
+            Book rides, shop local stores, send parcels, and manage your wallet — on iOS and Android.
+          </p>
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
+            <StoreBadgeButton store="ios" href={links.ios_url} label="App Store" />
+            <StoreBadgeButton store="android" href={links.android_url} label="Google Play" />
+          </div>
+        </main>
+      </section>
     </div>
   );
 }

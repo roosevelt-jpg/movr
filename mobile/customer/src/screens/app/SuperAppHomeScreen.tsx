@@ -45,10 +45,12 @@ function authHeaders(): Record<string, string> {
  */
 export default function SuperAppHomeScreen({
   onOpenVoice,
+  onOpenAi,
   onOpenStore,
   onOpenRecent,
 }: {
   onOpenVoice?: () => void;
+  onOpenAi?: () => void;
   onOpenWhatsApp?: () => void;
   onOpenStore?: (storeId: string) => void;
   onOpenRecent?: () => void;
@@ -339,10 +341,19 @@ export default function SuperAppHomeScreen({
               >
                 <Text style={styles.recenterGlyph}>⌖</Text>
               </Pressable>
-              {onOpenVoice ? (
-                <Pressable style={styles.micHint} onPress={onOpenVoice}>
-                  <Text style={{ color: colors.pureWhite, fontSize: 12 }}>Voice</Text>
-                </Pressable>
+              {onOpenAi || onOpenVoice ? (
+                <View style={styles.mapActions}>
+                  {onOpenAi ? (
+                    <Pressable style={styles.micHint} onPress={onOpenAi}>
+                      <Text style={{ color: colors.pureWhite, fontSize: 12 }}>Movr AI</Text>
+                    </Pressable>
+                  ) : null}
+                  {onOpenVoice ? (
+                    <Pressable style={styles.micHint} onPress={onOpenVoice}>
+                      <Text style={{ color: colors.pureWhite, fontSize: 12 }}>Voice</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               ) : null}
             </View>
 
@@ -530,10 +541,14 @@ function makeStyles(colors: any) {
       justifyContent: 'center',
     },
     recenterGlyph: { color: colors.pureWhite, fontSize: 18 },
-    micHint: {
+    mapActions: {
       position: 'absolute',
       bottom: spacing[3],
       right: spacing[3],
+      flexDirection: 'row',
+      gap: 8,
+    },
+    micHint: {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: radius.pill,

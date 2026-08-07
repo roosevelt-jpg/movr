@@ -40,6 +40,7 @@ export default function ShopHomeScreen({
               name: s.name,
               category: s.category || 'Store',
               rating: Number(s.rating || 4.5),
+              qualityScore: s.quality_score != null ? Number(s.quality_score) : null,
               eta: s.eta_text || `${s.eta_min_minutes || 20}–${s.eta_max_minutes || 30} min`,
               imageUrl: s.image_url || s.banner_url || null,
             }))
@@ -84,7 +85,7 @@ export default function ShopHomeScreen({
         data={visible}
         keyExtractor={(i) => String(i.id)}
         contentContainerStyle={{ paddingBottom: spacing[8] }}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Pressable style={styles.card} onPress={() => onOpenStore?.(String(item.id))}>
             {item.imageUrl ? (
               <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
@@ -96,6 +97,7 @@ export default function ShopHomeScreen({
               <Text style={styles.cardCat}>{item.category}</Text>
               <Text style={styles.cardMeta}>
                 ★ {Number(item.rating).toFixed(1)} · {item.eta}
+                {index < 3 && item.qualityScore != null ? ' · Top rated' : ''}
               </Text>
             </View>
           </Pressable>

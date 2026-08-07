@@ -1,11 +1,13 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Share2, Mail, Users, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { getStoredCountry, setStoredCountry } from '../hooks/useLocalCurrency';
 import { useCmsPage } from '../services/cms';
 import { StoreBadgeButton } from './StoreBadges';
 import { useTheme } from '../theme/ThemeProvider';
+import { AFRICA_LOCALES } from '../lib/africaLocales';
+import { SocialPlatformIcon, socialAriaLabel, type SocialLink } from './SocialPlatformIcon';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -21,11 +23,8 @@ type LocaleRow = {
 const FALLBACK_FOOTER = {
   brand: 'Movr',
   tagline: 'Move. Shop. Deliver.\nGlobal mobility, commerce, and logistics in one platform.',
-  social: [
-    { key: 'share', href: '/download' },
-    { key: 'mail', href: '/contact' },
-    { key: 'community', href: '/about' },
-  ],
+  /** Empty until admin adds social links in CMS → global → footer */
+  social: [] as SocialLink[],
   columns: [
     {
       title: 'SERVICES',
@@ -78,12 +77,6 @@ const FALLBACK_FOOTER = {
   ],
 };
 
-const SOCIAL_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
-  share: Share2,
-  mail: Mail,
-  community: Users,
-};
-
 /** Public site footer — CMS + live app links + locales (mockup). */
 export default function SiteFooter() {
   const navigate = useNavigate();
@@ -92,6 +85,22 @@ export default function SiteFooter() {
   const user = useAuthStore((s) => s.user);
   const { section } = useCmsPage('global');
   const cms = section('footer')?.payload || {};
+  const socialLinks: SocialLink[] = (Array.isArray(cms.social) ? cms.social : [])
+    .map((s: any) => ({
+      key: s.key || s.platform,
+      platform: s.platform || s.key,
+      label: s.label,
+      href: String(s.href || '').trim(),
+      iconUrl: s.iconUrl || s.icon_url || undefined,
+    }))
+    .filter((s: SocialLink) => {
+      if (!s.href) return false;
+      // Drop legacy seed placeholders (share/community → internal pages)
+      const key = String(s.platform || s.key || '').toLowerCase();
+      if ((key === 'share' || key === 'community') && !/^https?:/i.test(s.href)) return false;
+      return true;
+    });
+
   const footer = {
     ...FALLBACK_FOOTER,
     ...cms,
@@ -104,8 +113,7 @@ export default function SiteFooter() {
       Array.isArray(cms.legalLinks) && cms.legalLinks.length
         ? cms.legalLinks
         : FALLBACK_FOOTER.legalLinks,
-    social:
-      Array.isArray(cms.social) && cms.social.length ? cms.social : FALLBACK_FOOTER.social,
+    social: socialLinks,
   };
 
   const [locales, setLocales] = React.useState<LocaleRow[]>([]);
@@ -200,39 +208,50 @@ export default function SiteFooter() {
       }
       {...(light ? { 'data-force-light': true } : { 'data-force-dark': true })}
     >
-      <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-5 gap-10">
-        <div className="col-span-2 md:col-span-1">
+      <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 lg:grid-cols-6 gap-10">
+        <div className="col-span-2 lg:col-span-1">
           <p className="text-2xl font-bold mb-4 tracking-tight">{footer.brand || 'Movr'}</p>
           <p className={`text-sm ${soft} leading-relaxed mb-5 whitespace-pre-line`}>
             {taglineLines.join('\n')}
           </p>
-          <div className="flex gap-2">
-            {(footer.social || []).map((s: any, i: number) => {
-              const Icon = SOCIAL_ICONS[s.key] || Share2;
-              const href = s.href || '#';
-              if (href.startsWith('http') || href.includes('#')) {
+          {socialLinks.length ? (
+          <div className="flex flex-wrap gap-2">
+            {socialLinks.map((s, i) => {
+              const href = String(s.href || '').trim();
+              const external = /^(https?:|mailto:|tel:)/i.test(href);
+              const label = socialAriaLabel(s);
+              if (external) {
                 return (
-                  <a key={i} href={href} className={socialBtn} aria-label={s.label || s.key}>
-                    <Icon size={16} />
+                  <a
+                    key={`${href}-${i}`}
+                    href={href}
+                    target={href.startsWith('http') ? '_blank' : undefined}
+                    rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                    className={socialBtn}
+                    aria-label={label}
+                    title={label}
+                  >
+                    <SocialPlatformIcon link={s} size={16} />
                   </a>
                 );
               }
               return (
-                <Link key={i} to={href} className={socialBtn} aria-label={s.label || s.key}>
-                  <Icon size={16} />
+                <Link key={`${href}-${i}`} to={href || '/'} className={socialBtn} aria-label={label} title={label}>
+                  <SocialPlatformIcon link={s} size={16} />
                 </Link>
               );
             })}
           </div>
+          ) : null}
         </div>
 
         {(footer.columns || []).map((col: any) => (
           <Col key={col.title} title={col.title} links={col.links || []} />
         ))}
 
-        <div>
+        <div className="col-span-2 lg:col-span-1">
           <p className={`text-[11px] tracking-[0.12em] uppercase ${muted} mb-4`}>GET THE APP</p>
-          <div className="space-y-3">
+          <div className="flex flex-row flex-wrap items-center gap-2.5">
             {(footer.appButtons || []).map((b: any) => (
               <StoreBadgeButton
                 key={b.label}
@@ -241,7 +260,7 @@ export default function SiteFooter() {
                 href={b.href}
                 onClick={() => openApp(b)}
                 variant="full"
-                className="w-full [&_svg]:w-full [&_svg]:h-auto [&_svg]:max-h-12"
+                className="shrink-0 [&_svg]:h-10 [&_svg]:w-auto"
               />
             ))}
           </div>
@@ -268,7 +287,11 @@ export default function SiteFooter() {
               >
                 {(locales.length
                   ? locales
-                  : [{ country_code: 'GH', display_label: 'Ghana - English', is_default: true }]
+                  : AFRICA_LOCALES.map((c) => ({
+                      country_code: c.country_code,
+                      display_label: c.display_label,
+                      is_default: c.is_default,
+                    }))
                 ).map((c) => (
                   <option
                     key={c.country_code}

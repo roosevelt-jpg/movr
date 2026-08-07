@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { StoreBadgeButton } from '../components/StoreBadges';
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
+import { resolveCmsHeroMedia } from '../brand/assets';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -46,16 +47,35 @@ function go(navigate: ReturnType<typeof useNavigate>, href?: string) {
 }
 
 /** PerfectRide-style choice hero — eyebrow, large headline, two path cards. */
-export function CmsChoiceHero({ payload }: { payload: any }) {
+export function CmsChoiceHero({
+  payload,
+  pageSlug,
+}: {
+  payload: any;
+  pageSlug?: string;
+}) {
   const navigate = useNavigate();
+  const media = resolveCmsHeroMedia(payload, pageSlug);
+  const hasMedia = Boolean(media.imageUrl || media.videoUrl);
+
   return (
-    <section className="mkt-hero relative">
-      <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
+    <section
+      className={`mkt-hero relative min-h-[56vh] sm:min-h-[62vh] ${hasMedia ? 'mkt-hero-media' : ''}`}
+    >
+      <CmsMediaBackdrop
+        imageUrl={media.imageUrl}
+        videoUrl={media.videoUrl}
+        intensity="photo"
+        imageOpacity={media.imageOpacity}
+        overlayOpacity={media.overlayOpacity}
+      />
       <div className="mkt-shell relative pt-16 sm:pt-24 pb-16 sm:pb-20">
         {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
-        <h1 className="mkt-display mt-5 max-w-4xl whitespace-pre-line">{payload.headline}</h1>
+        <h1 className="mkt-display mt-5 max-w-4xl whitespace-pre-line text-white">
+          {payload.headline}
+        </h1>
         {payload.subhead ? (
-          <p className="mt-6 text-lg sm:text-xl mkt-muted max-w-2xl leading-relaxed">
+          <p className="mt-6 text-lg sm:text-xl text-white/75 max-w-2xl leading-relaxed">
             {payload.subhead}
           </p>
         ) : null}
@@ -80,10 +100,10 @@ export function CmsChoiceHero({ payload }: { payload: any }) {
                     {c.emoji || '•'}
                   </span>
                 )}
-                <span className="block text-lg font-semibold mkt-ink">
+                <span className="block text-lg font-semibold text-white">
                   {c.title}
                 </span>
-                <span className="block mt-2 text-sm mkt-muted leading-relaxed">{c.body}</span>
+                <span className="block mt-2 text-sm text-white/65 leading-relaxed">{c.body}</span>
                 {c.cta ? (
                   <span className="inline-block mt-4 text-sm font-semibold text-motion-blue">
                     {c.cta} →
@@ -273,16 +293,20 @@ export function CmsTestimonials({ payload }: { payload: any }) {
   );
 }
 
-export function CmsFinalCta({ payload }: { payload: any }) {
+export function CmsFinalCta({ payload, pageSlug }: { payload: any; pageSlug?: string }) {
   const navigate = useNavigate();
+  const media = resolveCmsHeroMedia(payload, pageSlug);
   return (
     <section className="mkt-section pb-24">
       <div className="mkt-shell">
         <div className="mkt-final relative overflow-hidden">
           <CmsMediaBackdrop
-            imageUrl={payload.backgroundImage}
-            videoUrl={payload.backgroundVideo}
+            imageUrl={media.imageUrl}
+            videoUrl={media.videoUrl}
             className="rounded-[1.75rem]"
+            intensity="soft"
+            imageOpacity={media.imageOpacity}
+            overlayOpacity={media.overlayOpacity}
           />
           <div className="relative">
             <h2 className="mkt-h2 max-w-2xl">{payload.heading}</h2>

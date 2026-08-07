@@ -28,6 +28,7 @@ import {
   CmsAiShowcase,
 } from './marketing-sections';
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
+import { resolveCmsHeroMedia } from '../brand/assets';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -162,25 +163,37 @@ export function CmsNav({ payload }: { payload: any }) {
   );
 }
 
-export function CmsHero({ payload }: { payload: any }) {
+export function CmsHero({ payload, pageSlug }: { payload: any; pageSlug?: string }) {
   const navigate = useNavigate();
+  const media = resolveCmsHeroMedia(payload, pageSlug);
+  const hasMedia = Boolean(media.imageUrl || media.videoUrl);
+  const heroClass = `mkt-hero relative ${hasMedia ? 'mkt-hero-media' : ''}`;
 
   /* New choice-card heroes use dedicated renderer via type, but support inline choices too */
   if (payload.choices?.length) {
-    return <CmsChoiceHero payload={payload} />;
+    return <CmsChoiceHero payload={payload} pageSlug={pageSlug} />;
   }
 
   const centered = payload.layout === 'centered';
+  const backdrop = (
+    <CmsMediaBackdrop
+      imageUrl={media.imageUrl}
+      videoUrl={media.videoUrl}
+      intensity="photo"
+      imageOpacity={media.imageOpacity}
+      overlayOpacity={media.overlayOpacity}
+    />
+  );
 
   if (centered) {
     return (
-      <section className="mkt-hero relative">
-        <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
+      <section className={`${heroClass} min-h-[52vh] sm:min-h-[58vh]`}>
+        {backdrop}
         <div className="mkt-shell relative pt-20 sm:pt-28 pb-16 text-center">
           {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
-          <h1 className="mkt-display mt-5 mx-auto max-w-4xl">{payload.headline}</h1>
+          <h1 className="mkt-display mt-5 mx-auto max-w-4xl text-white">{payload.headline}</h1>
           {payload.subhead ? (
-            <p className="mt-6 text-lg text-white/60 max-w-2xl mx-auto leading-relaxed whitespace-pre-line">
+            <p className="mt-6 text-lg text-white/75 max-w-2xl mx-auto leading-relaxed whitespace-pre-line">
               {payload.subhead}
             </p>
           ) : null}
@@ -212,14 +225,14 @@ export function CmsHero({ payload }: { payload: any }) {
   }
 
   return (
-    <section className="mkt-hero relative">
-      <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
+    <section className={`${heroClass} min-h-[56vh]`}>
+      {backdrop}
       <div className="mkt-shell relative pt-16 sm:pt-24 pb-20 grid lg:grid-cols-2 gap-12 items-center">
         <div>
           {payload.eyebrow ? <p className="mkt-eyebrow mb-5">{payload.eyebrow}</p> : null}
-          <h1 className="mkt-display">{payload.headline}</h1>
+          <h1 className="mkt-display text-white">{payload.headline}</h1>
           {payload.subhead ? (
-            <p className="mt-6 text-lg text-white/60 max-w-md leading-relaxed">{payload.subhead}</p>
+            <p className="mt-6 text-lg text-white/75 max-w-md leading-relaxed">{payload.subhead}</p>
           ) : null}
           <div className="mt-10 flex flex-wrap gap-3">
             {payload.primaryCta ? (

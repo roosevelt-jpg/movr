@@ -141,7 +141,7 @@ export default function InboxScreen({
               ) : null}
               {onOpenBot ? (
                 <Pressable onPress={onOpenBot}>
-                  <Text style={styles.channelLink}>Movr Bot →</Text>
+                  <Text style={styles.channelLink}>Movr AI →</Text>
                 </Pressable>
               ) : null}
               {onOpenSupport ? (

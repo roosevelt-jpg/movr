@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MessageCircle, X, Send, Sparkles, Headset, Minimize2 } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Headphones, Minimize2 } from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { useLocalCurrency } from '../hooks/useLocalCurrency';
 
@@ -172,7 +172,7 @@ export default function LiveChatWidget() {
                 >
                   {m.from === 'agent' ? (
                     <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-success mb-1">
-                      <Headset size={10} /> Agent
+                      <Headphones size={10} /> Agent
                     </span>
                   ) : null}
                   {m.text}
@@ -191,7 +191,7 @@ export default function LiveChatWidget() {
               title="Live agent"
               aria-label="Talk to live agent"
             >
-              <Headset size={16} />
+              <Headphones size={16} />
             </button>
             <input
               value={input}

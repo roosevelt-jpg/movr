@@ -51,11 +51,7 @@ export const CMS_SEED: Array<{
           brand: 'Movr',
           tagline:
             'Move. Shop. Deliver.\nGlobal mobility, commerce, and logistics in one platform.',
-          social: [
-            { key: 'share', href: '/download', label: 'Share' },
-            { key: 'mail', href: '/contact', label: 'Email' },
-            { key: 'community', href: '/about', label: 'Community' },
-          ],
+          social: [],
           columns: [
             {
               title: 'SERVICES',
@@ -122,6 +118,7 @@ export const CMS_SEED: Array<{
           headline: 'Move. Shop. Deliver.\nOne app for Africa.',
           subhead:
             'Book rides, shop local stores, send parcels, and rent vehicles — built for Ghana and expanding across Africa.',
+          backgroundImage: '/brand/ride-sedan.png',
           choices: [
             {
               emoji: '🚗',
@@ -129,6 +126,7 @@ export const CMS_SEED: Array<{
               body: 'Cars, bikes, and tricycles on demand — tracked live.',
               cta: 'Book a ride',
               href: '/login',
+              imageUrl: '/brand/ride-sedan.png',
             },
             {
               emoji: '🏪',
@@ -136,6 +134,7 @@ export const CMS_SEED: Array<{
               body: 'Sell in-app, deliver with Movr, get paid fast.',
               cta: 'Open a storefront',
               href: '/merchants',
+              imageUrl: '/brand/shop-partner.png',
             },
           ],
         },
@@ -342,6 +341,7 @@ export const CMS_SEED: Array<{
           headline: 'Sell faster with an\nin-app storefront.',
           subhead:
             'Order management, live delivery tracking, and instant payouts — all from one dashboard.',
+          backgroundImage: '/brand/shop-partner.png',
           choices: [
             {
               emoji: '🛍️',
@@ -349,6 +349,7 @@ export const CMS_SEED: Array<{
               body: 'List products, set hours, and go live in minutes.',
               cta: 'Start onboarding',
               href: '/merchant/onboarding',
+              imageUrl: '/brand/shop-partner.png',
             },
             {
               emoji: '📦',
@@ -356,6 +357,7 @@ export const CMS_SEED: Array<{
               body: 'Connect delivery and get paid to bank or mobile money.',
               cta: 'Merchant login',
               href: '/merchant/login',
+              imageUrl: '/brand/courier-moto.png',
             },
           ],
         },
@@ -431,6 +433,7 @@ export const CMS_SEED: Array<{
           headline: 'Keep 100% of\nevery fare.',
           subhead:
             'No commission. One flexible subscription, cancel any time. Drive Sedan, SUV, Motorcycle, Tricycle, or Van.',
+          backgroundImage: '/brand/courier-moto.png',
           choices: [
             {
               emoji: '🔑',
@@ -438,6 +441,7 @@ export const CMS_SEED: Array<{
               body: 'Verify your identity and start earning on your schedule.',
               cta: 'Apply now',
               href: '/register?role=driver',
+              imageUrl: '/brand/courier-moto.png',
             },
             {
               emoji: '📱',
@@ -445,6 +449,7 @@ export const CMS_SEED: Array<{
               body: 'Log in to accept trips and track your earnings.',
               cta: 'Driver login',
               href: '/login',
+              imageUrl: '/brand/ride-sedan.png',
             },
           ],
         },
@@ -519,6 +524,7 @@ export const CMS_SEED: Array<{
           headline: 'Get the Movr app',
           subhead: 'Available on iOS and Android',
           layout: 'centered',
+          backgroundImage: '/brand/movr-wordmark.png',
           storeButtons: [
             { label: 'App Store', href: 'https://apps.apple.com' },
             { label: 'Google Play', href: 'https://play.google.com' },
@@ -716,6 +722,23 @@ export const CMS_SEED: Array<{
     ],
   },
   {
+    slug: 'ai',
+    title: 'Movr AI',
+    status: 'published',
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          headline: 'Movr AI',
+          subhead: 'Talk. Don’t tap. Book rides, find stores, and escalate to live agents.',
+          layout: 'centered',
+          backgroundImage: '/brand/ride-sedan.png',
+          showPhoneMock: false,
+        },
+      },
+    ],
+  },
+  {
     slug: 'about',
     title: 'About Movr',
     status: 'published',
@@ -727,6 +750,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Movr is the super-app for rides, local shopping, and delivery — priced in your local currency.',
           layout: 'centered',
+          backgroundImage: '/brand/ride-sedan.png',
           primaryCta: { label: 'Get the app', href: '/download' },
           showPhoneMock: false,
         },

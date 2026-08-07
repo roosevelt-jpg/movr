@@ -130,6 +130,43 @@ input[type='date'].input-base {
     radial-gradient(ellipse 50% 40% at 50% 100%, rgba(106, 0, 255, 0.08), transparent 60%);
 }
 
+/* Photo/video heroes always use white text — readable on dark brand imagery in light or dark mode */
+.mkt-hero-media,
+[data-theme='light'] .mkt-hero-media {
+  background-color: #000000;
+  color: #ffffff;
+  background-image: none;
+}
+.mkt-hero-media .mkt-eyebrow,
+.mkt-hero-media .mkt-display,
+.mkt-hero-media .mkt-h2,
+[data-theme='light'] .mkt-hero-media .mkt-eyebrow,
+[data-theme='light'] .mkt-hero-media .mkt-display,
+[data-theme='light'] .mkt-hero-media .mkt-h2 {
+  color: #ffffff !important;
+}
+[data-theme='light'] .mkt-hero-media .mkt-eyebrow {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+.mkt-hero-media .mkt-choice,
+[data-theme='light'] .mkt-hero-media .mkt-choice {
+  border-color: rgba(255, 255, 255, 0.14);
+  background-color: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  box-shadow: none;
+}
+.mkt-hero-media .mkt-choice:hover,
+[data-theme='light'] .mkt-hero-media .mkt-choice:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background-color: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 85, 255, 0.15), 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+.mkt-hero-media .mkt-btn-ghost,
+[data-theme='light'] .mkt-hero-media .mkt-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
 .mkt-section {
   @apply py-20 sm:py-24;
 }

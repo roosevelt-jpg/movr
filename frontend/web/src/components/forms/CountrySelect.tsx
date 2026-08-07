@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FormField, fieldClassName } from './FormField';
+import { AFRICA_COUNTRIES } from '../../lib/africaLocales';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -21,11 +22,12 @@ type Props = {
   disabled?: boolean;
   error?: string;
   className?: string;
-  /** When true, also sync locale store via callback only (parent decides). */
   placeholder?: string;
 };
 
-/** Country selector — live from GET /public/countries (no manual typing). */
+const FALLBACK_COUNTRIES: CountryOption[] = AFRICA_COUNTRIES;
+
+/** Country selector — live from GET /public/countries (Africa-wide). */
 export default function CountrySelect({
   label = 'Country',
   value,
@@ -54,26 +56,10 @@ export default function CountrySelect({
               dialCode: c.dialCode || c.dial_code,
             }))
           : [];
-        setCountries(
-          rows.length
-            ? rows
-            : [
-                { code: 'GH', name: 'Ghana', currencyCode: 'GHS', dialCode: '+233' },
-                { code: 'NG', name: 'Nigeria', currencyCode: 'NGN', dialCode: '+234' },
-                { code: 'KE', name: 'Kenya', currencyCode: 'KES', dialCode: '+254' },
-                { code: 'ZA', name: 'South Africa', currencyCode: 'ZAR', dialCode: '+27' },
-              ]
-        );
+        setCountries(rows.length >= 40 ? rows : FALLBACK_COUNTRIES);
       })
       .catch(() => {
-        if (!cancelled) {
-          setCountries([
-            { code: 'GH', name: 'Ghana', currencyCode: 'GHS', dialCode: '+233' },
-            { code: 'NG', name: 'Nigeria', currencyCode: 'NGN', dialCode: '+234' },
-            { code: 'KE', name: 'Kenya', currencyCode: 'KES', dialCode: '+254' },
-            { code: 'ZA', name: 'South Africa', currencyCode: 'ZAR', dialCode: '+27' },
-          ]);
-        }
+        if (!cancelled) setCountries(FALLBACK_COUNTRIES);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

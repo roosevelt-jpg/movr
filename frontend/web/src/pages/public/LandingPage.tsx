@@ -15,11 +15,13 @@ function HomepageFallback() {
   return (
     <div className="bg-surface text-text-primary">
       <CmsChoiceHero
+        pageSlug="home"
         payload={{
           eyebrow: 'The mobility & commerce platform',
           headline: 'Move. Shop. Deliver.\nOne app for Africa.',
           subhead:
             'Book rides, shop local stores, send parcels, and rent vehicles — built for Ghana and expanding across Africa.',
+          backgroundImage: '/brand/ride-sedan.png',
           choices: [
             {
               emoji: '🚗',
@@ -27,6 +29,7 @@ function HomepageFallback() {
               body: 'Cars, bikes, and tricycles on demand — tracked live.',
               cta: 'Book a ride',
               href: '/login',
+              imageUrl: '/brand/ride-sedan.png',
             },
             {
               emoji: '🏪',
@@ -34,6 +37,7 @@ function HomepageFallback() {
               body: 'Sell in-app, deliver with Movr, get paid fast.',
               cta: 'Open a storefront',
               href: '/merchants',
+              imageUrl: '/brand/shop-partner.png',
             },
           ],
         }}

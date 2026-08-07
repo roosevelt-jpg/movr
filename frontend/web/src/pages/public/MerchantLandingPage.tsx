@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Truck, BarChart3, CreditCard } from 'lucide-react';
 import { useCmsPage } from '../../services/cms';
 import { CmsSections } from '../../cms/sections';
+import { BrandHeroBanner } from '../../brand/BrandHeroBanner';
+import { BRAND } from '../../brand/assets';
 
 const FEATURES = [
   {
@@ -26,30 +28,29 @@ function MerchantLandingFallback() {
   const navigate = useNavigate();
   return (
     <div className="bg-surface text-text-primary">
-      <section className="max-w-4xl mx-auto px-6 pt-16 sm:pt-24 pb-16 text-center">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-tight">
-          Sell faster with an in-app storefront
-        </h1>
-        <p className="mt-5 text-[#888888] text-lg max-w-2xl mx-auto">
-          Order management, live delivery tracking, and instant payouts — all from one dashboard.
-        </p>
+      <BrandHeroBanner
+        imageUrl={BRAND.shopPartner}
+        eyebrow="Movr for merchants"
+        headline={'Sell faster with an\nin-app storefront'}
+        subhead="Order management, live delivery tracking, and instant payouts — all from one dashboard."
+      >
         <button
           type="button"
           onClick={() => navigate('/merchant/onboarding')}
-          className="mt-8 rounded-full px-8 py-3.5 font-semibold bg-movr-gradient text-white"
+          className="mkt-btn-primary"
         >
           Create your storefront
         </button>
-      </section>
+      </BrandHeroBanner>
 
-      <section className="max-w-6xl mx-auto px-6 pb-24 grid md:grid-cols-3 gap-4">
+      <section className="max-w-6xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-4">
         {FEATURES.map((f) => {
           const Icon = f.icon;
           return (
-            <div key={f.title} className="rounded-2xl bg-[#1A1A1A] p-6 text-left">
-              <Icon size={20} className="text-white mb-4" />
-              <h3 className="font-bold text-lg text-white">{f.title}</h3>
-              <p className="mt-2 text-sm text-[#888888]">{f.body}</p>
+            <div key={f.title} className="rounded-2xl bg-surface-elevated border border-border p-6 text-left">
+              <Icon size={20} className="text-text-primary mb-4" />
+              <h3 className="font-bold text-lg text-text-primary">{f.title}</h3>
+              <p className="mt-2 text-sm text-text-secondary">{f.body}</p>
             </div>
           );
         })}

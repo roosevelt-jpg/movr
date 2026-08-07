@@ -25,12 +25,16 @@ const ICON: Record<string, string> = {
   card: '💳',
 };
 
-/** Mobile Help centre — live help_categories. */
+/** Mobile Help centre — live help_categories + Movr AI entry. */
 export default function HelpCentreScreen({
   onOpenCategory,
+  onOpenAi,
+  onOpenSupport,
   onBack,
 }: {
   onOpenCategory?: (slug: string) => void;
+  onOpenAi?: () => void;
+  onOpenSupport?: () => void;
   onBack?: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -70,6 +74,20 @@ export default function HelpCentreScreen({
       />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.heading}>How can we help?</Text>
+        {onOpenAi || onOpenSupport ? (
+          <View style={styles.ctaRow}>
+            {onOpenAi ? (
+              <Pressable style={styles.ctaPrimary} onPress={onOpenAi}>
+                <Text style={styles.ctaPrimaryText}>Talk to Movr AI</Text>
+              </Pressable>
+            ) : null}
+            {onOpenSupport ? (
+              <Pressable style={styles.ctaGhost} onPress={onOpenSupport}>
+                <Text style={styles.ctaGhostText}>Live support</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         {loading ? <Text style={styles.meta}>Loading…</Text> : null}
         {categories.map((c) => (
           <Pressable
@@ -107,8 +125,24 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: spacing[6],
+    marginBottom: spacing[4],
   },
+  ctaRow: { gap: 10, marginBottom: spacing[5] },
+  ctaPrimary: {
+    backgroundColor: '#0055FF',
+    borderRadius: radius.pill,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  ctaPrimaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  ctaGhost: {
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: radius.pill,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  ctaGhostText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
   meta: { color: '#A1A1AA', textAlign: 'center', marginBottom: 12 },
   card: {
     backgroundColor: '#1A1A1A',

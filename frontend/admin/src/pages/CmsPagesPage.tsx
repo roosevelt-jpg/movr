@@ -3,6 +3,7 @@ import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import RichTextEditor from '../components/RichTextEditor';
 import { MediaField } from '../components/CmsMediaField';
+import { HeroBackgroundField } from '../components/HeroBackgroundField';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -114,6 +115,153 @@ function LinkRows({
   );
 }
 
+function SocialRows({
+  items,
+  onChange,
+  disabled,
+}: {
+  items: Array<{ platform?: string; key?: string; label?: string; href?: string; iconUrl?: string }>;
+  onChange: (
+    next: Array<{ platform: string; label: string; href: string; iconUrl?: string; key: string }>
+  ) => void;
+  disabled?: boolean;
+}) {
+  const PLATFORMS = [
+    { value: 'facebook', label: 'Facebook' },
+    { value: 'instagram', label: 'Instagram' },
+    { value: 'x', label: 'X (Twitter)' },
+    { value: 'linkedin', label: 'LinkedIn' },
+    { value: 'youtube', label: 'YouTube' },
+    { value: 'tiktok', label: 'TikTok' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'telegram', label: 'Telegram' },
+    { value: 'threads', label: 'Threads' },
+    { value: 'snapchat', label: 'Snapchat' },
+    { value: 'pinterest', label: 'Pinterest' },
+    { value: 'reddit', label: 'Reddit' },
+    { value: 'discord', label: 'Discord' },
+    { value: 'github', label: 'GitHub' },
+    { value: 'twitch', label: 'Twitch' },
+    { value: 'spotify', label: 'Spotify' },
+    { value: 'mail', label: 'Email' },
+    { value: 'other', label: 'Other / custom' },
+  ];
+
+  const rows = items?.length
+    ? items
+    : [{ platform: 'instagram', label: '', href: '', iconUrl: '' }];
+
+  const normalize = (list: typeof rows) =>
+    list.map((r) => {
+      const platform = String(r.platform || r.key || 'other');
+      return {
+        platform,
+        key: platform,
+        label: r.label || '',
+        href: r.href || '',
+        iconUrl: r.iconUrl || '',
+      };
+    });
+
+  return (
+    <div style={styles.group}>
+      <p style={styles.groupTitle}>Social media links</p>
+      <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-secondary)' }}>
+        Links added here appear in the public site footer. Pick a platform or choose Other and upload a custom icon.
+      </p>
+      {rows.map((row, i) => {
+        const platform = String(row.platform || row.key || 'other');
+        return (
+          <div key={i} style={{ ...styles.card, marginBottom: 10 }}>
+            <div style={styles.row2}>
+              <label style={styles.field}>
+                <span style={styles.label}>Platform</span>
+                <select
+                  style={styles.input}
+                  value={platform}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const next = normalize(rows);
+                    next[i] = {
+                      ...next[i],
+                      platform: e.target.value,
+                      key: e.target.value,
+                      label:
+                        next[i].label ||
+                        PLATFORMS.find((p) => p.value === e.target.value)?.label ||
+                        '',
+                    };
+                    onChange(next);
+                  }}
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Label"
+                value={row.label || ''}
+                disabled={disabled}
+                onChange={(v) => {
+                  const next = normalize(rows);
+                  next[i] = { ...next[i], label: v };
+                  onChange(next);
+                }}
+              />
+            </div>
+            <Field
+              label="Profile URL"
+              value={row.href || ''}
+              disabled={disabled}
+              onChange={(v) => {
+                const next = normalize(rows);
+                next[i] = { ...next[i], href: v };
+                onChange(next);
+              }}
+            />
+            <MediaField
+              label="Custom icon (optional — for Other or brand override)"
+              value={row.iconUrl || ''}
+              disabled={disabled}
+              accept="image/*"
+              hint="Upload a PNG/SVG logo if the platform is not in the list."
+              onChange={(v) => {
+                const next = normalize(rows);
+                next[i] = { ...next[i], iconUrl: v };
+                onChange(next);
+              }}
+            />
+            <button
+              type="button"
+              style={styles.smallDanger}
+              disabled={disabled}
+              onClick={() => onChange(normalize(rows.filter((_, idx) => idx !== i)))}
+            >
+              Remove
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        style={styles.smallGhost}
+        disabled={disabled}
+        onClick={() =>
+          onChange([
+            ...normalize(rows),
+            { platform: 'other', key: 'other', label: '', href: '', iconUrl: '' },
+          ])
+        }
+      >
+        + Add social link
+      </button>
+    </div>
+  );
+}
+
 function SectionEditor({
   section,
   onChange,
@@ -187,18 +335,14 @@ function SectionEditor({
               <option value="centered">Centered</option>
             </select>
           </label>
-          <MediaField
-            label="Background image or video"
-            value={p.backgroundVideo || p.backgroundImage || ''}
+          <HeroBackgroundField
+            label="Hero background (public page banner)"
+            backgroundImage={p.backgroundImage}
+            backgroundVideo={p.backgroundVideo}
+            backgroundOpacity={p.backgroundOpacity}
+            overlayOpacity={p.overlayOpacity}
             disabled={disabled}
-            hint="Shown behind the hero. Video loops muted."
-            onChange={(url) => {
-              if (/\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/')) {
-                set({ backgroundVideo: url, backgroundImage: '' });
-              } else {
-                set({ backgroundImage: url, backgroundVideo: '' });
-              }
-            }}
+            onChange={(next) => set(next)}
           />
           <div style={styles.row2}>
             <Field
@@ -380,17 +524,14 @@ function SectionEditor({
           />
           <Field label="Banner text" value={p.body || ''} multiline rows={4} disabled={disabled} onChange={(v) => set({ body: v })} />
           <Field label="Anchor id" value={p.anchor || ''} disabled={disabled} onChange={(v) => set({ anchor: v })} />
-          <MediaField
-            label="Banner background image or video"
-            value={p.backgroundVideo || p.backgroundImage || ''}
+          <HeroBackgroundField
+            label="Banner background"
+            backgroundImage={p.backgroundImage}
+            backgroundVideo={p.backgroundVideo}
+            backgroundOpacity={p.backgroundOpacity}
+            overlayOpacity={p.overlayOpacity}
             disabled={disabled}
-            onChange={(url) => {
-              if (/\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/')) {
-                set({ backgroundVideo: url, backgroundImage: '' });
-              } else {
-                set({ backgroundImage: url, backgroundVideo: '' });
-              }
-            }}
+            onChange={(next) => set(next)}
           />
           <div style={styles.row2}>
             <Field
@@ -434,6 +575,11 @@ function SectionEditor({
             value={p.copyright || ''}
             disabled={disabled}
             onChange={(v) => set({ copyright: v })}
+          />
+          <SocialRows
+            items={p.social || []}
+            disabled={disabled}
+            onChange={(social) => set({ social })}
           />
           {(p.columns || []).map((col: any, i: number) => (
             <div key={i} style={styles.card}>
@@ -759,17 +905,14 @@ function SectionEditor({
             disabled={disabled}
             onChange={(v) => set({ subhead: v })}
           />
-          <MediaField
-            label="Background image or looping video"
-            value={p.backgroundVideo || p.backgroundImage || ''}
+          <HeroBackgroundField
+            label="Hero background (public page banner)"
+            backgroundImage={p.backgroundImage}
+            backgroundVideo={p.backgroundVideo}
+            backgroundOpacity={p.backgroundOpacity}
+            overlayOpacity={p.overlayOpacity}
             disabled={disabled}
-            onChange={(url) => {
-              if (/\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/')) {
-                set({ backgroundVideo: url, backgroundImage: '' });
-              } else {
-                set({ backgroundImage: url, backgroundVideo: '' });
-              }
-            }}
+            onChange={(next) => set(next)}
           />
           {(p.choices || [{ title: '', body: '', href: '', emoji: '' }]).map((c: any, i: number) => (
             <div key={i} style={styles.card}>
@@ -1121,17 +1264,14 @@ function SectionEditor({
           <Field label="Heading" value={p.heading || ''} disabled={disabled} onChange={(v) => set({ heading: v })} />
           <Field label="Body" value={p.body || ''} multiline disabled={disabled} onChange={(v) => set({ body: v })} />
           <Field label="Note" value={p.note || ''} disabled={disabled} onChange={(v) => set({ note: v })} />
-          <MediaField
-            label="Background image or video"
-            value={p.backgroundVideo || p.backgroundImage || ''}
+          <HeroBackgroundField
+            label="CTA banner background"
+            backgroundImage={p.backgroundImage}
+            backgroundVideo={p.backgroundVideo}
+            backgroundOpacity={p.backgroundOpacity}
+            overlayOpacity={p.overlayOpacity}
             disabled={disabled}
-            onChange={(url) => {
-              if (/\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/')) {
-                set({ backgroundVideo: url, backgroundImage: '' });
-              } else {
-                set({ backgroundImage: url, backgroundVideo: '' });
-              }
-            }}
+            onChange={(next) => set(next)}
           />
           <div style={styles.row2}>
             <Field

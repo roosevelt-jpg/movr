@@ -19,12 +19,14 @@ export default function ProfileSettingsScreen({
   onSignOut,
   onEditProfile,
   onHelp,
+  onOpenAi,
   onPrivacy,
   onNotifications,
 }: {
   onSignOut?: () => void;
   onEditProfile?: () => void;
   onHelp?: () => void;
+  onOpenAi?: () => void;
   onPrivacy?: () => void;
   onNotifications?: () => void;
 }) {
@@ -131,6 +133,7 @@ export default function ProfileSettingsScreen({
       <Text style={styles.section}>SUPPORT</Text>
       <View style={styles.divider} />
       <View style={styles.group}>
+        {onOpenAi ? <Row icon="✦" label="Talk to Movr AI" onPress={onOpenAi} /> : null}
         <Row icon="?" label="Help centre" onPress={onHelp} />
         <Row icon="🛡" label="Privacy & security" onPress={onPrivacy} />
       </View>
