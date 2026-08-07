@@ -47,9 +47,11 @@
   --brand-white: #ffffff;
 }
 
-/* Marketing / forced-dark islands keep the black canvas even in light mode */
-.movr-hero,
-[data-force-dark] {
+/* Marketing / forced-dark islands — only when dark theme or explicit force */
+[data-theme='dark'] .movr-hero,
+[data-theme='dark'] .mkt-hero,
+[data-force-dark],
+.surface-dark {
   color-scheme: dark;
   --jet-black: #000000;
   --pure-white: #ffffff;
@@ -58,4 +60,21 @@
   --text-primary: #ffffff;
   --text-secondary: #a0a0a0;
   --border: #2a2a2a;
+  color: #ffffff;
+}
+
+/* Forced light islands (cards on dark pages, light sheets) */
+[data-theme='light'] .movr-hero,
+[data-theme='light'] .mkt-hero,
+[data-force-light],
+.surface-light {
+  color-scheme: light;
+  --jet-black: #f4f5f7;
+  --pure-white: #0b0b0f;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --text-primary: #0b0b0f;
+  --text-secondary: #5a5a64;
+  --border: #d8d8de;
+  color: #0b0b0f;
 }

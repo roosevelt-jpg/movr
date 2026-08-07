@@ -1170,6 +1170,109 @@ function SectionEditor({
         </>
       );
 
+    case 'ai_showcase':
+      return (
+        <>
+          <Field label="Anchor id" value={p.anchor || 'ai'} disabled={disabled} onChange={(v) => set({ anchor: v })} />
+          <Field label="Eyebrow" value={p.eyebrow || ''} disabled={disabled} onChange={(v) => set({ eyebrow: v })} />
+          <Field label="Heading" value={p.heading || ''} disabled={disabled} onChange={(v) => set({ heading: v })} />
+          <Field label="Body" value={p.body || ''} multiline disabled={disabled} onChange={(v) => set({ body: v })} />
+          <Field label="Note" value={p.note || ''} disabled={disabled} onChange={(v) => set({ note: v })} />
+          <div style={styles.row2}>
+            <Field
+              label="Primary CTA label"
+              value={p.primaryCta?.label || ''}
+              disabled={disabled}
+              onChange={(v) => set({ primaryCta: { ...(p.primaryCta || {}), label: v } })}
+            />
+            <Field
+              label="Primary CTA link"
+              value={p.primaryCta?.href || '/ai'}
+              disabled={disabled}
+              onChange={(v) => set({ primaryCta: { ...(p.primaryCta || {}), href: v } })}
+            />
+          </div>
+          <div style={styles.row2}>
+            <Field
+              label="Secondary CTA label"
+              value={p.secondaryCta?.label || ''}
+              disabled={disabled}
+              onChange={(v) => set({ secondaryCta: { ...(p.secondaryCta || {}), label: v } })}
+            />
+            <Field
+              label="Secondary CTA link"
+              value={p.secondaryCta?.href || ''}
+              disabled={disabled}
+              onChange={(v) => set({ secondaryCta: { ...(p.secondaryCta || {}), href: v } })}
+            />
+          </div>
+          <p style={styles.groupTitle}>Demo chat</p>
+          <Field
+            label="Chat title"
+            value={p.demo?.title || ''}
+            disabled={disabled}
+            onChange={(v) => set({ demo: { ...(p.demo || {}), title: v } })}
+          />
+          <Field
+            label="User message"
+            value={p.demo?.userMessage || ''}
+            multiline
+            disabled={disabled}
+            onChange={(v) => set({ demo: { ...(p.demo || {}), userMessage: v } })}
+          />
+          <Field
+            label="AI reply"
+            value={p.demo?.botMessage || ''}
+            multiline
+            disabled={disabled}
+            onChange={(v) => set({ demo: { ...(p.demo || {}), botMessage: v } })}
+          />
+          <Field
+            label="Quote card title"
+            value={p.demo?.quoteCard?.title || ''}
+            disabled={disabled}
+            onChange={(v) =>
+              set({ demo: { ...(p.demo || {}), quoteCard: { ...(p.demo?.quoteCard || {}), title: v } } })
+            }
+          />
+          <div style={styles.row2}>
+            <Field
+              label="Quote price"
+              value={p.demo?.quoteCard?.price || ''}
+              disabled={disabled}
+              onChange={(v) =>
+                set({ demo: { ...(p.demo || {}), quoteCard: { ...(p.demo?.quoteCard || {}), price: v } } })
+              }
+            />
+            <Field
+              label="Quote badge"
+              value={p.demo?.quoteCard?.badge || ''}
+              disabled={disabled}
+              onChange={(v) =>
+                set({ demo: { ...(p.demo || {}), quoteCard: { ...(p.demo?.quoteCard || {}), badge: v } } })
+              }
+            />
+          </div>
+          <Field
+            label="Quote footer"
+            value={p.demo?.quoteCard?.footer || ''}
+            disabled={disabled}
+            onChange={(v) =>
+              set({ demo: { ...(p.demo || {}), quoteCard: { ...(p.demo?.quoteCard || {}), footer: v } } })
+            }
+          />
+          <MediaField
+            label="Quote image (optional)"
+            value={p.demo?.quoteCard?.imageUrl || ''}
+            disabled={disabled}
+            accept="image/*"
+            onChange={(url) =>
+              set({ demo: { ...(p.demo || {}), quoteCard: { ...(p.demo?.quoteCard || {}), imageUrl: url } } })
+            }
+          />
+        </>
+      );
+
     default:
       return (
         <p style={styles.hint}>
@@ -1185,6 +1288,7 @@ const TYPE_LABELS: Record<string, string> = {
   choice_hero: 'Choice hero',
   trust_strip: 'Trust strip',
   how_it_works: 'How it works',
+  ai_showcase: 'Movr AI showcase',
   product_grid: 'Product grid',
   why_grid: 'Why grid',
   testimonials: 'Testimonials',
@@ -1540,6 +1644,9 @@ export default function CmsPagesPage() {
         </button>
         <button type="button" style={styles.smallGhost} disabled={busy} onClick={() => addSection('form')}>
           + Form section
+        </button>
+        <button type="button" style={styles.smallGhost} disabled={busy} onClick={() => addSection('ai_showcase')}>
+          + Movr AI showcase
         </button>
       </div>
 

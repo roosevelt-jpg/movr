@@ -13,7 +13,7 @@ import {
 /** Exact marketing fallback when CMS home is empty. */
 function HomepageFallback() {
   return (
-    <div className="bg-black text-white" data-force-dark>
+    <div className="bg-surface text-text-primary">
       <CmsChoiceHero
         payload={{
           eyebrow: 'The mobility & commerce platform',
@@ -148,7 +148,7 @@ const LandingPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className="bg-black text-white" data-force-dark>
+    <div className="bg-surface text-text-primary">
       <CmsSections sections={page.sections} pageSlug="home" />
     </div>
   );

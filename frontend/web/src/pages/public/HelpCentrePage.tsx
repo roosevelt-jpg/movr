@@ -77,7 +77,7 @@ export default function HelpCentrePage() {
 
   if (cmsLoading) {
     return (
-      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -85,14 +85,14 @@ export default function HelpCentrePage() {
 
   if (page?.sections?.length) {
     return (
-      <div className="bg-black text-white" data-force-dark>
+      <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug="help" />
       </div>
     );
   }
 
   return (
-    <div className="bg-black text-white">
+    <div className="bg-surface text-text-primary">
       <main className="max-w-5xl mx-auto px-6 py-16">
         <h1 className="text-4xl font-bold text-center mb-8">How can we help?</h1>
         <div className="max-w-md mx-auto mb-10 relative">

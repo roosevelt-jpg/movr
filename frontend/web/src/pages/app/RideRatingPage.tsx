@@ -57,7 +57,7 @@ const RideRatingPage: React.FC = () => {
 
   if (step === 'tip') {
     return (
-      <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]">
+      <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]" data-force-dark>
         <h1 className="text-2xl font-bold text-center mb-3">Add a tip?</h1>
         <p className="text-text-secondary text-center mb-8 max-w-md">
           100% goes to your driver. Tips help drivers earn more on every trip.
@@ -97,7 +97,7 @@ const RideRatingPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       <div className="w-22 h-22 w-24 h-24 rounded-full bg-border mb-6" />
       <h1 className="text-2xl font-bold text-center mb-6">How was your ride with Kwesi?</h1>
       <div className="flex gap-2 mb-8">

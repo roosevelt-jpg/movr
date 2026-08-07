@@ -37,7 +37,7 @@ export default function DriverLandingPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 bg-jet-black text-pure-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -45,7 +45,7 @@ export default function DriverLandingPage() {
 
   if (page?.sections?.length) {
     return (
-      <div className="bg-jet-black text-pure-white">
+      <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug="drivers" />
       </div>
     );
@@ -66,12 +66,12 @@ export default function DriverLandingPage() {
   };
 
   return (
-    <div className="bg-jet-black text-pure-white">
-      <main className="max-w-4xl mx-auto px-6 pt-16 sm:pt-20 pb-16 text-center">
+    <div className="bg-surface text-text-primary">
+      <div className="mkt-shell py-16 sm:py-24">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-tight">
           {FALLBACK.headline}
         </h1>
-        <div className="mt-6 space-y-2 text-base sm:text-lg text-pure-white/90">
+        <div className="mt-6 space-y-2 text-base sm:text-lg text-text-secondary">
           {FALLBACK.lines.map((line) => (
             <p key={line}>{line}</p>
           ))}
@@ -79,7 +79,7 @@ export default function DriverLandingPage() {
         <button
           type="button"
           onClick={() => go(FALLBACK.cta.href)}
-          className="mt-10 rounded-full px-8 py-3.5 text-base font-semibold bg-movr-gradient shadow-active-glow"
+          className="mt-10 rounded-full px-8 py-3.5 text-base font-semibold bg-movr-gradient shadow-active-glow text-white"
         >
           {FALLBACK.cta.label}
         </button>
@@ -90,13 +90,13 @@ export default function DriverLandingPage() {
               key={c.title}
               className="rounded-2xl bg-surface-elevated border border-border p-6"
             >
-              <div className="text-pure-white mb-4">{icons[c.icon]}</div>
+              <div className="text-text-primary mb-4">{icons[c.icon]}</div>
               <h3 className="font-bold text-lg">{c.title}</h3>
               <p className="mt-2 text-sm text-text-secondary leading-relaxed">{c.body}</p>
             </div>
           ))}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

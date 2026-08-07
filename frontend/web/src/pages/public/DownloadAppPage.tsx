@@ -31,7 +31,7 @@ export default function DownloadAppPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -39,14 +39,14 @@ export default function DownloadAppPage() {
 
   if (page?.sections?.length) {
     return (
-      <div className="bg-black text-white" data-force-dark>
+      <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug="download" />
       </div>
     );
   }
 
   return (
-    <div className="bg-black text-white flex flex-col flex-1 mkt-hero" data-force-dark>
+    <div className="bg-surface text-text-primary flex flex-col flex-1 mkt-hero">
       <main className="mkt-shell flex-1 flex flex-col items-center justify-center py-20 sm:py-28 text-center">
         <p className="mkt-eyebrow">Get the app</p>
         <h1 className="mkt-display mt-5 max-w-3xl">Take Movr with you.</h1>

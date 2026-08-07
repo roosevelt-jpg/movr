@@ -39,7 +39,7 @@ export default function DateSelect({
     <FormField label={label} error={error} hint={hint} className={className}>
       <input
         type="date"
-        className={`${fieldClassName} [color-scheme:dark]`}
+        className={`${fieldClassName} [color-scheme:inherit]`}
         value={value || ''}
         required={required}
         disabled={disabled}

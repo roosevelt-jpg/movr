@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/auth.store';
 import { getStoredCountry, setStoredCountry } from '../hooks/useLocalCurrency';
 import { useCmsPage } from '../services/cms';
 import { StoreBadgeButton } from './StoreBadges';
+import { useTheme } from '../theme/ThemeProvider';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -36,6 +37,15 @@ const FALLBACK_FOOTER = {
       ],
     },
     {
+      title: 'PLATFORM',
+      links: [
+        { label: 'Movr AI', href: '/ai' },
+        { label: 'Wallet', href: '/wallet' },
+        { label: 'Marketplace', href: '/marketplace' },
+        { label: 'Download app', href: '/download' },
+      ],
+    },
+    {
       title: 'COMPANY',
       links: [
         { label: 'About Movr', href: '/about' },
@@ -48,6 +58,7 @@ const FALLBACK_FOOTER = {
       title: 'SUPPORT',
       links: [
         { label: 'Help centre', href: '/help' },
+        { label: 'Talk to Movr AI', href: '/ai' },
         { label: 'Contact us', href: '/contact' },
         { label: 'Safety', href: '/help' },
         { label: 'Terms of Service', href: '/terms' },
@@ -76,6 +87,8 @@ const SOCIAL_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
 /** Public site footer — CMS + live app links + locales (mockup). */
 export default function SiteFooter() {
   const navigate = useNavigate();
+  const { mode } = useTheme();
+  const light = mode === 'light';
   const user = useAuthStore((s) => s.user);
   const { section } = useCmsPage('global');
   const cms = section('footer')?.payload || {};
@@ -141,6 +154,14 @@ export default function SiteFooter() {
     navigate(btn.href || '/download');
   };
 
+  const muted = light ? 'text-black/45' : 'text-white/45';
+  const ink = light ? 'text-black' : 'text-white';
+  const soft = light ? 'text-black/50' : 'text-white/50';
+  const hover = light ? 'hover:text-black/70' : 'hover:text-white/80';
+  const socialBtn = light
+    ? 'w-9 h-9 rounded-lg bg-black/5 flex items-center justify-center text-black/55 hover:text-black transition-colors'
+    : 'w-9 h-9 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-white/55 hover:text-white transition-colors';
+
   const Col = ({
     title,
     links,
@@ -149,16 +170,16 @@ export default function SiteFooter() {
     links: { label: string; href: string }[];
   }) => (
     <div>
-      <p className="text-[11px] tracking-[0.12em] uppercase text-white/45 mb-4">{title}</p>
-      <ul className="space-y-3 text-sm text-white">
+      <p className={`text-[11px] tracking-[0.12em] uppercase ${muted} mb-4`}>{title}</p>
+      <ul className={`space-y-3 text-sm ${ink}`}>
         {(links || []).map((l) => (
           <li key={l.label}>
             {(l.href || '').includes('#') ? (
-              <a href={l.href} className="hover:text-white/80 transition-colors">
+              <a href={l.href} className={`${hover} transition-colors`}>
                 {l.label}
               </a>
             ) : (
-              <Link to={l.href || '/'} className="hover:text-white/80 transition-colors">
+              <Link to={l.href || '/'} className={`${hover} transition-colors`}>
                 {l.label}
               </Link>
             )}
@@ -171,28 +192,33 @@ export default function SiteFooter() {
   const taglineLines = String(footer.tagline || FALLBACK_FOOTER.tagline).split('\n');
 
   return (
-    <footer className="bg-black text-white border-t border-white/10 font-[Poppins,Montserrat,sans-serif]">
+    <footer
+      className={
+        light
+          ? 'bg-white text-black border-t border-black/10 font-[Poppins,Montserrat,sans-serif]'
+          : 'bg-black text-white border-t border-white/10 font-[Poppins,Montserrat,sans-serif]'
+      }
+      {...(light ? { 'data-force-light': true } : { 'data-force-dark': true })}
+    >
       <div className="max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-5 gap-10">
         <div className="col-span-2 md:col-span-1">
           <p className="text-2xl font-bold mb-4 tracking-tight">{footer.brand || 'Movr'}</p>
-          <p className="text-sm text-white/50 leading-relaxed mb-5 whitespace-pre-line">
+          <p className={`text-sm ${soft} leading-relaxed mb-5 whitespace-pre-line`}>
             {taglineLines.join('\n')}
           </p>
           <div className="flex gap-2">
             {(footer.social || []).map((s: any, i: number) => {
               const Icon = SOCIAL_ICONS[s.key] || Share2;
               const href = s.href || '#';
-              const className =
-                'w-9 h-9 rounded-lg bg-[#1a1a1a] flex items-center justify-center text-white/55 hover:text-white transition-colors';
               if (href.startsWith('http') || href.includes('#')) {
                 return (
-                  <a key={i} href={href} className={className} aria-label={s.label || s.key}>
+                  <a key={i} href={href} className={socialBtn} aria-label={s.label || s.key}>
                     <Icon size={16} />
                   </a>
                 );
               }
               return (
-                <Link key={i} to={href} className={className} aria-label={s.label || s.key}>
+                <Link key={i} to={href} className={socialBtn} aria-label={s.label || s.key}>
                   <Icon size={16} />
                 </Link>
               );
@@ -205,7 +231,7 @@ export default function SiteFooter() {
         ))}
 
         <div>
-          <p className="text-[11px] tracking-[0.12em] uppercase text-white/45 mb-4">GET THE APP</p>
+          <p className={`text-[11px] tracking-[0.12em] uppercase ${muted} mb-4`}>GET THE APP</p>
           <div className="space-y-3">
             {(footer.appButtons || []).map((b: any) => (
               <StoreBadgeButton
@@ -222,14 +248,16 @@ export default function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-white/10">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm text-white/45">
+      <div className={light ? 'border-t border-black/10' : 'border-t border-white/10'}>
+        <div
+          className={`max-w-6xl mx-auto px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm ${muted}`}
+        >
           <p>{footer.copyright || FALLBACK_FOOTER.copyright}</p>
           <div className="flex flex-wrap items-center gap-5">
-            <label className="inline-flex items-center gap-2 text-white/45">
+            <label className={`inline-flex items-center gap-2 ${muted}`}>
               <Globe size={14} aria-hidden />
               <select
-                className="bg-transparent border-0 outline-none text-white/45 cursor-pointer"
+                className={`bg-transparent border-0 outline-none cursor-pointer ${muted}`}
                 value={country}
                 onChange={(e) => {
                   const next = e.target.value.toUpperCase();
@@ -242,14 +270,22 @@ export default function SiteFooter() {
                   ? locales
                   : [{ country_code: 'GH', display_label: 'Ghana - English', is_default: true }]
                 ).map((c) => (
-                  <option key={c.country_code} value={c.country_code} className="bg-black text-white">
+                  <option
+                    key={c.country_code}
+                    value={c.country_code}
+                    className={light ? 'bg-white text-black' : 'bg-black text-white'}
+                  >
                     {c.display_label}
                   </option>
                 ))}
               </select>
             </label>
             {(footer.legalLinks || []).map((l: any) => (
-              <Link key={l.label} to={l.href || '/'} className="hover:text-white transition-colors">
+              <Link
+                key={l.label}
+                to={l.href || '/'}
+                className={light ? 'hover:text-black transition-colors' : 'hover:text-white transition-colors'}
+              >
                 {l.label}
               </Link>
             ))}

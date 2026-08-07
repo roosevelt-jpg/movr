@@ -10,7 +10,7 @@ html {
 }
 
 body {
-  @apply font-sans antialiased bg-jet-black text-text-primary;
+  @apply font-sans antialiased bg-surface text-text-primary;
   font-feature-settings: "rlig" 1, "calt" 1;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -39,7 +39,8 @@ select {
 
 /* Brand utility classes (token-backed) */
 .btn-primary {
-  @apply px-6 py-2.5 text-brand-white font-semibold rounded-pill bg-movr-gradient shadow-active-glow disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply px-6 py-2.5 font-semibold rounded-pill bg-movr-gradient shadow-active-glow disabled:opacity-50 disabled:cursor-not-allowed;
+  color: #ffffff;
 }
 
 .btn-secondary {
@@ -47,8 +48,22 @@ select {
 }
 
 .input-base {
-  @apply w-full px-4 py-3 border border-border rounded-xl bg-surface-elevated text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-motion-blue/40 focus:border-motion-blue;
+  @apply w-full py-3 border border-border rounded-xl bg-surface-elevated text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-motion-blue/40 focus:border-motion-blue;
   min-height: 48px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Icon gutters — beat base padding so text never overlaps leading/trailing icons */
+.input-base.input-has-leading {
+  padding-left: 2.75rem;
+}
+.input-base.input-has-trailing {
+  padding-right: 2.75rem;
+}
+.input-base.input-has-leading.input-has-trailing {
+  padding-left: 2.75rem;
+  padding-right: 2.75rem;
 }
 
 select.input-base,
@@ -97,11 +112,22 @@ input[type='date'].input-base {
 }
 
 .mkt-hero {
-  @apply relative overflow-hidden bg-brand-jet text-brand-white;
+  @apply relative overflow-hidden;
+  background-color: var(--brand-jet);
+  color: var(--brand-white);
   background-image:
     radial-gradient(ellipse 80% 50% at 10% -10%, rgba(63, 112, 72, 0.28), transparent 55%),
     radial-gradient(ellipse 70% 45% at 90% 0%, rgba(0, 85, 255, 0.22), transparent 50%),
     radial-gradient(ellipse 50% 40% at 50% 100%, rgba(106, 0, 255, 0.12), transparent 60%);
+}
+
+[data-theme='light'] .mkt-hero {
+  background-color: #f7f8fa;
+  color: #0b0b0f;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(63, 112, 72, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 0%, rgba(0, 85, 255, 0.1), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(106, 0, 255, 0.08), transparent 60%);
 }
 
 .mkt-section {
@@ -109,52 +135,214 @@ input[type='date'].input-base {
 }
 
 .mkt-eyebrow {
-  @apply text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase text-white/45;
+  @apply text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+[data-theme='light'] .mkt-eyebrow {
+  color: rgba(11, 11, 15, 0.45);
 }
 
 .mkt-display {
   font-size: clamp(2.4rem, 6vw, 4.25rem);
-  @apply font-bold tracking-tight leading-[1.05] text-brand-white;
+  @apply font-bold tracking-tight leading-[1.05];
+  color: inherit;
 }
 
 .mkt-h2 {
   font-size: clamp(1.75rem, 4vw, 2.75rem);
-  @apply font-bold tracking-tight leading-[1.12] text-brand-white;
+  @apply font-bold tracking-tight leading-[1.12];
+  color: inherit;
 }
 
 .mkt-choice {
-  @apply rounded-2xl border border-white/12 bg-white/[0.03] p-6 sm:p-7 transition-all duration-300;
+  @apply rounded-2xl border p-6 sm:p-7 transition-all duration-300;
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 .mkt-choice:hover {
-  @apply border-white/25 bg-white/[0.06];
+  border-color: rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.06);
   box-shadow: 0 0 0 1px rgba(0, 85, 255, 0.15), 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+[data-theme='light'] .mkt-choice {
+  border-color: rgba(11, 11, 15, 0.1);
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+[data-theme='light'] .mkt-choice:hover {
+  border-color: rgba(0, 85, 255, 0.35);
+  background-color: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
 }
 
 .mkt-product {
-  @apply rounded-2xl border border-white/10 bg-[#0d0d0d] p-6 transition-all duration-300 h-full;
+  @apply rounded-2xl border p-6 transition-all duration-300 h-full;
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: #0d0d0d;
 }
 .mkt-product:hover {
-  @apply border-white/22;
+  border-color: rgba(255, 255, 255, 0.22);
   transform: translateY(-2px);
+}
+[data-theme='light'] .mkt-product {
+  border-color: rgba(11, 11, 15, 0.1);
+  background-color: #ffffff;
+}
+[data-theme='light'] .mkt-product:hover {
+  border-color: rgba(0, 85, 255, 0.3);
 }
 
 .mkt-quote {
-  @apply rounded-2xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-7;
+  @apply rounded-2xl border p-6 sm:p-7;
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: #0d0d0d;
+}
+[data-theme='light'] .mkt-quote {
+  border-color: rgba(11, 11, 15, 0.1);
+  background-color: #ffffff;
 }
 
 .mkt-final {
-  @apply rounded-[1.75rem] border border-white/10 p-8 sm:p-12;
+  @apply p-8 sm:p-12;
+  border-radius: 1.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background:
     linear-gradient(135deg, rgba(63, 112, 72, 0.18), rgba(106, 0, 255, 0.14) 50%, rgba(0, 85, 255, 0.18)),
     #0a0a0a;
+  color: #ffffff;
+}
+[data-theme='light'] .mkt-final {
+  border-color: rgba(11, 11, 15, 0.1);
+  background:
+    linear-gradient(135deg, rgba(63, 112, 72, 0.1), rgba(106, 0, 255, 0.08) 50%, rgba(0, 85, 255, 0.1)),
+    #ffffff;
+  color: #0b0b0f;
 }
 
 .mkt-btn-primary {
-  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-brand-white bg-movr-gradient shadow-active-glow transition-opacity hover:opacity-95;
+  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold bg-movr-gradient shadow-active-glow transition-opacity hover:opacity-95;
+  color: #ffffff;
 }
 
 .mkt-btn-ghost {
-  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-brand-white border border-white/25 hover:bg-white/5 transition-colors;
+  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold transition-colors;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.mkt-btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+[data-theme='light'] .mkt-btn-ghost {
+  border-color: rgba(11, 11, 15, 0.2);
+  color: #0b0b0f;
+}
+[data-theme='light'] .mkt-btn-ghost:hover {
+  background-color: rgba(11, 11, 15, 0.04);
+}
+
+/* Marketing muted text helpers used in section JSX */
+.mkt-muted {
+  color: rgba(255, 255, 255, 0.6);
+}
+[data-theme='light'] .mkt-muted {
+  color: rgba(11, 11, 15, 0.55);
+}
+.mkt-soft {
+  color: rgba(255, 255, 255, 0.45);
+}
+[data-theme='light'] .mkt-soft {
+  color: rgba(11, 11, 15, 0.45);
+}
+.mkt-ink {
+  color: #ffffff;
+}
+[data-theme='light'] .mkt-ink {
+  color: #0b0b0f;
+}
+
+/* Movr AI showcase chat mock */
+.mkt-ai-chat {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+[data-theme='light'] .mkt-ai-chat {
+  border-color: rgba(11, 11, 15, 0.1);
+  background: #ffffff;
+  box-shadow: 0 20px 50px rgba(11, 11, 15, 0.08);
+}
+.mkt-ai-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-theme='light'] .mkt-ai-chat-head {
+  border-bottom-color: rgba(11, 11, 15, 0.08);
+}
+.mkt-ai-chat-body {
+  padding: 1.1rem;
+  min-height: 16rem;
+}
+.mkt-ai-bubble-user {
+  max-width: 85%;
+  border-radius: 1rem 1rem 0.35rem 1rem;
+  padding: 0.7rem 0.95rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  background: linear-gradient(135deg, #6a00ff, #0055ff);
+  color: #ffffff;
+}
+.mkt-ai-bubble-bot {
+  max-width: 90%;
+  border-radius: 1rem 1rem 1rem 0.35rem;
+  padding: 0.7rem 0.95rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-theme='light'] .mkt-ai-bubble-bot {
+  background: #f4f5f7;
+  color: #0b0b0f;
+  border-color: rgba(11, 11, 15, 0.08);
+}
+.mkt-ai-quote-card {
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.85rem;
+}
+[data-theme='light'] .mkt-ai-quote-card {
+  background: #fafafa;
+  border-color: rgba(11, 11, 15, 0.1);
+}
+
+.bg-movr-gradient {
+  color: #ffffff;
+}
+
+/* Contrast helpers — dark bg ⇒ light text; light bg ⇒ dark text */
+.surface-dark,
+[data-force-dark] {
+  color: #ffffff;
+}
+.surface-dark a,
+[data-force-dark] a {
+  color: inherit;
+}
+.surface-light,
+[data-force-light] {
+  color: #0b0b0f;
+}
+
+/* Absolute brand blacks always pair with brand white text when used as canvas */
+.bg-brand-jet {
+  color: var(--brand-white);
 }
 
 /* Marketing hero only (Phase 0B) — always dark brand canvas */

@@ -30,15 +30,17 @@ export default function HelpArticlePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading…</div>
+      <div className="min-h-[50vh] bg-surface text-text-primary flex items-center justify-center">
+        Loading…
+      </div>
     );
   }
 
   if (error || !cat) {
     return (
-      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-3">
+      <div className="min-h-[50vh] bg-surface text-text-primary flex flex-col items-center justify-center gap-3">
         <p>{error || 'Article not found'}</p>
-        <button type="button" onClick={() => navigate('/help')} className="text-[#6B8AFF]">
+        <button type="button" onClick={() => navigate('/help')} className="text-brand-blue">
           Back to help
         </button>
       </div>
@@ -46,9 +48,13 @@ export default function HelpArticlePage() {
   }
 
   return (
-    <div className="bg-black text-white flex-1">
+    <div className="bg-surface text-text-primary flex-1">
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
-        <button type="button" onClick={() => navigate('/help')} className="text-sm text-white/55 mb-6">
+        <button
+          type="button"
+          onClick={() => navigate('/help')}
+          className="text-sm text-text-secondary mb-6"
+        >
           ← Help
         </button>
         <h1 className="text-3xl font-bold mb-8">{cat.title}</h1>
@@ -56,7 +62,7 @@ export default function HelpArticlePage() {
           {(cat.articles || []).map((a: any) => (
             <section key={a.slug}>
               <h2 className="text-lg font-semibold mb-2">{a.title}</h2>
-              <p className="text-white/60 leading-relaxed whitespace-pre-wrap">{a.body}</p>
+              <p className="text-text-secondary leading-relaxed whitespace-pre-wrap">{a.body}</p>
             </section>
           ))}
         </div>

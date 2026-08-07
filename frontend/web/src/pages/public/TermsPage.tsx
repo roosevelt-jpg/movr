@@ -64,7 +64,7 @@ export default function TermsPage() {
 
   if (cmsLoading || loading) {
     return (
-      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -72,14 +72,14 @@ export default function TermsPage() {
 
   if (page?.sections?.length) {
     return (
-      <div className="bg-black text-white" data-force-dark>
+      <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug={slug} />
       </div>
     );
   }
 
   return (
-    <div className="bg-black text-white">
+    <div className="bg-surface text-text-primary">
       <main className="max-w-3xl mx-auto px-6 py-16">
         <h1 className="text-4xl font-bold">{doc.title}</h1>
         {doc.updated_label ? (

@@ -47,8 +47,13 @@ export class MarketplaceService {
              COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
              COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes,
              COALESCE(s.eta_min_minutes, 20)::text || '–' || COALESCE(s.eta_max_minutes, 30)::text || ' min' AS eta_text,
-             COALESCE(s.hours_json->>'label', 'Open until 9:00 PM') AS hours_text
+             COALESCE(s.hours_json->>'label', 'Open until 9:00 PM') AS hours_text,
+             COALESCE(q.score, COALESCE(s.rating, 0) * 20) AS quality_score,
+             COALESCE(s.response_score, 70) AS response_score,
+             COALESCE(s.service_score, 70) AS service_score
       FROM stores s
+      LEFT JOIN entity_quality_scores q
+        ON q.entity_type = 'store' AND q.entity_id = s.id
       WHERE COALESCE(s.status, 'active') = 'active'
         AND s.is_active = TRUE
     `;
@@ -88,7 +93,7 @@ export class MarketplaceService {
         ) ASC
       `;
     } else {
-      query += ` ORDER BY s.rating DESC NULLS LAST, s.name ASC`;
+      query += ` ORDER BY quality_score DESC NULLS LAST, s.rating DESC NULLS LAST, s.review_count DESC NULLS LAST, s.name ASC`;
     }
 
     query += ` LIMIT 50`;
@@ -112,6 +117,8 @@ export class MarketplaceService {
         })
       );
       enriched.sort((a, b) => {
+        const qualityDiff = Number(b.quality_score || 0) - Number(a.quality_score || 0);
+        if (Math.abs(qualityDiff) > 0.5) return qualityDiff;
         const boostDiff = (b.stakeBoost || 1) - (a.stakeBoost || 1);
         if (Math.abs(boostDiff) > 0.001) return boostDiff;
         return Number(b.rating || 0) - Number(a.rating || 0);

@@ -53,7 +53,7 @@ const TripSharePage: React.FC = () => {
   const lng = live?.lng ?? data?.ride?.pickup_lng;
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white px-6 py-10 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-jet-black text-pure-white px-6 py-10 font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       <h1 className="text-2xl font-bold mb-2">Live trip</h1>
       <p className="text-text-secondary mb-6">Read-only share link — no account required.</p>
       {error ? <p className="text-error">{error}</p> : null}

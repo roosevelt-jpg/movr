@@ -16,7 +16,7 @@ const SettingsPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-jet-black text-text-primary font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
+    <div className="min-h-screen bg-surface text-text-primary font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
       <h1 className="text-3xl font-bold mb-6">Settings</h1>
 
       <div className="rounded-2xl bg-surface-elevated border border-border p-4 mb-4">

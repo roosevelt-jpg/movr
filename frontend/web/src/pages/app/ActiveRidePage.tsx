@@ -112,7 +112,7 @@ const ActiveRidePage: React.FC = () => {
   const fare = Number(ride?.estimated_fare || ride?.actual_fare || 45);
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white overflow-hidden border border-border relative">
+    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white overflow-hidden border border-border relative" data-force-dark>
       {!noticeAcked ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-jet-black/80 p-6">
           <div className="max-w-md rounded-2xl border border-border bg-surface-elevated p-6 space-y-4">

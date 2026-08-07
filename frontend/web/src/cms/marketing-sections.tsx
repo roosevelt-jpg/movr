@@ -49,13 +49,13 @@ function go(navigate: ReturnType<typeof useNavigate>, href?: string) {
 export function CmsChoiceHero({ payload }: { payload: any }) {
   const navigate = useNavigate();
   return (
-    <section className="mkt-hero relative" data-force-dark>
+    <section className="mkt-hero relative">
       <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
       <div className="mkt-shell relative pt-16 sm:pt-24 pb-16 sm:pb-20">
         {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
         <h1 className="mkt-display mt-5 max-w-4xl whitespace-pre-line">{payload.headline}</h1>
         {payload.subhead ? (
-          <p className="mt-6 text-lg sm:text-xl text-white/60 max-w-2xl leading-relaxed">
+          <p className="mt-6 text-lg sm:text-xl mkt-muted max-w-2xl leading-relaxed">
             {payload.subhead}
           </p>
         ) : null}
@@ -80,10 +80,10 @@ export function CmsChoiceHero({ payload }: { payload: any }) {
                     {c.emoji || '•'}
                   </span>
                 )}
-                <span className="block text-lg font-semibold text-white group-hover:text-white">
+                <span className="block text-lg font-semibold mkt-ink">
                   {c.title}
                 </span>
-                <span className="block mt-2 text-sm text-white/55 leading-relaxed">{c.body}</span>
+                <span className="block mt-2 text-sm mkt-muted leading-relaxed">{c.body}</span>
                 {c.cta ? (
                   <span className="inline-block mt-4 text-sm font-semibold text-motion-blue">
                     {c.cta} →
@@ -128,7 +128,7 @@ export function CmsTrustStrip({ payload }: { payload: any }) {
     <section className="border-y border-white/8 py-10">
       <div className="mkt-shell">
         {payload.label ? (
-          <p className="text-center text-xs tracking-[0.14em] uppercase text-white/40 mb-6">
+          <p className="text-center text-xs tracking-[0.14em] uppercase mkt-soft mb-6">
             {payload.label}
           </p>
         ) : null}
@@ -136,7 +136,7 @@ export function CmsTrustStrip({ payload }: { payload: any }) {
           {items.map((item: any) => (
             <span
               key={typeof item === 'string' ? item : item.label}
-              className="text-sm sm:text-base font-medium text-white/35"
+              className="text-sm sm:text-base font-medium mkt-soft"
             >
               {typeof item === 'string' ? item : item.label}
             </span>
@@ -159,8 +159,8 @@ export function CmsHowItWorks({ payload }: { payload: any }) {
               <p className="text-sm font-semibold tracking-widest text-motion-blue mb-4">
                 {s.number || String(i + 1).padStart(2, '0')}
               </p>
-              <h3 className="text-xl font-semibold text-white">{s.title}</h3>
-              <p className="mt-3 text-white/55 leading-relaxed">{s.body}</p>
+              <h3 className="text-xl font-semibold mkt-ink">{s.title}</h3>
+              <p className="mt-3 mkt-muted leading-relaxed">{s.body}</p>
               {s.imageUrl ? (
                 <img
                   src={s.imageUrl}
@@ -197,14 +197,14 @@ export function CmsProductGrid({ payload }: { payload: any }) {
                   {c.imageUrl ? (
                     <img src={c.imageUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <Icon size={20} className="text-white" />
+                    <Icon size={20} className="mkt-ink" />
                   )}
                 </span>
-                <p className="text-xs tracking-[0.12em] uppercase text-white/40 mb-2">
+                <p className="text-xs tracking-[0.12em] uppercase mkt-soft mb-2">
                   {c.eyebrow || c.category}
                 </p>
-                <h3 className="text-lg font-semibold text-white">{c.title}</h3>
-                <p className="mt-2 text-sm text-white/55 leading-relaxed">{c.body}</p>
+                <h3 className="text-lg font-semibold mkt-ink">{c.title}</h3>
+                <p className="mt-2 text-sm mkt-muted leading-relaxed">{c.body}</p>
                 {c.cta ? (
                   <span className="inline-block mt-5 text-sm font-semibold text-motion-blue">
                     {c.cta} →
@@ -231,8 +231,8 @@ export function CmsWhyGrid({ payload }: { payload: any }) {
             return (
               <div key={c.title} className="py-2">
                 <Icon size={22} className="text-movr-green mb-4" />
-                <h3 className="text-lg font-semibold text-white">{c.title}</h3>
-                <p className="mt-2 text-sm text-white/55 leading-relaxed">{c.body}</p>
+                <h3 className="text-lg font-semibold mkt-ink">{c.title}</h3>
+                <p className="mt-2 text-sm mkt-muted leading-relaxed">{c.body}</p>
               </div>
             );
           })}
@@ -251,7 +251,7 @@ export function CmsTestimonials({ payload }: { payload: any }) {
         <div className="mt-12 grid md:grid-cols-3 gap-6">
           {(payload.items || payload.quotes || []).map((q: any) => (
             <blockquote key={q.name || q.quote} className="mkt-quote">
-              <p className="text-white/85 leading-relaxed text-base">“{q.quote || q.body}”</p>
+              <p className="mkt-ink leading-relaxed text-base">“{q.quote || q.body}”</p>
               <footer className="mt-6 flex items-center gap-3">
                 {q.avatarUrl || q.imageUrl ? (
                   <img
@@ -261,8 +261,8 @@ export function CmsTestimonials({ payload }: { payload: any }) {
                   />
                 ) : null}
                 <div>
-                  <p className="font-semibold text-white">{q.name}</p>
-                  <p className="text-sm text-white/45 mt-0.5">{q.role}</p>
+                  <p className="font-semibold mkt-ink">{q.name}</p>
+                  <p className="text-sm mkt-soft mt-0.5">{q.role}</p>
                 </div>
               </footer>
             </blockquote>
@@ -287,7 +287,7 @@ export function CmsFinalCta({ payload }: { payload: any }) {
           <div className="relative">
             <h2 className="mkt-h2 max-w-2xl">{payload.heading}</h2>
             {payload.body ? (
-              <p className="mt-4 text-white/60 max-w-xl leading-relaxed">{payload.body}</p>
+              <p className="mt-4 mkt-muted max-w-xl leading-relaxed">{payload.body}</p>
             ) : null}
             <div className="mt-8 flex flex-wrap gap-3">
               {payload.primaryCta ? (
@@ -309,7 +309,7 @@ export function CmsFinalCta({ payload }: { payload: any }) {
                 </button>
               ) : null}
             </div>
-            {payload.note ? <p className="mt-5 text-sm text-white/40">{payload.note}</p> : null}
+            {payload.note ? <p className="mt-5 text-sm mkt-soft">{payload.note}</p> : null}
             {payload.storeButtons?.length ? (
               <div className="mt-8 flex flex-wrap gap-3">
                 {payload.storeButtons.map((b: any) => (
@@ -321,6 +321,114 @@ export function CmsFinalCta({ payload }: { payload: any }) {
                     onClick={() => go(navigate, b.href)}
                   />
                 ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** PerfectRide-style Movr AI showcase — Talk. Don't tap. + chat mock. */
+export function CmsAiShowcase({ payload }: { payload: any }) {
+  const navigate = useNavigate();
+  const demo = payload.demo || {};
+  const quote = demo.quoteCard || null;
+
+  return (
+    <section id={payload.anchor || 'ai'} className="mkt-section scroll-mt-24">
+      <div className="mkt-shell grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        <div>
+          {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
+          <h2 className="mkt-h2 mt-4 max-w-xl">{payload.heading || 'Talk. Don’t tap.'}</h2>
+          {payload.body ? (
+            <p className="mt-5 text-lg mkt-muted max-w-xl leading-relaxed">{payload.body}</p>
+          ) : null}
+          <div className="mt-8 flex flex-wrap gap-3">
+            {payload.primaryCta ? (
+              <button
+                type="button"
+                onClick={() => go(navigate, payload.primaryCta.href || '/ai')}
+                className="mkt-btn-primary inline-flex items-center gap-2"
+              >
+                <Sparkles size={16} />
+                {payload.primaryCta.label}
+              </button>
+            ) : null}
+            {payload.secondaryCta ? (
+              <button
+                type="button"
+                onClick={() => go(navigate, payload.secondaryCta.href)}
+                className="mkt-btn-ghost"
+              >
+                {payload.secondaryCta.label}
+              </button>
+            ) : null}
+          </div>
+          {payload.note ? <p className="mt-5 text-sm mkt-soft">{payload.note}</p> : null}
+        </div>
+
+        <div className="mkt-ai-chat" aria-hidden={!demo.userMessage}>
+          <div className="mkt-ai-chat-head">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-movr-gradient text-white shrink-0">
+                <Sparkles size={16} />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold mkt-ink text-sm truncate">
+                  {demo.title || 'Movr AI'}
+                </p>
+                <p className="text-[11px] uppercase tracking-wide text-success flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                  {demo.status || 'Online'}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="mkt-ai-chat-body space-y-3">
+            {demo.userMessage ? (
+              <div className="flex justify-end">
+                <p className="mkt-ai-bubble-user">{demo.userMessage}</p>
+              </div>
+            ) : null}
+            {demo.botMessage ? (
+              <div className="flex justify-start">
+                <p className="mkt-ai-bubble-bot">{demo.botMessage}</p>
+              </div>
+            ) : null}
+            {quote ? (
+              <div className="mkt-ai-quote-card">
+                <div className="flex gap-3 items-start">
+                  {quote.imageUrl ? (
+                    <img
+                      src={quote.imageUrl}
+                      alt=""
+                      className="h-14 w-14 rounded-lg object-cover shrink-0"
+                    />
+                  ) : (
+                    <span className="h-14 w-14 rounded-lg bg-surface-elevated border border-border flex items-center justify-center shrink-0">
+                      <Car size={22} className="text-motion-blue" />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold mkt-ink text-sm">{quote.title}</p>
+                    {quote.badge ? (
+                      <p className="text-[11px] uppercase tracking-wide text-motion-blue mt-0.5">
+                        {quote.badge}
+                      </p>
+                    ) : null}
+                    {quote.price ? (
+                      <p className="text-lg font-bold mkt-ink mt-1">{quote.price}</p>
+                    ) : null}
+                  </div>
+                </div>
+                {quote.footer ? (
+                  <p className="mt-3 text-xs text-success flex items-center gap-1.5 border-t border-border pt-2.5">
+                    <ShieldCheck size={14} />
+                    {quote.footer}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>

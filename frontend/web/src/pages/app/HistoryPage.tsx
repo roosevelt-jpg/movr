@@ -77,7 +77,7 @@ const HistoryPage: React.FC = () => {
   }, [forceEmpty]);
 
   return (
-    <div className="min-h-screen bg-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8">
+    <div className="min-h-screen bg-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8" data-force-dark>
       <h1 className="text-3xl font-bold mb-6">Trip history</h1>
 
       {!loading && items.length === 0 ? (

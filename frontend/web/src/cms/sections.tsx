@@ -25,6 +25,7 @@ import {
   CmsWhyGrid,
   CmsTestimonials,
   CmsFinalCta,
+  CmsAiShowcase,
 } from './marketing-sections';
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
 
@@ -728,6 +729,7 @@ const RENDERERS: Record<string, React.FC<{ payload: any; pageSlug?: string }>> =
   choice_hero: CmsChoiceHero,
   trust_strip: CmsTrustStrip,
   how_it_works: CmsHowItWorks,
+  ai_showcase: CmsAiShowcase,
   product_grid: CmsProductGrid,
   why_grid: CmsWhyGrid,
   testimonials: CmsTestimonials,

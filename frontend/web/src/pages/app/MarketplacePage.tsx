@@ -64,7 +64,11 @@ const MarketplacePage: React.FC = () => {
 
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="relative mb-6">
-          <Search className="absolute left-4 top-3 text-text-secondary" size={20} />
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
+            size={20}
+            aria-hidden
+          />
           <input
             type="text"
             value={searchQuery}

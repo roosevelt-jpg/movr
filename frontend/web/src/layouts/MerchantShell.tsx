@@ -87,7 +87,7 @@ export default function MerchantShell({
   );
 
   return (
-    <div className="min-h-[calc(100dvh-8rem)] bg-black text-white flex font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-[calc(100dvh-8rem)] bg-black text-white flex font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-56 shrink-0 border-r border-white/10 bg-black p-4 flex-col">
         <div className="font-bold text-xl mb-8 px-2 tracking-tight">Movr</div>

@@ -111,7 +111,7 @@ export default function UsersListPage() {
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && load()}
                   placeholder="Search users..."
-                  className="w-56 rounded-lg bg-[#1A1A1A] border border-[#2A2A2A] pl-9 pr-3 py-2 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-[#3B5CFF]"
+                  className="w-56 rounded-lg bg-[#1A1A1A] border border-[#2A2A2A] pl-10 pr-3 py-2 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-[#3B5CFF]"
                 />
               </div>
               <button

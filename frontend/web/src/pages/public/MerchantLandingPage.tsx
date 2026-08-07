@@ -25,7 +25,7 @@ const FEATURES = [
 function MerchantLandingFallback() {
   const navigate = useNavigate();
   return (
-    <div className="bg-black text-white">
+    <div className="bg-surface text-text-primary">
       <section className="max-w-4xl mx-auto px-6 pt-16 sm:pt-24 pb-16 text-center">
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-tight">
           Sell faster with an in-app storefront
@@ -64,7 +64,7 @@ export default function MerchantLandingPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+      <div className="flex-1 bg-surface text-text-primary flex items-center justify-center py-24">
         Loading…
       </div>
     );
@@ -75,7 +75,7 @@ export default function MerchantLandingPage() {
   }
 
   return (
-    <div className="bg-black text-white">
+    <div className="bg-surface text-text-primary">
       <CmsSections sections={page.sections} pageSlug="merchants" />
     </div>
   );

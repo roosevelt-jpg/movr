@@ -242,7 +242,8 @@ const {
 
 app.use('/api/v1/rides', rideBookingRouter);
 app.use('/api/v1/voice', voiceRouter);
-app.use('/webhooks', channelWebhooksRouter);
+  app.use('/api/v1/ai', require('./routes/ai.routes').aiRouter);
+  app.use('/webhooks', channelWebhooksRouter);
 app.use('/api/v1/admin', adminVehicleRouter);
 app.use('/api/v1/admin/channels', adminChannelsRouter);
 

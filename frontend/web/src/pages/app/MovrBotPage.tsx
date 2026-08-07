@@ -92,7 +92,7 @@ export default function MovrBotPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <div className="w-10 h-10 rounded-full bg-electric-violet flex items-center justify-center font-bold">
           M

@@ -5,13 +5,30 @@
  */
 const tokens = require('./tokens.json');
 
+/**
+ * Tailwind may pass:
+ * - undefined → solid color
+ * - a number / numeric string (slash opacity like /80) → color-mix percent
+ * - `var(--tw-*-opacity)` for base utilities → must not Number() (that becomes NaN%)
+ */
 const withAlpha = (cssVar) => {
   return ({ opacityValue }) => {
-    if (opacityValue !== undefined) {
-      const pct = Math.round(Number(opacityValue) * 1000) / 10;
+    if (opacityValue === undefined) {
+      return `var(${cssVar})`;
+    }
+    const numeric =
+      typeof opacityValue === 'number'
+        ? opacityValue
+        : typeof opacityValue === 'string' &&
+            opacityValue.trim() !== '' &&
+            !Number.isNaN(Number(opacityValue))
+          ? Number(opacityValue)
+          : null;
+    if (numeric !== null) {
+      const pct = Math.round(numeric * 1000) / 10;
       return `color-mix(in srgb, var(${cssVar}) ${pct}%, transparent)`;
     }
-    return `var(${cssVar})`;
+    return `color-mix(in srgb, var(${cssVar}) calc(${opacityValue} * 100%), transparent)`;
   };
 };
 

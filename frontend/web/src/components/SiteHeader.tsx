@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { useCmsPage } from '../services/cms';
 import MovrWordmark from './MovrWordmark';
+import ThemeModeIcon from './ThemeModeIcon';
 import { useAuthStore } from '../store/auth.store';
+import { useTheme } from '../theme/ThemeProvider';
 
 const FALLBACK_NAV = {
   brand: 'Movr',
@@ -11,9 +13,10 @@ const FALLBACK_NAV = {
     { label: 'Ride', href: '/#ride' },
     { label: 'Shop', href: '/#shop' },
     { label: 'Deliver', href: '/#deliver' },
+    { label: 'AI', href: '/ai' },
     { label: 'Drivers', href: '/drivers' },
     { label: 'Merchants', href: '/merchants' },
-    { label: 'Pricing', href: '/download' },
+    { label: 'About', href: '/about' },
   ],
   secondaryCta: { label: 'Log in', href: '/login' },
   cta: { label: 'Get started', href: '/register' },
@@ -32,10 +35,12 @@ function go(navigate: ReturnType<typeof useNavigate>, href?: string) {
   navigate(href);
 }
 
-/** Global site header — PerfectRide-style: logo, links, Log in + Get started. */
+/** Global site header — theme-aware with sun/moon toggle. */
 export default function SiteHeader() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
+  const { mode } = useTheme();
+  const light = mode === 'light';
   const { section } = useCmsPage('global');
   const payload = section('nav')?.payload || FALLBACK_NAV;
   const [open, setOpen] = useState(false);
@@ -47,6 +52,10 @@ export default function SiteHeader() {
     ? { label: 'Dashboard', href: '/dashboard' }
     : payload.cta || { label: 'Get started', href: '/register' };
 
+  const linkCls = light
+    ? 'text-sm text-black/65 hover:text-black transition-colors'
+    : 'text-sm text-white/70 hover:text-white transition-colors';
+
   const NavLinks = ({
     className,
     onNavigate,
@@ -57,12 +66,7 @@ export default function SiteHeader() {
     <nav className={className}>
       {(payload.links || []).map((l: any) =>
         l.href?.startsWith('/#') || l.href?.startsWith('#') ? (
-          <a
-            key={l.label}
-            href={l.href}
-            className="text-sm text-white/70 hover:text-white transition-colors"
-            onClick={onNavigate}
-          >
+          <a key={l.label} href={l.href} className={`${linkCls} text-left`} onClick={onNavigate}>
             {l.label}
           </a>
         ) : (
@@ -73,7 +77,7 @@ export default function SiteHeader() {
               go(navigate, l.href);
               onNavigate?.();
             }}
-            className="text-sm text-white/70 hover:text-white transition-colors text-left"
+            className={`${linkCls} text-left`}
           >
             {l.label}
           </button>
@@ -83,7 +87,14 @@ export default function SiteHeader() {
   );
 
   return (
-    <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/8 text-white">
+    <header
+      className={
+        light
+          ? 'sticky top-0 z-50 bg-white/85 backdrop-blur-xl border-b border-black/8 text-black'
+          : 'sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/8 text-white'
+      }
+      {...(light ? { 'data-force-light': true } : { 'data-force-dark': true })}
+    >
       <div className="mkt-shell py-3.5 sm:py-4 flex items-center justify-between gap-4">
         <button
           type="button"
@@ -98,11 +109,16 @@ export default function SiteHeader() {
         <NavLinks className="hidden lg:flex items-center gap-8" />
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeModeIcon lightChrome={light} />
           {secondary ? (
             <button
               type="button"
               onClick={() => go(navigate, secondary.href)}
-              className="hidden sm:inline-flex text-sm font-medium text-white/75 hover:text-white px-3 py-2"
+              className={
+                light
+                  ? 'hidden sm:inline-flex text-sm font-medium text-black/70 hover:text-black px-3 py-2'
+                  : 'hidden sm:inline-flex text-sm font-medium text-white/75 hover:text-white px-3 py-2'
+              }
             >
               {secondary.label}
             </button>
@@ -111,14 +127,18 @@ export default function SiteHeader() {
             <button
               type="button"
               onClick={() => go(navigate, cta.href)}
-              className="rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold bg-movr-gradient"
+              className="rounded-full px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold bg-movr-gradient text-white"
             >
               {cta.label}
             </button>
           ) : null}
           <button
             type="button"
-            className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15"
+            className={
+              light
+                ? 'lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/12'
+                : 'lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15'
+            }
             aria-label={open ? 'Close menu' : 'Open menu'}
             onClick={() => setOpen((v) => !v)}
           >
@@ -128,13 +148,27 @@ export default function SiteHeader() {
       </div>
 
       {open ? (
-        <div className="lg:hidden border-t border-white/8 bg-black px-5 py-5">
+        <div
+          className={
+            light
+              ? 'lg:hidden border-t border-black/8 bg-white px-5 py-5'
+              : 'lg:hidden border-t border-white/8 bg-black px-5 py-5'
+          }
+        >
           <NavLinks className="flex flex-col gap-4" onNavigate={() => setOpen(false)} />
+          <div className="mt-5 flex items-center justify-between">
+            <span className={`text-sm ${light ? 'text-black/55' : 'text-white/55'}`}>Appearance</span>
+            <ThemeModeIcon lightChrome={light} />
+          </div>
           {!isAuthenticated ? (
             <div className="mt-6 flex flex-col gap-2">
               <button
                 type="button"
-                className="rounded-full border border-white/20 py-2.5 text-sm font-medium"
+                className={
+                  light
+                    ? 'rounded-full border border-black/15 py-2.5 text-sm font-medium'
+                    : 'rounded-full border border-white/20 py-2.5 text-sm font-medium'
+                }
                 onClick={() => {
                   navigate('/login');
                   setOpen(false);
@@ -144,7 +178,7 @@ export default function SiteHeader() {
               </button>
               <button
                 type="button"
-                className="rounded-full py-2.5 text-sm font-semibold bg-movr-gradient"
+                className="rounded-full py-2.5 text-sm font-semibold bg-movr-gradient text-white"
                 onClick={() => {
                   navigate('/register');
                   setOpen(false);

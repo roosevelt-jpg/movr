@@ -71,14 +71,15 @@ const ResetPasswordPage: React.FC = () => {
               type={show ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 pr-12"
+              className="w-full rounded-xl bg-surface-elevated border border-border pl-4 pr-12 py-3"
               minLength={8}
               required
             />
             <button
               type="button"
-              className="absolute right-3 top-3.5 text-text-secondary"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary"
               onClick={() => setShow((v) => !v)}
+              aria-label={show ? 'Hide password' : 'Show password'}
             >
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>

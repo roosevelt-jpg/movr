@@ -47,7 +47,7 @@ const ProfilePage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-4 sm:p-6 md:p-8 max-w-xl mx-auto w-full">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-4 sm:p-6 md:p-8 max-w-xl mx-auto w-full" data-force-dark>
       <div className="flex items-center gap-4 mb-8">
         {user?.avatarUrl ? (
           <img

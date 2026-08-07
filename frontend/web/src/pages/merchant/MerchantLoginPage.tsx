@@ -33,7 +33,7 @@ export default function MerchantLoginPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white flex items-center justify-center px-4 py-10">
+    <div className="min-h-[70vh] bg-surface text-text-primary flex items-center justify-center px-4 py-10">
       <form onSubmit={submit} className="w-full max-w-md space-y-5">
         <div className="text-center mb-2">
           <h1 className="text-2xl sm:text-3xl font-bold">Movr for Merchants</h1>

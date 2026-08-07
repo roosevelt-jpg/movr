@@ -48,7 +48,7 @@ export default function SupportChatPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white flex flex-col max-w-lg mx-auto font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <button type="button" onClick={() => navigate('/help')} className="text-text-secondary">
           ←

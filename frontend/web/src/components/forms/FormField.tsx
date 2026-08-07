@@ -42,20 +42,30 @@ export function TextField({
   className = '',
   ...props
 }: TextFieldProps) {
+  const padCls = [
+    leading ? 'input-has-leading' : '',
+    trailing ? 'input-has-trailing' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <FormField label={label} hint={hint} error={error}>
       <div className="relative">
         {leading ? (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none">
+          <span
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none flex items-center justify-center w-5 h-5"
+            aria-hidden
+          >
             {leading}
           </span>
         ) : null}
         <input
           {...props}
-          className={`${fieldClassName} ${leading ? 'pl-10' : ''} ${trailing ? 'pr-10' : ''} ${className}`}
+          className={`${fieldClassName} ${padCls} ${className}`.trim()}
         />
         {trailing ? (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary flex items-center justify-center">
             {trailing}
           </span>
         ) : null}

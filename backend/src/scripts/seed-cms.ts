@@ -36,6 +36,7 @@ export const CMS_SEED: Array<{
             { label: 'Ride', href: '/#ride' },
             { label: 'Shop', href: '/#shop' },
             { label: 'Deliver', href: '/#deliver' },
+            { label: 'AI', href: '/ai' },
             { label: 'Drivers', href: '/drivers' },
             { label: 'Merchants', href: '/merchants' },
             { label: 'About', href: '/about' },
@@ -66,6 +67,15 @@ export const CMS_SEED: Array<{
               ],
             },
             {
+              title: 'PLATFORM',
+              links: [
+                { label: 'Movr AI', href: '/ai' },
+                { label: 'Wallet', href: '/wallet' },
+                { label: 'Marketplace', href: '/marketplace' },
+                { label: 'Download app', href: '/download' },
+              ],
+            },
+            {
               title: 'COMPANY',
               links: [
                 { label: 'About Movr', href: '/about' },
@@ -78,6 +88,7 @@ export const CMS_SEED: Array<{
               title: 'SUPPORT',
               links: [
                 { label: 'Help centre', href: '/help' },
+                { label: 'Talk to Movr AI', href: '/ai' },
                 { label: 'Contact us', href: '/contact' },
                 { label: 'Safety', href: '/help' },
                 { label: 'Terms of Service', href: '/terms' },
@@ -158,6 +169,32 @@ export const CMS_SEED: Array<{
               body: 'Wallet, card, or mobile money. Ratings and support keep every trip accountable.',
             },
           ],
+        },
+      },
+      {
+        type: 'ai_showcase',
+        payload: {
+          anchor: 'ai',
+          eyebrow: 'Movr AI',
+          heading: "Talk. Don't tap.",
+          body:
+            'Movr AI understands. Plans. Books. Coordinates — so a ride, an order, or a delivery is one message, not a hundred taps. Ask about rates, book a trip, or find a store.',
+          primaryCta: { label: 'Tell Movr AI', href: '/ai' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
+          note: 'Available in the app, on the web, and over messaging channels.',
+          demo: {
+            title: 'Movr AI',
+            status: 'Online',
+            userMessage: 'How much from Osu to the airport?',
+            botMessage:
+              'Economy about GHS 45 · 12 min, or Comfort GHS 62 · 10 min. Want me to book one?',
+            quoteCard: {
+              title: 'Economy · Sedan',
+              badge: 'Fare estimate',
+              price: 'GHS 45',
+              footer: 'Live quote · confirm in chat to book',
+            },
+          },
         },
       },
       {

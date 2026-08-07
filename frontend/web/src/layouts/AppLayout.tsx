@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Moon,
   Sun,
+  Sparkles,
 } from 'lucide-react';
 import MovrLogoMark from '../components/MovrLogoMark';
 import { useTheme } from '../theme/ThemeProvider';
@@ -33,7 +34,8 @@ const NAV_ITEMS = [
   { label: 'Token', path: '/token', icon: Coins, match: ['/token', '/claim'] },
   { label: 'Staking', path: '/staking', icon: Layers, match: ['/staking'] },
   { label: 'History', path: '/history', icon: Clock, match: ['/history'] },
-  { label: 'Support', path: '/support', icon: HelpCircle, match: ['/support', '/bot', '/channels/bot'] },
+  { label: 'Movr AI', path: '/ai', icon: Sparkles, match: ['/ai', '/bot', '/channels/bot'] },
+  { label: 'Support', path: '/support', icon: HelpCircle, match: ['/support'] },
   { label: 'Profile', path: '/profile', icon: User, match: ['/profile'] },
   { label: 'Settings', path: '/settings', icon: Settings, match: ['/settings'] },
 ];
@@ -193,7 +195,7 @@ const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-[calc(100dvh-8rem)] bg-surface text-text-primary flex font-[Poppins,Montserrat,sans-serif]">
-      <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-jet-black p-4 flex-col sticky top-[4.5rem] h-[calc(100dvh-4.5rem)]">
+      <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-brand-jet p-4 flex-col sticky top-[4.5rem] h-[calc(100dvh-4.5rem)]" data-force-dark>
         <SidebarNav />
       </aside>
 
@@ -202,10 +204,10 @@ const AppLayout: React.FC = () => {
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute inset-0 bg-jet-black/60"
+            className="absolute inset-0 bg-black/60"
             onClick={() => setIsMenuOpen(false)}
           />
-          <aside className="relative z-10 w-64 max-w-[80vw] h-full bg-jet-black border-r border-border p-4 flex flex-col">
+          <aside className="relative z-10 w-64 max-w-[80vw] h-full bg-brand-jet border-r border-border p-4 flex flex-col" data-force-dark>
             <div className="flex justify-end mb-2">
               <button
                 type="button"

@@ -62,7 +62,7 @@ import WalletTopUpPage from './pages/app/WalletTopUpPage';
 import RedeemPointsPage from './pages/app/RedeemPointsPage';
 import NotificationPrefsPage from './pages/app/NotificationPrefsPage';
 import SupportChatPage from './pages/app/SupportChatPage';
-import MovrBotPage from './pages/app/MovrBotPage';
+import MovrAiPage from './pages/public/MovrAiPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -135,6 +135,9 @@ const App: React.FC = () => {
               <Route path="/t/:code" element={<ClaimTransferPage />} />
               <Route path="/trip/:token" element={<TripSharePage />} />
               <Route path="/about" element={<AboutPage />} />
+              <Route path="/ai" element={<MovrAiPage />} />
+              <Route path="/bot" element={<MovrAiPage />} />
+              <Route path="/channels/bot" element={<MovrAiPage />} />
               <Route path="/features" element={<LandingPage />} />
               <Route path="/contact" element={<LandingPage />} />
               <Route path="/pages/:slug" element={<DynamicCmsPage />} />
@@ -174,8 +177,6 @@ const App: React.FC = () => {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/notifications" element={<NotificationPrefsPage />} />
                 <Route path="/support" element={<SupportChatPage />} />
-                <Route path="/bot" element={<MovrBotPage />} />
-                <Route path="/channels/bot" element={<MovrBotPage />} />
               </Route>
 
               <Route path="/merchant/login" element={<MerchantLoginPage />} />

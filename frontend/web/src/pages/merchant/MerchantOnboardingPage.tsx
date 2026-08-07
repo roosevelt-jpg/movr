@@ -120,7 +120,7 @@ export default function MerchantOnboardingPage() {
     'input-base rounded-xl min-h-[48px]';
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white flex items-center justify-center px-4 py-10">
+    <div className="min-h-[70vh] bg-surface text-text-primary flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <StepDots />
 

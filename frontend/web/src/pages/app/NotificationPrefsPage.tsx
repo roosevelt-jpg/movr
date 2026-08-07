@@ -77,7 +77,7 @@ export default function NotificationPrefsPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-jet-black text-pure-white p-6 md:p-8 max-w-lg font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white p-6 md:p-8 max-w-lg font-[Poppins,Montserrat,sans-serif]" data-force-dark>
       <button type="button" onClick={() => navigate('/profile')} className="text-text-secondary text-sm mb-4">
         ← Profile
       </button>

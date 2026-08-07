@@ -58,7 +58,7 @@ const WalletPage: React.FC = () => {
   const fmt = (n: number) => formatCurrency(Math.abs(n), walletCurrency || currency);
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white p-6 md:p-8 space-y-6">
+    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white p-6 md:p-8 space-y-6" data-force-dark>
       <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
 
       <div className="rounded-2xl p-6 bg-gradient-to-br from-surface via-electric-violet/70 to-motion-blue">
