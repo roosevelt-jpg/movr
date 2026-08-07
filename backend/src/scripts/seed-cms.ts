@@ -32,6 +32,8 @@ export const CMS_SEED: Array<{
         type: 'nav',
         payload: {
           brand: 'Movr',
+          logoUrl: '/brand/movr-logo.png',
+          faviconUrl: '/favicon.png',
           links: [
             { label: 'Ride', href: '/#ride' },
             { label: 'Shop', href: '/#shop' },

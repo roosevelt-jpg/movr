@@ -128,7 +128,7 @@ export function CmsNav({ payload }: { payload: any }) {
           className="flex items-center gap-2 text-xl font-bold tracking-tight"
           aria-label={payload.brand || 'MOVR'}
         >
-          <MovrWordmark height={28} />
+          <MovrWordmark height={32} src={payload.logoUrl} title={payload.brand || 'Movr'} />
           <span className="sr-only">{payload.brand || 'MOVR'}</span>
         </button>
         <nav className="hidden lg:flex items-center gap-7 text-sm text-text-primary/90">

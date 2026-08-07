@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
+import SiteBranding from '../components/SiteBranding';
 import LiveChatWidget from '../components/LiveChatWidget';
 
 /**
@@ -12,6 +13,7 @@ import LiveChatWidget from '../components/LiveChatWidget';
 export default function SiteChrome() {
   return (
     <div className="min-h-screen min-h-[100dvh] flex flex-col bg-surface text-text-primary font-[Poppins,Montserrat,sans-serif]">
+      <SiteBranding />
       <SiteHeader />
       <div className="flex-1 flex flex-col min-w-0">
         <Outlet />

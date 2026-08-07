@@ -279,6 +279,22 @@ function SectionEditor({
       return (
         <>
           <Field label="Brand name" value={p.brand || ''} disabled={disabled} onChange={(v) => set({ brand: v })} />
+          <MediaField
+            label="Site logo (header)"
+            value={p.logoUrl || ''}
+            disabled={disabled}
+            accept="image/*"
+            hint="Shown in the site header. PNG or SVG recommended. Clear to use the default Movr logo."
+            onChange={(v) => set({ logoUrl: v })}
+          />
+          <MediaField
+            label="Favicon (browser tab icon)"
+            value={p.faviconUrl || ''}
+            disabled={disabled}
+            accept="image/*"
+            hint="Browser tab icon. Square PNG or ICO works best. Clear to use the default favicon."
+            onChange={(v) => set({ faviconUrl: v })}
+          />
           <LinkRows items={p.links || []} disabled={disabled} onChange={(links) => set({ links })} title="Nav links" />
           <div style={styles.row2}>
             <Field

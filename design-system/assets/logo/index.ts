@@ -4,3 +4,5 @@
  */
 export const LOGO_MARK = 'movr-mark.svg';
 export const LOGO_WORDMARK = 'movr-wordmark.svg';
+/** Primary header / favicon square — white Movr on black */
+export const LOGO_PRIMARY = 'movr-logo.png';

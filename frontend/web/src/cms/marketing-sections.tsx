@@ -296,10 +296,13 @@ export function CmsTestimonials({ payload }: { payload: any }) {
 export function CmsFinalCta({ payload, pageSlug }: { payload: any; pageSlug?: string }) {
   const navigate = useNavigate();
   const media = resolveCmsHeroMedia(payload, pageSlug);
+  const hasMedia = Boolean(media.imageUrl || media.videoUrl);
   return (
     <section className="mkt-section pb-24">
       <div className="mkt-shell">
-        <div className="mkt-final relative overflow-hidden">
+        <div
+          className={`mkt-final relative overflow-hidden ${hasMedia ? 'mkt-final-media' : ''}`}
+        >
           <CmsMediaBackdrop
             imageUrl={media.imageUrl}
             videoUrl={media.videoUrl}

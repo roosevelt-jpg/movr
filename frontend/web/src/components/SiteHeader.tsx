@@ -9,6 +9,8 @@ import { useTheme } from '../theme/ThemeProvider';
 
 const FALLBACK_NAV = {
   brand: 'Movr',
+  logoUrl: '/brand/movr-logo.png',
+  faviconUrl: '/favicon.png',
   links: [
     { label: 'Ride', href: '/#ride' },
     { label: 'Shop', href: '/#shop' },
@@ -102,7 +104,7 @@ export default function SiteHeader() {
           className="flex items-center gap-2 shrink-0"
           aria-label={payload.brand || 'MOVR'}
         >
-          <MovrWordmark height={26} />
+          <MovrWordmark height={32} src={payload.logoUrl} title={payload.brand || 'Movr'} />
           <span className="sr-only">{payload.brand || 'MOVR'}</span>
         </button>
 

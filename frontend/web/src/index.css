@@ -256,6 +256,37 @@ input[type='date'].input-base {
   color: #0b0b0f;
 }
 
+/* Photo/video final CTAs stay white — readable on dark imagery in light mode */
+.mkt-final-media,
+[data-theme='light'] .mkt-final-media {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #000000;
+  color: #ffffff;
+}
+.mkt-final-media .mkt-h2,
+.mkt-final-media .mkt-muted,
+.mkt-final-media .mkt-soft,
+[data-theme='light'] .mkt-final-media .mkt-h2,
+[data-theme='light'] .mkt-final-media .mkt-muted,
+[data-theme='light'] .mkt-final-media .mkt-soft {
+  color: #ffffff !important;
+}
+[data-theme='light'] .mkt-final-media .mkt-muted {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+[data-theme='light'] .mkt-final-media .mkt-soft {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+.mkt-final-media .mkt-btn-ghost,
+[data-theme='light'] .mkt-final-media .mkt-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+.mkt-final-media .mkt-btn-ghost:hover,
+[data-theme='light'] .mkt-final-media .mkt-btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
 .mkt-btn-primary {
   @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold bg-movr-gradient shadow-active-glow transition-opacity hover:opacity-95;
   color: #ffffff;
