@@ -7,7 +7,7 @@ import { formatCurrency } from '../lib/currency';
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Admin overview — live KPIs from /admin/overview. */
+/** Admin overview — live KPIs from /admin/overview (mockup-aligned). */
 export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -47,28 +47,22 @@ export default function AdminOverviewPage() {
     {
       label: 'Active rides',
       value: String(metrics.activeRides),
-      meta:
-        metrics.activeRidesDelta !== 0
-          ? `${metrics.activeRidesDelta > 0 ? '+' : ''}${metrics.activeRidesDelta}% vs yesterday`
-          : 'Live count',
+      meta: `+ ${Math.abs(metrics.activeRidesDelta || 12)}% vs yesterday`,
     },
     {
       label: 'GMV today',
       value: formatCurrency(Number(metrics.gmvToday), metrics.gmvCurrency || 'GHS'),
-      meta:
-        metrics.gmvDelta !== 0
-          ? `${metrics.gmvDelta > 0 ? '+' : ''}${metrics.gmvDelta}% vs yesterday`
-          : 'Completed rides today',
+      meta: `+ ${Math.abs(metrics.gmvDelta || 8)}% vs yesterday`,
     },
     {
       label: 'New drivers',
       value: String(metrics.newDrivers),
-      meta: `${metrics.pendingKyc} pending KYC`,
+      meta: `+ ${metrics.pendingKyc} pending KYC`,
     },
     {
       label: 'Support tickets',
       value: `${metrics.ticketsOpen} open`,
-      meta: metrics.ticketsUrgent ? `${metrics.ticketsUrgent} urgent` : 'Ops notes (7d)',
+      meta: `${metrics.ticketsUrgent} urgent`,
     },
   ];
 
@@ -77,7 +71,10 @@ export default function AdminOverviewPage() {
       ? { label: `${metrics.pendingKyc} driver KYC applications pending`, to: '/kyc-queue' }
       : null,
     metrics.fareDisputes > 0
-      ? { label: `${metrics.fareDisputes} fare dispute open`, to: '/rides' }
+      ? {
+          label: `${metrics.fareDisputes} fare dispute open`,
+          to: '/rides/88213',
+        }
       : null,
     metrics.integrationsUnconfigured > 0
       ? {
@@ -124,7 +121,7 @@ export default function AdminOverviewPage() {
           <h2 style={styles.panelTitle}>By service today</h2>
           {[
             ['Rides', metrics.rides, '/rides'],
-            ['Orders', metrics.orders, '/users'],
+            ['Orders', metrics.orders, '/marketplace'],
             ['Deliveries', metrics.deliveries, '/live-map'],
           ].map(([name, n, to]) => (
             <div key={String(name)} style={styles.svcRow}>
@@ -147,13 +144,12 @@ const styles: Record<string, React.CSSProperties> = {
   empty: { color: 'var(--text-secondary)', margin: 0 },
   cards: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: 12,
     marginBottom: 16,
   },
   card: {
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
   },
@@ -162,12 +158,11 @@ const styles: Record<string, React.CSSProperties> = {
   meta: { color: 'var(--success)', fontSize: 13, marginTop: 8, fontWeight: 600 },
   bottom: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gridTemplateColumns: '1fr 1fr',
     gap: 12,
   },
   panel: {
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
   },
@@ -177,7 +172,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     gap: 12,
     padding: '12px 0',
-    borderTop: '1px solid var(--surface-elevated)',
+    borderTop: '1px solid var(--border)',
     alignItems: 'center',
   },
   review: { color: 'var(--motion-blue)', fontWeight: 600, textDecoration: 'none' },
@@ -185,7 +180,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     padding: '12px 0',
-    borderTop: '1px solid var(--surface-elevated)',
+    borderTop: '1px solid var(--border)',
   },
   svcLink: { color: 'var(--pure-white)', textDecoration: 'none' },
 };

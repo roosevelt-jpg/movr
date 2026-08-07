@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
+import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -12,58 +11,108 @@ type Item = {
   when: string;
   amount: number;
   kind: 'ride' | 'order';
+  sortAt: number;
 };
+
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function formatHistoryWhen(value: string | Date | null | undefined): string {
+  if (!value) return 'Recently';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return 'Recently';
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startThat = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startToday.getTime() - startThat.getTime()) / 86400000);
+  if (dayDiff === 0) {
+    const time = d.toLocaleTimeString('en-GH', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `Today, ${time}`;
+  }
+  if (dayDiff === 1) return 'Yesterday';
+  if (dayDiff > 1 && dayDiff < 7) return `${dayDiff} days ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 /** Unified trip + order history — empty state matches mockup. */
 export default function TripHistoryScreen({
   onOpen,
   onBookRide,
-  showDemoWhenEmpty = false,
+  forceEmpty = false,
 }: {
   onOpen?: (item: Item) => void;
   onBookRide?: () => void;
-  /** Keep false by default so empty state can show; set true for demos. */
-  showDemoWhenEmpty?: boolean;
+  forceEmpty?: boolean;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emptyCopy, setEmptyCopy] = useState({
+    title: 'No trips yet',
+    body: 'Your ride and order history will show up here once you take your first trip.',
+    cta_label: 'Book a ride',
+  });
 
   useEffect(() => {
+    fetch(`${API}/public/status-copy/trip_history_empty`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (body?.data?.title) setEmptyCopy(body.data);
+      })
+      .catch(() => undefined);
+
+    if (forceEmpty) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+
     Promise.all([
-      fetch(`${API}/rides?limit=20`).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/orders?limit=20`).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/rides?limit=20`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`${API}/orders?limit=20`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
     ]).then(([rides, orders]) => {
-      const rideRows = (rides?.data?.rides || rides?.data || []).map((r: any) => ({
-        id: r.id,
-        title: `${r.pickup_address || r.pickupAddress || 'Pickup'} → ${
-          r.dropoff_address || r.dropoffAddress || 'Dropoff'
-        }`,
-        when: r.created_at ? formatLocalTime(r.created_at) : 'Recently',
-        amount: Number(r.actual_fare || r.estimated_fare || r.actualFare || 0),
-        kind: 'ride' as const,
-      }));
-      const orderRows = (orders?.data || []).map((o: any) => ({
-        id: o.id,
-        title: `${o.store_name || o.storeName || 'Store'} order`,
-        when: o.created_at ? formatLocalTime(o.created_at) : 'Recently',
-        amount: Number(o.total || 0),
-        kind: 'order' as const,
-      }));
-      const merged = [...rideRows, ...orderRows];
-      if (merged.length) setItems(merged);
-      else if (showDemoWhenEmpty) {
-        setItems([
-          { id: '1', title: 'Osu → Airport', when: 'Today, 2:14 PM', amount: 45, kind: 'ride' },
-          { id: '2', title: 'East Legon → Labone', when: 'Yesterday', amount: 28, kind: 'ride' },
-          { id: '3', title: 'Boutique 22 order', when: '2 days ago', amount: 330, kind: 'order' },
-        ]);
-      }
+      const rideRows: Item[] = (rides?.data?.rides || rides?.data || []).map((r: any) => {
+        const at = r.completed_at || r.created_at;
+        return {
+          id: String(r.id),
+          title: `${r.pickup_address || r.pickupAddress || 'Pickup'} → ${
+            r.dropoff_address || r.dropoffAddress || 'Dropoff'
+          }`,
+          when: formatHistoryWhen(at),
+          amount: Number(r.actual_fare || r.estimated_fare || r.actualFare || 0),
+          kind: 'ride' as const,
+          sortAt: at ? new Date(at).getTime() : 0,
+        };
+      });
+      const orderRows: Item[] = (orders?.data || []).map((o: any) => {
+        const at = o.created_at || o.createdAt;
+        return {
+          id: String(o.id),
+          title: `${o.store_name || o.storeName || 'Store'} order`,
+          when: formatHistoryWhen(at),
+          amount: Number(o.total || 0),
+          kind: 'order' as const,
+          sortAt: at ? new Date(at).getTime() : 0,
+        };
+      });
+      setItems([...rideRows, ...orderRows].sort((a, b) => b.sortAt - a.sortAt));
       setLoading(false);
     });
-  }, [showDemoWhenEmpty]);
+  }, [forceEmpty]);
 
   return (
     <View style={styles.root}>
@@ -72,32 +121,31 @@ export default function TripHistoryScreen({
       {!loading && items.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}>
-            <Text style={{ fontSize: 28 }}>🚐</Text>
+            <Text style={styles.vanGlyph}>🚐</Text>
           </View>
-          <Text style={styles.emptyTitle}>No trips yet</Text>
-          <Text style={styles.emptyBody}>
-            Your ride and order history will show up here once you take your first trip.
-          </Text>
-          <Pressable style={styles.cta} onPress={onBookRide}>
-            <View style={styles.ctaGlow} />
-            <Text style={styles.ctaText}>Book a ride</Text>
+          <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
+          <Text style={styles.emptyBody}>{emptyCopy.body}</Text>
+          <Pressable style={styles.cta} onPress={onBookRide} accessibilityRole="button">
+            <View style={styles.ctaPurple} />
+            <View style={styles.ctaBlue} />
+            <Text style={styles.ctaText}>{emptyCopy.cta_label}</Text>
           </Pressable>
         </View>
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(i) => i.id}
+          keyExtractor={(i) => `${i.kind}-${i.id}`}
           contentContainerStyle={{ paddingBottom: 40 }}
-          ListEmptyComponent={
-            loading ? <Text style={styles.when}>Loading…</Text> : null
-          }
+          ListEmptyComponent={loading ? <Text style={styles.when}>Loading…</Text> : null}
           renderItem={({ item }) => (
             <Pressable style={styles.card} onPress={() => onOpen?.(item)}>
               <View style={styles.iconBox}>
-                <Text>{item.kind === 'order' ? '📦' : '🚗'}</Text>
+                <Text style={styles.iconGlyph}>{item.kind === 'order' ? '📦' : '🚗'}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
                 <Text style={styles.when}>{item.when}</Text>
               </View>
               <Text style={styles.amount}>{formatCurrency(item.amount, 'GHS')}</Text>
@@ -109,28 +157,28 @@ export default function TripHistoryScreen({
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
+const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.jetBlack,
+    backgroundColor: '#000000',
     paddingHorizontal: spacing[4],
     paddingTop: spacing[5],
   },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80 },
   emptyIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[4],
   },
-  emptyTitle: { color: colors.pureWhite, fontSize: 20, fontWeight: '700' },
+  vanGlyph: { fontSize: 28 },
+  emptyTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
   emptyBody: {
-    color: colors.textSecondary,
+    color: '#A1A1AA',
     textAlign: 'center',
     marginTop: 10,
     marginBottom: spacing[6],
@@ -144,20 +192,25 @@ function makeStyles(colors: any) {
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: colors.electricViolet,
+    backgroundColor: '#6B21A8',
   },
-  ctaGlow: {
+  ctaPurple: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
+    backgroundColor: '#6B21A8',
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaBlue: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.72,
+    left: '35%',
+  },
+  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
     padding: spacing[4],
     marginBottom: spacing[3],
   },
@@ -165,12 +218,12 @@ function makeStyles(colors: any) {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#2A2A2A',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
-  when: { color: colors.textSecondary, marginTop: 4, fontSize: 13 },
-  amount: { color: colors.pureWhite, fontWeight: '600' },
+  iconGlyph: { fontSize: 16 },
+  cardTitle: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  when: { color: '#A1A1AA', marginTop: 4, fontSize: 13 },
+  amount: { color: '#FFFFFF', fontWeight: '600' },
 });
-}

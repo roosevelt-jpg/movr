@@ -20,18 +20,19 @@ function authHeaders(): Record<string, string> {
 const VEHICLES = [
   { id: 'standard', name: 'Sedan', meta: '5 seats · Automatic', icon: '🚘' },
   { id: 'suv', name: 'SUV', meta: '7 seats · Automatic', icon: '🚙' },
+  { id: 'luxury', name: 'Luxury', meta: '4 seats · Chauffeur available', icon: '🚗' },
 ];
 
-/** Rentals — chauffeur/self-drive (flag-gated), hourly/daily, license + deposit. */
+/** Rentals — Self-drive | Chauffeur, Hourly | Daily, live rental_pricing. */
 export default function RentalHomeScreen() {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
-  const [rentalType, setRentalType] = useState<'chauffeur' | 'self_drive'>('chauffeur');
+  const [rentalType, setRentalType] = useState<'chauffeur' | 'self_drive'>('self_drive');
   const [rateUnit, setRateUnit] = useState<'hourly' | 'daily'>('daily');
   const [duration, setDuration] = useState('1');
   const [selected, setSelected] = useState('standard');
-  const [selfDriveOn, setSelfDriveOn] = useState(false);
+  const [selfDriveOn, setSelfDriveOn] = useState(true);
   const [pricing, setPricing] = useState<any[]>([]);
   const [licenseUrl, setLicenseUrl] = useState('');
   const [uploadingLicense, setUploadingLicense] = useState(false);
@@ -46,11 +47,11 @@ export default function RentalHomeScreen() {
     fetch(`${API}/rentals/self-drive-available`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        const on = j.data?.enabled === true;
+        const on = j.data?.enabled !== false;
         setSelfDriveOn(on);
         if (!on) setRentalType('chauffeur');
       })
-      .catch(() => setSelfDriveOn(false));
+      .catch(() => setSelfDriveOn(true));
   }, []);
 
   const unitPrice = useMemo(() => {
@@ -72,7 +73,7 @@ export default function RentalHomeScreen() {
     setMsg('');
     try {
       if (rentalType === 'self_drive' && !licenseUrl.trim()) {
-        setMsg('Upload your license photo to continue (file upload required)');
+        setMsg('Upload your license photo to continue');
         setBusy(false);
         return;
       }
@@ -161,15 +162,14 @@ export default function RentalHomeScreen() {
 
       {VEHICLES.map((v) => {
         const on = selected === v.id;
-        const price =
-          Number(
-            pricing.find(
-              (p) =>
-                p.vehicle_type_id === v.id &&
-                p.rental_type === rentalType &&
-                p.rate_unit === rateUnit
-            )?.rate_amount || 0
-          ) || unitPrice;
+        const price = Number(
+          pricing.find(
+            (p) =>
+              p.vehicle_type_id === v.id &&
+              p.rental_type === rentalType &&
+              p.rate_unit === rateUnit
+          )?.rate_amount || 0
+        );
         return (
           <Pressable
             key={v.id}
@@ -191,19 +191,11 @@ export default function RentalHomeScreen() {
         );
       })}
 
-      <View style={styles.totalCard}>
-        <Text style={styles.totalLabel}>Estimated total</Text>
-        <Text style={styles.totalValue}>{formatCurrency(total, 'GHS')}</Text>
-        {deposit > 0 ? (
-          <Text style={styles.deposit}>Refundable deposit hold · {formatCurrency(deposit, 'GHS')}</Text>
-        ) : null}
-      </View>
-
       {rentalType === 'self_drive' ? (
         <View style={styles.banner}>
           <Text style={styles.bannerIcon}>🪪</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.bannerText}>License upload + deposit required</Text>
+            <Text style={styles.bannerText}>License upload + deposit required for self-drive</Text>
             <Pressable
               style={styles.licenseBtn}
               disabled={uploadingLicense}
@@ -233,6 +225,14 @@ export default function RentalHomeScreen() {
         </View>
       ) : null}
 
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>Estimated total</Text>
+        <Text style={styles.totalValue}>{formatCurrency(total, 'GHS')}</Text>
+        {deposit > 0 ? (
+          <Text style={styles.deposit}>Refundable deposit hold · {formatCurrency(deposit, 'GHS')}</Text>
+        ) : null}
+      </View>
+
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
       <Pressable style={styles.cta} onPress={book} disabled={busy || !unitPrice}>
@@ -245,140 +245,130 @@ export default function RentalHomeScreen() {
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.pill,
-    padding: 4,
-    marginBottom: spacing[3],
-  },
-  segBtn: {
-    flex: 1,
-    borderRadius: radius.pill,
-    paddingVertical: spacing[3],
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  segActive: { backgroundColor: colors.electricViolet },
-  segGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.4,
-  },
-  segText: { color: colors.textSecondary, fontWeight: '600', zIndex: 1 },
-  segTextOn: { color: colors.pureWhite },
-  flagHint: { color: colors.textSecondary, marginBottom: spacing[3], fontSize: 12 },
-  rateRow: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[3] },
-  rateChip: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  rateChipOn: { borderColor: colors.motionBlue },
-  rateText: { color: colors.textSecondary, fontWeight: '600' },
-  rateTextOn: { color: colors.pureWhite },
-  durationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing[4],
-  },
-  durationLabel: { color: colors.textSecondary },
-  durationInput: {
-    width: 72,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    color: colors.pureWhite,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    textAlign: 'center',
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[3],
-  },
-  cardOn: { borderColor: colors.motionBlue },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  cardMeta: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
-  price: { color: colors.pureWhite, fontWeight: '700' },
-  per: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  totalCard: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    padding: spacing[4],
-    marginBottom: spacing[3],
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  totalLabel: { color: colors.textSecondary },
-  totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 22, marginTop: 4 },
-  deposit: { color: colors.warning, marginTop: 6, fontSize: 13 },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[3],
-    marginTop: spacing[2],
-    padding: spacing[4],
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,184,0,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,184,0,0.35)',
-    marginBottom: spacing[3],
-  },
-  bannerIcon: { fontSize: 18, marginTop: 2 },
-  bannerText: { color: colors.warning, fontWeight: '600', fontSize: 13, marginBottom: 8 },
-  licenseBtn: {
-    marginTop: spacing[2],
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[3],
-  },
-  licenseBtnText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
-  licenseInput: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,184,0,0.35)',
-    borderRadius: radius.sm,
-    color: colors.pureWhite,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  msg: { color: colors.success, marginBottom: spacing[3] },
-  cta: {
-    borderRadius: radius.pill,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.electricViolet,
-    overflow: 'hidden',
-  },
-  ctaGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
-  },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+    segment: {
+      flexDirection: 'row',
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.pill,
+      padding: 4,
+      marginBottom: spacing[3],
+    },
+    segBtn: {
+      flex: 1,
+      borderRadius: radius.pill,
+      paddingVertical: spacing[3],
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    segActive: { backgroundColor: colors.electricViolet },
+    segGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.4,
+    },
+    segText: { color: colors.textSecondary, fontWeight: '600', zIndex: 1 },
+    segTextOn: { color: colors.pureWhite },
+    flagHint: { color: colors.textSecondary, marginBottom: spacing[3], fontSize: 12 },
+    rateRow: { flexDirection: 'row', gap: spacing[2], marginBottom: spacing[3] },
+    rateChip: {
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[2],
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      backgroundColor: colors.surfaceElevated,
+    },
+    rateChipOn: { borderColor: colors.motionBlue },
+    rateText: { color: colors.textSecondary, fontWeight: '600' },
+    rateTextOn: { color: colors.pureWhite },
+    durationRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing[4],
+    },
+    durationLabel: { color: colors.textSecondary },
+    durationInput: {
+      width: 72,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.sm,
+      color: colors.pureWhite,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      textAlign: 'center',
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing[3],
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing[4],
+      marginBottom: spacing[3],
+    },
+    cardOn: { borderColor: colors.motionBlue },
+    iconBox: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.sm,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
+    cardMeta: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+    price: { color: colors.pureWhite, fontWeight: '700' },
+    per: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+    totalCard: {
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.md,
+      padding: spacing[4],
+      marginBottom: spacing[3],
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    totalLabel: { color: colors.textSecondary },
+    totalValue: { color: colors.pureWhite, fontWeight: '700', fontSize: 22, marginTop: 4 },
+    deposit: { color: colors.warning, marginTop: 6, fontSize: 13 },
+    banner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing[3],
+      padding: spacing[4],
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceElevated,
+      marginBottom: spacing[3],
+    },
+    bannerIcon: { fontSize: 18, marginTop: 2 },
+    bannerText: { color: colors.warning, fontWeight: '600', fontSize: 13, marginBottom: 8 },
+    licenseBtn: {
+      marginTop: spacing[2],
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: spacing[2],
+      paddingHorizontal: spacing[3],
+    },
+    licenseBtnText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
+    msg: { color: colors.success, marginBottom: spacing[3] },
+    cta: {
+      borderRadius: radius.pill,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.electricViolet,
+      overflow: 'hidden',
+    },
+    ctaGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.45,
+    },
+    ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
+  });
 }

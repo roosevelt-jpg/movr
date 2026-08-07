@@ -184,20 +184,74 @@ merchantRouter.get('/me', authenticateToken, requireMerchant, async (req: AuthRe
       return res.status(404).json({ status: 'error', message: 'Merchant not found' });
     }
     const user = await db.query(`SELECT email, phone FROM users WHERE id = $1`, [req.user!.id]);
+    const prefs = await db
+      .query(
+        `SELECT new_order_alerts, daily_sales_summary
+         FROM merchant_notification_settings WHERE merchant_id = $1`,
+        [merchant.id]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    const payoutRaw = merchant.payout_account;
+    let payoutLabel = 'GCB Bank · ****3390';
+    if (typeof payoutRaw === 'string' && payoutRaw.trim()) {
+      payoutLabel = payoutRaw;
+    } else if (payoutRaw && typeof payoutRaw === 'object') {
+      const bank = payoutRaw.bankName || payoutRaw.bank || 'GCB Bank';
+      const mask = payoutRaw.accountNumber || payoutRaw.last4 || '****3390';
+      payoutLabel = `${bank} · ${mask}`;
+    }
+
     res.json({
       status: 'success',
       data: {
         ...merchant,
-        email: user.rows[0]?.email || merchant.email,
-        business_email: user.rows[0]?.email,
+        email: merchant.business_email || user.rows[0]?.email || merchant.email,
+        business_email: merchant.business_email || user.rows[0]?.email,
         registration_number: merchant.business_registration_number || 'BN-2024-88213',
-        payout_account: merchant.payout_account || 'GCB Bank · ****3390',
+        payout_account: payoutLabel,
+        notifications: {
+          new_order_alerts: prefs.rows[0]?.new_order_alerts ?? true,
+          daily_sales_summary: prefs.rows[0]?.daily_sales_summary ?? true,
+        },
       },
     });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+merchantRouter.patch(
+  '/settings/notifications',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      if (!merchant) {
+        return res.status(404).json({ status: 'error', message: 'Merchant not found' });
+      }
+      const newOrders =
+        req.body.new_order_alerts != null ? !!req.body.new_order_alerts : undefined;
+      const daily =
+        req.body.daily_sales_summary != null ? !!req.body.daily_sales_summary : undefined;
+
+      const row = await db.query(
+        `INSERT INTO merchant_notification_settings (merchant_id, new_order_alerts, daily_sales_summary, updated_at)
+         VALUES ($1, COALESCE($2, TRUE), COALESCE($3, TRUE), NOW())
+         ON CONFLICT (merchant_id) DO UPDATE SET
+           new_order_alerts = COALESCE($2, merchant_notification_settings.new_order_alerts),
+           daily_sales_summary = COALESCE($3, merchant_notification_settings.daily_sales_summary),
+           updated_at = NOW()
+         RETURNING new_order_alerts, daily_sales_summary`,
+        [merchant.id, newOrders ?? null, daily ?? null]
+      );
+      res.json({ status: 'success', data: row.rows[0] });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
 
 merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
@@ -211,18 +265,22 @@ merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: Auth
       documentNumber,
       fileUrl,
       businessRegistrationNumber,
+      businessName,
       countryCode = 'GH',
       fullName,
       dateOfBirth,
       ocrConfirmed,
     } = req.body;
 
-    // Phase 26 — country-specific ID validation before identity pipeline
-    if (documentType === 'national_id' || documentType === 'ghana_card' || documentNumber) {
+    // National ID validation only — not business registration numbers
+    if (
+      (documentType === 'national_id' || documentType === 'ghana_card') &&
+      documentNumber
+    ) {
       const { NationalIdVerificationService } = require('../services/ghana-card-verification.service');
       const national = new NationalIdVerificationService(db);
       const check = national.validateIdNumber(countryCode, documentNumber || '');
-      if (documentNumber && !check.valid) {
+      if (!check.valid) {
         return res.status(400).json({
           status: 'error',
           message: `Invalid ${check.pattern.label} for ${String(countryCode).toUpperCase()}`,
@@ -231,11 +289,29 @@ merchantRouter.post('/kyc', authenticateToken, requireMerchant, async (req: Auth
       }
     }
 
-    if (businessRegistrationNumber) {
+    if (businessRegistrationNumber || businessName || fileUrl) {
       await db.query(
-        `UPDATE merchants SET business_registration_number = $1, updated_at = NOW() WHERE id = $2`,
-        [businessRegistrationNumber, merchant.id]
-      );
+        `UPDATE merchants SET
+           business_registration_number = COALESCE($1, business_registration_number),
+           business_name = COALESCE($2, business_name),
+           registration_certificate_url = COALESCE($3, registration_certificate_url),
+           onboarding_step = GREATEST(COALESCE(onboarding_step, 1), 2),
+           updated_at = NOW()
+         WHERE id = $4`,
+        [
+          businessRegistrationNumber || null,
+          businessName || null,
+          fileUrl || null,
+          merchant.id,
+        ]
+      ).catch(async () => {
+        if (businessRegistrationNumber) {
+          await db.query(
+            `UPDATE merchants SET business_registration_number = $1, updated_at = NOW() WHERE id = $2`,
+            [businessRegistrationNumber, merchant.id]
+          );
+        }
+      });
     }
 
     // Reuse identity pipeline for merchants
@@ -368,7 +444,29 @@ merchantRouter.get('/products', authenticateToken, requireMerchant, async (req: 
   try {
     const merchant = await getMerchantForUser(req.user!.id);
     const products = await db.query(
-      `SELECT p.*, c.name AS category_name, c.slug AS category_slug
+      `SELECT p.*, c.name AS category_name, c.slug AS category_slug,
+              (
+                SELECT COALESCE(
+                  json_agg(
+                    json_build_object(
+                      'id', pv.id,
+                      'name', pv.name,
+                      'price_delta', pv.price_delta,
+                      'sku', pv.sku
+                    )
+                    ORDER BY pv.created_at ASC NULLS LAST, pv.name ASC
+                  ),
+                  '[]'::json
+                )
+                FROM product_variants pv
+                WHERE pv.product_id = p.id
+              ) AS variants,
+              (
+                SELECT pv.name FROM product_variants pv
+                WHERE pv.product_id = p.id
+                ORDER BY pv.created_at ASC NULLS LAST, pv.name ASC
+                LIMIT 1
+              ) AS variant_label
        FROM products p
        JOIN stores s ON s.id = p.store_id
        LEFT JOIN product_categories c ON c.id = p.category_id
@@ -627,8 +725,21 @@ merchantRouter.get('/orders', authenticateToken, requireMerchant, async (req: Au
   try {
     const merchant = await getMerchantForUser(req.user!.id);
     const orders = await db.query(
-      `SELECT o.* FROM marketplace_orders o
+      `SELECT o.*,
+              TRIM(CONCAT(
+                COALESCE(u.first_name, 'Customer'),
+                CASE
+                  WHEN u.last_name IS NOT NULL AND LENGTH(TRIM(u.last_name)) > 0
+                  THEN ' ' || LEFT(TRIM(u.last_name), 1) || '.'
+                  ELSE ''
+                END
+              )) AS customer_name,
+              COALESCE((
+                SELECT SUM(i.quantity)::int FROM marketplace_order_items i WHERE i.order_id = o.id
+              ), 0) AS item_count
+       FROM marketplace_orders o
        JOIN stores s ON s.id = o.store_id
+       LEFT JOIN users u ON u.id = o.user_id
        WHERE s.merchant_id = $1
        ORDER BY o.created_at DESC
        LIMIT 100`,
@@ -646,31 +757,50 @@ merchantRouter.get(
   requireMerchant,
   async (req: AuthRequest, res: Response) => {
     try {
+      const id = req.params.id;
       const orderRes = await db.query(
-        `SELECT o.*, u.first_name, u.last_name, u.phone
+        `SELECT o.*, u.first_name, u.last_name, u.phone,
+                COALESCE(o.public_ref, RIGHT(REPLACE(o.id::text, '-', ''), 4)) AS display_ref
          FROM marketplace_orders o
          JOIN stores s ON s.id = o.store_id
          JOIN merchants m ON m.id = s.merchant_id
          LEFT JOIN users u ON u.id = o.user_id
-         WHERE o.id = $1 AND m.user_id = $2`,
-        [req.params.id, req.user!.id]
+         WHERE m.user_id = $2
+           AND (o.id::text = $1 OR o.public_ref = $1)`,
+        [id, req.user!.id]
       );
       const order = orderRes.rows[0];
       if (!order) {
         return res.status(404).json({ status: 'error', message: 'Order not found' });
       }
-      const items = await db.query(
-        `SELECT product_name, unit_price, quantity, line_total
-         FROM marketplace_order_items WHERE order_id = $1`,
-        [order.id]
-      ).catch(() => ({ rows: [] }));
+      const items = await db
+        .query(
+          `SELECT product_name, unit_price, quantity, line_total
+           FROM marketplace_order_items WHERE order_id = $1
+           ORDER BY created_at ASC NULLS LAST, product_name ASC`,
+          [order.id]
+        )
+        .catch(() =>
+          db.query(
+            `SELECT product_name, unit_price, quantity, line_total
+             FROM marketplace_order_items WHERE order_id = $1`,
+            [order.id]
+          )
+        );
+      const customerName =
+        [order.first_name, order.last_name].filter(Boolean).join(' ') || order.customer_name || 'Customer';
+      const shortName = order.first_name
+        ? `${order.first_name}${order.last_name ? ` ${String(order.last_name)[0]}.` : ''}`
+        : customerName;
       res.json({
         status: 'success',
         data: {
           ...order,
-          customer_name:
-            [order.first_name, order.last_name].filter(Boolean).join(' ') || order.customer_name,
+          public_ref: order.public_ref || order.display_ref,
+          customer_name: customerName,
+          customer_short: shortName,
           items: items.rows,
+          delivery_recipient: order.delivery_address || customerName,
         },
       });
     } catch (error: any) {
@@ -737,11 +867,39 @@ merchantRouter.patch(
   async (req: AuthRequest, res: Response) => {
     try {
       const result = await db.query(
-        `UPDATE marketplace_orders o SET status = 'accepted', updated_at = NOW()
+        `UPDATE marketplace_orders o SET status = 'preparing', updated_at = NOW()
          FROM stores s
          WHERE o.id = $1 AND o.store_id = s.id AND s.merchant_id = (
            SELECT id FROM merchants WHERE user_id = $2
          )
+         AND o.status IN ('pending_payment', 'paid', 'accepted')
+         RETURNING o.*`,
+        [req.params.id, req.user!.id]
+      );
+      if (result.rows[0]) await notifyCustomerOrderUpdate(result.rows[0]);
+      res.json({ status: 'success', data: result.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.patch(
+  '/orders/:id/out-for-delivery',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE marketplace_orders o
+         SET status = 'out_for_delivery',
+             delivery_otp = COALESCE(NULLIF(o.delivery_otp, ''), LPAD((floor(random()*9000)+1000)::int::text, 4, '0')),
+             updated_at = NOW()
+         FROM stores s
+         WHERE o.id = $1 AND o.store_id = s.id AND s.merchant_id = (
+           SELECT id FROM merchants WHERE user_id = $2
+         )
+         AND o.status IN ('accepted', 'preparing', 'ready_for_pickup')
          RETURNING o.*`,
         [req.params.id, req.user!.id]
       );
@@ -878,6 +1036,63 @@ merchantRouter.get('/earnings', authenticateToken, requireMerchant, async (req: 
   }
 });
 
+/** Summary cards for Earnings & payouts mockup. */
+merchantRouter.get(
+  '/earnings/summary',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const earned = await db.query(
+        `SELECT COALESCE(SUM(o.total), 0)::float AS total
+         FROM marketplace_orders o
+         JOIN stores s ON s.id = o.store_id
+         WHERE s.merchant_id = $1
+           AND o.status IN ('completed', 'paid', 'out_for_delivery', 'ready_for_pickup', 'preparing', 'accepted')`,
+        [merchant.id]
+      );
+      const month = await db.query(
+        `SELECT COALESCE(SUM(o.total), 0)::float AS total
+         FROM marketplace_orders o
+         JOIN stores s ON s.id = o.store_id
+         WHERE s.merchant_id = $1
+           AND o.created_at >= date_trunc('month', NOW())
+           AND o.status IN ('completed', 'paid', 'out_for_delivery', 'ready_for_pickup', 'preparing', 'accepted')`,
+        [merchant.id]
+      );
+      const paidOut = await db.query(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM merchant_payouts
+         WHERE merchant_id = $1 AND status IN ('processing', 'completed', 'paid')`,
+        [merchant.id]
+      ).catch(() => ({ rows: [{ total: 0 }] }));
+      const pending = await db.query(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM merchant_payouts
+         WHERE merchant_id = $1 AND status IN ('pending', 'processing')`,
+        [merchant.id]
+      ).catch(() => ({ rows: [{ total: 0 }] }));
+      const total = Number(earned.rows[0]?.total || 0);
+      const withdrawn = Number(paidOut.rows[0]?.total || 0);
+      const currency = merchant.country === 'NG' ? 'NGN' : 'GHS';
+      res.json({
+        status: 'success',
+        data: {
+          available: Math.max(0, total - withdrawn),
+          thisMonth: Number(month.rows[0]?.total || 0),
+          month: Number(month.rows[0]?.total || 0),
+          pending: Number(pending.rows[0]?.total || 0),
+          currency,
+          payoutAccount: merchant.payout_account || null,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
@@ -886,6 +1101,7 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
        FROM marketplace_orders o
        JOIN stores s ON s.id = o.store_id
        WHERE s.merchant_id = $1 AND o.created_at > NOW() - INTERVAL '30 days'
+         AND o.status IN ('paid','accepted','preparing','out_for_delivery','ready_for_pickup','completed')
        GROUP BY 1 ORDER BY 1`,
       [merchant.id]
     );
@@ -895,6 +1111,7 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
        JOIN marketplace_orders o ON o.id = oi.order_id
        JOIN stores s ON s.id = o.store_id
        WHERE s.merchant_id = $1
+         AND o.status IN ('paid','accepted','preparing','out_for_delivery','ready_for_pickup','completed')
        GROUP BY oi.product_name
        ORDER BY qty DESC
        LIMIT 10`,
@@ -906,7 +1123,8 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
               COUNT(*)::int AS orders
        FROM marketplace_orders o
        JOIN stores s ON s.id = o.store_id
-       WHERE s.merchant_id = $1`,
+       WHERE s.merchant_id = $1
+         AND o.status IN ('paid','accepted','preparing','out_for_delivery','ready_for_pickup','completed')`,
       [merchant.id]
     );
     const repeat = await db.query(
@@ -914,6 +1132,7 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
          SELECT o.user_id FROM marketplace_orders o
          JOIN stores s ON s.id = o.store_id
          WHERE s.merchant_id = $1
+           AND o.status IN ('paid','accepted','preparing','out_for_delivery','ready_for_pickup','completed')
          GROUP BY o.user_id HAVING COUNT(*) > 1
        ) t`,
       [merchant.id]
@@ -922,10 +1141,26 @@ merchantRouter.get('/analytics', authenticateToken, requireMerchant, async (req:
     const repeatRate =
       stats.customers > 0 ? repeat.rows[0].repeat_customers / stats.customers : 0;
 
+    // Pad last 7 calendar days for chart
+    const byDay = new Map<string, number>();
+    for (const r of sales.rows) {
+      const key = new Date(r.day).toISOString().slice(0, 10);
+      byDay.set(key, Number(r.sales || 0));
+    }
+    const salesOverTime: { day: string; sales: number; orders: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(12, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      salesOverTime.push({ day: key, sales: byDay.get(key) || 0, orders: 0 });
+    }
+
     res.json({
       status: 'success',
       data: {
-        salesOverTime: sales.rows,
+        salesOverTime,
+        salesLast30: sales.rows,
         topProducts: topProducts.rows,
         averageOrderValue: Number(stats.average_order_value || 0),
         repeatCustomerRate: repeatRate,
@@ -988,15 +1223,36 @@ merchantRouter.get(
     try {
       const merchant = await getMerchantForUser(req.user!.id);
       const rows = await db.query(
-        `SELECT id, amount, currency, status, reference_id, created_at,
-                COALESCE(reference_id, 'Payout') AS label
+        `SELECT id, amount, currency, status, reference_id, bank_account, created_at,
+                TRIM(
+                  CONCAT(
+                    'Weekly payout',
+                    CASE
+                      WHEN bank_account->>'bankName' IS NOT NULL AND bank_account->>'bankName' <> ''
+                      THEN ' · ' || (bank_account->>'bankName')
+                      WHEN bank_account->>'bankCode' IS NOT NULL AND bank_account->>'bankCode' <> ''
+                      THEN ' · ' || (bank_account->>'bankCode')
+                      ELSE ''
+                    END
+                  )
+                ) AS label
          FROM merchant_payouts
          WHERE merchant_id = $1
          ORDER BY created_at DESC
          LIMIT 50`,
         [merchant.id]
       ).catch(() => ({ rows: [] }));
-      res.json({ status: 'success', data: rows.rows });
+      res.json({
+        status: 'success',
+        data: rows.rows.map((r: any) => ({
+          ...r,
+          statusLabel:
+            String(r.status || '').toLowerCase() === 'completed' ||
+            String(r.status || '').toLowerCase() === 'paid'
+              ? 'Completed'
+              : String(r.status || 'Pending').replace(/^\w/, (c: string) => c.toUpperCase()),
+        })),
+      });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message });
     }

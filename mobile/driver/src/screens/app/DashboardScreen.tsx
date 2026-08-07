@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useTheme, useThemeColors } from '@movr/design-system/ThemeProvider';
-import type { ThemePreference } from '@movr/design-system/theme';
+import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
-import PerformanceScreen from './PerformanceScreen';
 import { initMobileSentry } from '../../sentry';
 
 initMobileSentry('driver');
@@ -15,124 +13,98 @@ function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-/** Driver home — Earnings / Performance tabs. */
+/** Driver home — greeting, online toggle, earnings, recent trips. */
 export default function DashboardScreen({
   onWithdraw,
   onDemand,
   onVehicle,
+  onPerformance,
+  onSubscription,
 }: {
   onWithdraw?: () => void;
   onDemand?: () => void;
   onVehicle?: () => void;
+  onPerformance?: () => void;
+  onSubscription?: () => void;
 }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
-  const { preference, mode, setPreference } = useTheme();
 
-  const [tab, setTab] = useState<'earnings' | 'performance'>('earnings');
   const [online, setOnline] = useState(true);
   const [today, setToday] = useState(0);
   const [trips, setTrips] = useState(0);
   const [week, setWeek] = useState(0);
   const [subActive, setSubActive] = useState(false);
   const [name, setName] = useState('Driver');
-  const [tier, setTier] = useState('lite');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [recent, setRecent] = useState<
     { id: string; route: string; time: string; amount: number }[]
   >([]);
 
-  useEffect(() => {
+  const load = async () => {
     const h = authHeaders();
-    fetch(`${API}/driver/performance`, { headers: h })
-      .then((r) => r.json())
-      .then((j) => {
-        const m = j.data?.metrics;
-        if (m?.rides_completed != null) setTrips(Number(m.rides_completed));
-        if (m?.current_tier) setTier(String(m.current_tier));
-      })
-      .catch(() => undefined);
-    fetch(`${API}/driver/earnings/today`, { headers: h })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.data?.amount != null) setToday(Number(j.data.amount));
-        if (j?.data?.trips != null) setTrips(Number(j.data.trips));
-        if (j?.data?.week != null) setWeek(Number(j.data.week));
-        if (j?.data?.name) setName(j.data.name);
-        if (Array.isArray(j?.data?.recent)) setRecent(j.data.recent);
-      })
-      .catch(() => undefined);
-    fetch(`${API}/subscriptions/me`, { headers: h })
-      .then((r) => r.json())
-      .then((j) =>
-        setSubActive(j?.data?.status === 'active' || j?.data?.status === 'pending')
-      )
-      .catch(() => undefined);
+    const [earn, sub, presence] = await Promise.all([
+      fetch(`${API}/driver/earnings/today`, { headers: h }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/subscriptions/me`, { headers: h }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/driver/presence`, { headers: h }).then((r) => r.json()).catch(() => null),
+    ]);
+    if (earn?.data) {
+      setToday(Number(earn.data.amount || 0));
+      setTrips(Number(earn.data.trips || 0));
+      setWeek(Number(earn.data.week || 0));
+      if (earn.data.name) setName(earn.data.name);
+      if (earn.data.avatarUrl) setAvatarUrl(earn.data.avatarUrl);
+      if (Array.isArray(earn.data.recent)) setRecent(earn.data.recent);
+      if (typeof earn.data.online === 'boolean') setOnline(earn.data.online);
+    }
+    setSubActive(sub?.data?.status === 'active' || sub?.data?.status === 'pending');
+    if (typeof presence?.data?.online === 'boolean') setOnline(presence.data.online);
+  };
+
+  useEffect(() => {
+    load().catch(() => undefined);
   }, []);
 
-  if (tab === 'performance') {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.jetBlack }}>
-        <View style={styles.tabs}>
-          <Pressable style={styles.tab} onPress={() => setTab('earnings')}>
-            <Text style={styles.tabText}>Earnings</Text>
-          </Pressable>
-          <Pressable style={styles.tab}>
-            <Text style={[styles.tabText, styles.tabOn]}>Performance</Text>
-            <View style={styles.underline} />
-          </Pressable>
-        </View>
-        <PerformanceScreen />
-      </View>
-    );
-  }
+  const setPresence = async (next: boolean) => {
+    setOnline(next);
+    try {
+      await fetch(`${API}/driver/presence`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ isOnline: next }),
+      });
+    } catch {
+      setOnline(!next);
+    }
+  };
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
-      <View style={styles.tabs}>
-        <Pressable style={styles.tab}>
-          <Text style={[styles.tabText, styles.tabOn]}>Earnings</Text>
-          <View style={styles.underline} />
-        </Pressable>
-        <Pressable style={styles.tab} onPress={() => setTab('performance')}>
-          <Text style={styles.tabText}>Performance</Text>
-        </Pressable>
-      </View>
-
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.greet}>{greet}</Text>
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.tierBadge}>
-            {tier.charAt(0).toUpperCase() + tier.slice(1)} tier
-          </Text>
         </View>
-        <View style={styles.avatar} />
-      </View>
-
-      <View style={styles.themeRow}>
-        {(['system', 'light', 'dark'] as ThemePreference[]).map((p) => (
-          <Pressable
-            key={p}
-            onPress={() => setPreference(p)}
-            style={[styles.themeChip, preference === p && styles.themeChipOn]}
-          >
-            <Text style={[styles.themeChipText, preference === p && styles.themeChipTextOn]}>
-              {p === 'system' ? `Auto (${mode})` : p === 'light' ? 'Light' : 'Dark'}
-            </Text>
-          </Pressable>
-        ))}
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatar} />
+        )}
       </View>
 
       <View style={styles.toggle}>
         <Pressable
           style={[styles.toggleBtn, online && styles.toggleOn]}
-          onPress={() => setOnline(true)}
+          onPress={() => setPresence(true)}
         >
           <Text style={[styles.toggleText, online && styles.toggleTextOn]}>
             {online ? '✓  Online' : 'Online'}
@@ -140,7 +112,7 @@ export default function DashboardScreen({
         </Pressable>
         <Pressable
           style={[styles.toggleBtn, !online && styles.toggleOffActive]}
-          onPress={() => setOnline(false)}
+          onPress={() => setPresence(false)}
         >
           <Text style={[styles.toggleText, !online && styles.toggleTextOn]}>Offline</Text>
         </Pressable>
@@ -148,6 +120,7 @@ export default function DashboardScreen({
 
       <View style={styles.earnCard}>
         <View style={styles.earnGlow} />
+        <View style={styles.earnGlow2} />
         <Text style={styles.earnLabel}>Today's earnings</Text>
         <Text style={styles.earnValue}>{formatCurrency(today, 'GHS')}</Text>
         <Text style={styles.earnMeta}>
@@ -165,21 +138,29 @@ export default function DashboardScreen({
           <Text style={styles.statLabel}>This week</Text>
           <Text style={styles.statValue}>{formatCurrency(week, 'GHS')}</Text>
         </View>
-        <View style={styles.statCard}>
+        <Pressable
+          style={styles.statCard}
+          onPress={onSubscription}
+          disabled={!onSubscription}
+        >
           <Text style={styles.statLabel}>Subscription</Text>
           <Text style={styles.statValue}>{subActive ? 'Active' : 'Inactive'}</Text>
-        </View>
+        </Pressable>
       </View>
 
-      {onDemand ? (
-        <Pressable style={styles.demandBtn} onPress={onDemand}>
-          <Text style={styles.demandText}>Demand near you →</Text>
+      {onPerformance ? (
+        <Pressable style={styles.linkBtn} onPress={onPerformance}>
+          <Text style={styles.linkText}>Performance →</Text>
         </Pressable>
       ) : null}
-
+      {onDemand ? (
+        <Pressable style={styles.linkBtn} onPress={onDemand}>
+          <Text style={styles.linkText}>Demand near you →</Text>
+        </Pressable>
+      ) : null}
       {onVehicle ? (
-        <Pressable style={styles.vehicleBtn} onPress={onVehicle}>
-          <Text style={styles.vehicleText}>My vehicle →</Text>
+        <Pressable style={styles.linkBtn} onPress={onVehicle}>
+          <Text style={styles.linkText}>My vehicle →</Text>
         </Pressable>
       ) : null}
 
@@ -203,129 +184,100 @@ export default function DashboardScreen({
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  tabs: { flexDirection: 'row', gap: spacing[5], marginBottom: spacing[4], paddingHorizontal: spacing[4], paddingTop: spacing[4] },
-  tab: { paddingBottom: 8 },
-  tabText: { color: colors.textSecondary, fontWeight: '600', fontSize: 15 },
-  tabOn: { color: colors.pureWhite },
-  underline: {
-    marginTop: 6,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.motionBlue,
-  },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  greet: { color: colors.textSecondary, fontSize: 14 },
-  name: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', marginTop: 2 },
-  tierBadge: { color: colors.warning, fontWeight: '700', marginTop: 4, fontSize: 13 },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  toggle: {
-    flexDirection: 'row',
-    marginTop: spacing[4],
-    marginBottom: spacing[4],
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.pill,
-    padding: 4,
-  },
-  toggleBtn: {
-    flex: 1,
-    borderRadius: radius.pill,
-    paddingVertical: spacing[3],
-    alignItems: 'center',
-  },
-  toggleOn: { backgroundColor: colors.movrGreen || colors.success },
-  toggleOffActive: { backgroundColor: colors.border },
-  toggleText: { color: colors.textSecondary, fontWeight: '700' },
-  toggleTextOn: { color: colors.pureWhite },
-  themeRow: { flexDirection: 'row', gap: 8, marginBottom: spacing[3] },
-  themeChip: {
-    flex: 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  themeChipOn: {
-    borderColor: colors.motionBlue,
-    backgroundColor: 'rgba(0, 85, 255, 0.12)',
-  },
-  themeChipText: { color: colors.textSecondary, fontWeight: '600', fontSize: 11 },
-  themeChipTextOn: { color: colors.textPrimary },
-  earnCard: {
-    borderRadius: radius.lg,
-    padding: spacing[5],
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-    marginBottom: spacing[3],
-  },
-  earnGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.4,
-  },
-  earnLabel: { color: 'rgba(255,255,255,0.7)', zIndex: 1 },
-  earnValue: { color: colors.pureWhite, fontSize: 36, fontWeight: '700', marginTop: 6, zIndex: 1 },
-  earnMeta: { color: 'rgba(255,255,255,0.7)', marginTop: spacing[3], zIndex: 1 },
-  withdrawBtn: {
-    marginTop: spacing[4],
-    alignSelf: 'flex-start',
-    borderRadius: radius.pill,
-    backgroundColor: colors.pureWhite,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-    zIndex: 1,
-  },
-  withdrawText: { color: colors.jetBlack, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[3] },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-  },
-  statLabel: { color: colors.textSecondary, fontSize: 12 },
-  statValue: { color: colors.pureWhite, fontWeight: '700', marginTop: 6, fontSize: 16 },
-  demandBtn: {
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[2],
-  },
-  demandText: { color: colors.pureWhite, fontWeight: '600' },
-  vehicleBtn: {
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-  },
-  vehicleText: { color: colors.pureWhite, fontWeight: '600' },
-  section: { color: colors.textSecondary, marginBottom: spacing[3] },
-  empty: { color: colors.textSecondary },
-  trip: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    padding: spacing[4],
-    marginBottom: spacing[2],
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tripRoute: { color: colors.pureWhite, fontWeight: '600' },
-  tripTime: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  tripAmt: { color: colors.success, fontWeight: '700' },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    greet: { color: colors.textSecondary, fontSize: 14 },
+    name: { color: colors.pureWhite, fontSize: 26, fontWeight: '700', marginTop: 2 },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    toggle: {
+      flexDirection: 'row',
+      marginTop: spacing[4],
+      marginBottom: spacing[4],
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.pill,
+      padding: 4,
+    },
+    toggleBtn: {
+      flex: 1,
+      borderRadius: radius.pill,
+      paddingVertical: spacing[3],
+      alignItems: 'center',
+    },
+    toggleOn: { backgroundColor: colors.movrGreen || colors.success },
+    toggleOffActive: { backgroundColor: colors.border },
+    toggleText: { color: colors.textSecondary, fontWeight: '700' },
+    toggleTextOn: { color: colors.pureWhite },
+    earnCard: {
+      borderRadius: radius.lg,
+      padding: spacing[5],
+      backgroundColor: colors.electricViolet,
+      overflow: 'hidden',
+      marginBottom: spacing[3],
+    },
+    earnGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.55,
+    },
+    earnGlow2: {
+      position: 'absolute',
+      right: -40,
+      top: -40,
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      backgroundColor: colors.electricViolet,
+      opacity: 0.5,
+    },
+    earnLabel: { color: 'rgba(220,200,255,0.9)', zIndex: 1 },
+    earnValue: { color: colors.pureWhite, fontSize: 36, fontWeight: '700', marginTop: 6, zIndex: 1 },
+    earnMeta: { color: 'rgba(220,200,255,0.85)', marginTop: spacing[3], zIndex: 1 },
+    withdrawBtn: {
+      marginTop: spacing[4],
+      alignSelf: 'flex-start',
+      borderRadius: radius.pill,
+      backgroundColor: colors.pureWhite,
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[2],
+      zIndex: 1,
+    },
+    withdrawText: { color: colors.jetBlack, fontWeight: '700' },
+    statsRow: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[3] },
+    statCard: {
+      flex: 1,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.lg,
+      padding: spacing[4],
+    },
+    statLabel: { color: colors.textSecondary, fontSize: 12 },
+    statValue: { color: colors.pureWhite, fontWeight: '700', marginTop: 6, fontSize: 18 },
+    linkBtn: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing[4],
+      marginBottom: spacing[2],
+    },
+    linkText: { color: colors.pureWhite, fontWeight: '600' },
+    section: { color: colors.textSecondary, marginTop: spacing[3], marginBottom: spacing[3] },
+    empty: { color: colors.textSecondary },
+    trip: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.lg,
+      padding: spacing[4],
+      marginBottom: spacing[2],
+    },
+    tripRoute: { color: colors.pureWhite, fontWeight: '600' },
+    tripTime: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+    tripAmt: { color: colors.pureWhite, fontWeight: '700' },
+  });
 }

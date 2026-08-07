@@ -13,8 +13,14 @@ const tokens = new TokenService(db);
 
 export const referralsRouter = Router();
 
-function makeCode(): string {
-  return `MOVR-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+function makeCode(user?: { first_name?: string; last_name?: string; phone?: string }): string {
+  const name = String(user?.first_name || user?.last_name || 'MOVR')
+    .replace(/[^a-zA-Z]/g, '')
+    .toUpperCase()
+    .slice(0, 5);
+  const digits = String(user?.phone || '').replace(/\D/g, '').slice(-3);
+  const suffix = digits || crypto.randomBytes(2).toString('hex').toUpperCase().slice(0, 3);
+  return `${name || 'MOVR'}${suffix}`;
 }
 
 referralsRouter.use(authenticateToken);
@@ -23,9 +29,25 @@ referralsRouter.get('/my-code', async (req: AuthRequest, res: Response) => {
   try {
     let row = await db.query(`SELECT * FROM referral_codes WHERE user_id = $1`, [req.user!.id]);
     if (!row.rows[0]) {
+      const user = await db.query(
+        `SELECT first_name, last_name, phone FROM users WHERE id = $1`,
+        [req.user!.id]
+      );
+      let code = makeCode(user.rows[0]);
+      // Ensure uniqueness
+      for (let i = 0; i < 5; i++) {
+        const exists = await db.query(`SELECT 1 FROM referral_codes WHERE UPPER(code) = $1`, [
+          code.toUpperCase(),
+        ]);
+        if (!exists.rows[0]) break;
+        code = makeCode({
+          ...user.rows[0],
+          phone: `${user.rows[0]?.phone || ''}${i}${crypto.randomBytes(1).toString('hex')}`,
+        });
+      }
       row = await db.query(
         `INSERT INTO referral_codes (user_id, code) VALUES ($1, $2) RETURNING *`,
-        [req.user!.id, makeCode()]
+        [req.user!.id, code]
       );
     }
     res.json({
@@ -78,7 +100,16 @@ referralsRouter.post('/apply', async (req: AuthRequest, res: Response) => {
 referralsRouter.get('/progress', async (req: AuthRequest, res: Response) => {
   try {
     const rows = await db.query(
-      `SELECT r.*, u.first_name, u.email
+      `SELECT r.*,
+              u.first_name, u.last_name, u.email, u.phone,
+              TRIM(CONCAT(
+                COALESCE(u.first_name, 'Friend'),
+                CASE
+                  WHEN u.last_name IS NOT NULL AND LENGTH(TRIM(u.last_name)) > 0
+                  THEN ' ' || LEFT(TRIM(u.last_name), 1) || '.'
+                  ELSE ''
+                END
+              )) AS display_name
        FROM referrals r
        JOIN users u ON u.id = r.referee_id
        WHERE r.referrer_id = $1
@@ -89,7 +120,36 @@ referralsRouter.get('/progress', async (req: AuthRequest, res: Response) => {
       (s: number, r: any) => s + Number(r.reward_points || 0),
       0
     );
-    res.json({ status: 'success', data: { referrals: rows.rows, totalRewards } });
+    const referrals = rows.rows.map((r: any) => {
+      const status = String(r.status || 'signed_up');
+      let progress = 0.2;
+      let statusLabel = 'Signed up';
+      if (status === 'qualified') {
+        progress = 1;
+        statusLabel = `Qualified · +${Number(r.reward_points || 250)} pts`;
+      } else if (
+        status === 'first_ride_completed' ||
+        status === 'first_ride_pending' ||
+        status === 'pending'
+      ) {
+        progress = 0.6;
+        statusLabel = 'First ride pending';
+      }
+      return {
+        ...r,
+        display_name: r.display_name,
+        progress,
+        status_label: statusLabel,
+      };
+    });
+    res.json({
+      status: 'success',
+      data: {
+        referrals,
+        totalRewards,
+        invitedCount: referrals.length,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }

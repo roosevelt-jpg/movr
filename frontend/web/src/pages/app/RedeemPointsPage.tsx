@@ -8,29 +8,35 @@ const API =
   'http://localhost:3000/api/v1';
 
 function authHeaders() {
-  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  const token =
+    localStorage.getItem('movr_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
 
-/** Redeem Movr points for ride/order vouchers. */
+/** Redeem Movr points — mockup: 1,280 pts · ride/order/delivery vouchers. */
 export default function RedeemPointsPage() {
   const navigate = useNavigate();
   const [balance, setBalance] = useState(0);
   const [catalog, setCatalog] = useState<{ id: string; label: string; points: number }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch(`${API}/points/balance`, { headers: authHeaders() }).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/points/redeem-catalog`, { headers: authHeaders() }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/points/redeem-catalog`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
     ]).then(([b, c]) => {
       if (b?.data?.balance != null) setBalance(Number(b.data.balance));
-      if (Array.isArray(c?.data)) {
+      if (Array.isArray(c?.data) && c.data.length) {
         setCatalog(c.data);
-        if (c.data.length) setSelected(c.data[0].id);
+        setSelected(c.data[0].id);
       }
     });
   }, []);
@@ -39,6 +45,7 @@ export default function RedeemPointsPage() {
 
   const redeem = async () => {
     if (!choice) return;
+    setLoading(true);
     try {
       const res = await fetch(`${API}/points/redeem`, {
         method: 'POST',
@@ -56,46 +63,52 @@ export default function RedeemPointsPage() {
       else setBalance((b) => Math.max(0, b - choice.points));
     } catch (e: any) {
       toast.error(e.message || 'Not enough points');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white p-6 md:p-8 max-w-lg">
-      <button type="button" onClick={() => navigate('/wallet')} className="text-text-secondary text-sm mb-4">
+    <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 max-w-lg font-[Poppins,Montserrat,sans-serif]">
+      <button type="button" onClick={() => navigate('/wallet')} className="text-white/50 text-sm mb-4">
         ← Wallet
       </button>
       <h1 className="text-3xl font-bold">Redeem points</h1>
-      <p className="text-text-secondary mt-2 mb-8">You have {balance.toLocaleString()} points</p>
+      <p className="text-white/55 mt-2 mb-8">You have {balance.toLocaleString()} points</p>
 
       {catalog.length === 0 ? (
-        <p className="text-text-secondary mb-8">No redeem options available right now.</p>
+        <p className="text-white/50 mb-8">No redeem options available right now.</p>
       ) : (
         <div className="space-y-3 mb-8">
-          {catalog.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => setSelected(r.id)}
-              className={`w-full flex justify-between gap-4 rounded-xl px-4 py-4 text-left ${
-                selected === r.id
-                  ? 'border border-motion-blue bg-surface'
-                  : 'bg-surface-elevated border border-border'
-              }`}
-            >
-              <span className="font-medium">{r.label}</span>
-              <span className="text-motion-blue shrink-0">{r.points} pts</span>
-            </button>
-          ))}
+          {catalog.map((r) => {
+            const on = selected === r.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setSelected(r.id)}
+                className={`w-full flex justify-between gap-4 rounded-xl px-4 py-4 text-left bg-[#1a1a1a] ${
+                  on ? 'border-2 border-[#3B5CFF]' : 'border border-transparent'
+                }`}
+              >
+                <span className="font-medium">{r.label}</span>
+                <span className="text-[#7EB6FF] shrink-0">{r.points} pts</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
       <button
         type="button"
         onClick={redeem}
-        disabled={!choice}
-        className="w-full rounded-full py-4 font-semibold bg-movr-gradient disabled:opacity-40"
+        disabled={!choice || loading}
+        className="w-full rounded-full py-4 font-semibold text-white disabled:opacity-40"
+        style={{
+          background: 'linear-gradient(90deg, #0F766E 0%, #6B21A8 45%, #3B5CFF 100%)',
+        }}
       >
-        {choice ? `Redeem · ${choice.points} pts` : 'Redeem'}
+        {loading ? 'Redeeming…' : choice ? `Redeem · ${choice.points} pts` : 'Redeem'}
       </button>
     </div>
   );

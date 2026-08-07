@@ -2,13 +2,24 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
-import { formatCurrency, formatLocalTime } from '../lib/currency';
-import OpsNotesPanel from '../components/OpsNotesPanel';
+import { formatCurrency } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Admin ride ops — force cancel, adjust fare, internal notes, recording playback (Phase 28). */
+function relativeTime(iso?: string) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return h === 1 ? '1 hr ago' : `${h} hrs ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? '1 day ago' : `${d} days ago`;
+}
+
+/** Admin ride ops — force cancel, adjust fare, internal notes (mockup-aligned). */
 export default function RideOpsPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -19,12 +30,10 @@ export default function RideOpsPage() {
   const [notes, setNotes] = useState<any[]>([]);
   const [draft, setDraft] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
+  const [showAdjust, setShowAdjust] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [recordingMeta, setRecordingMeta] = useState<any>(null);
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
-  const [incidentRef, setIncidentRef] = useState('');
 
   const loadNotes = async (id: string) => {
     try {
@@ -37,8 +46,8 @@ export default function RideOpsPage() {
         rows.map((n: any) => ({
           id: n.id,
           note: n.note,
-          author: n.author_name || 'Admin',
-          when: n.created_at ? formatLocalTime(n.created_at) : '',
+          author: n.author_name || n.admin_name || 'Admin',
+          when: relativeTime(n.created_at),
         }))
       );
     } catch {
@@ -46,32 +55,14 @@ export default function RideOpsPage() {
     }
   };
 
-  const loadRecordingMeta = async (id: string) => {
-    try {
-      const res = await axios.get(`${API}/admin/recordings/${id}/meta`, { headers: headers() });
-      const data = res.data.data;
-      setRecordingMeta(data);
-      const sosId = data?.incidents?.[0]?.id;
-      if (sosId) setIncidentRef(String(sosId));
-      else if (data?.recording?.flagged_for_dispute) {
-        setIncidentRef((r) => r || `DISPUTE-${id.slice(0, 8)}`);
-      }
-    } catch {
-      setRecordingMeta(null);
-    }
-  };
-
   const loadRide = async (id: string) => {
     if (!id) {
       setRide(null);
       setNotes([]);
-      setRecordingMeta(null);
-      setPlaybackUrl(null);
       return;
     }
     setLoading(true);
     setError('');
-    setPlaybackUrl(null);
     try {
       const res = await axios.get(`${API}/rides/${id}`, { headers: headers() });
       const r = res.data.data;
@@ -80,21 +71,31 @@ export default function RideOpsPage() {
         setError('Ride not found');
         return;
       }
-      const fare = Number(r.actual_fare || r.estimated_fare || 0);
+      const fare = Number(r.actual_fare ?? r.fare ?? r.estimated_fare ?? 0);
+      const driver =
+        r.driver?.name || r.driver_name || r.driverName || 'Driver';
+      const rider =
+        r.rider_name || r.customerName || r.customer_name || r.customer?.name || 'Rider';
+      const pickup = r.pickup_address || r.pickupAddress || r.pickup?.address || '';
+      const dropoff = r.dropoff_address || r.dropoffAddress || r.dropoff?.address || '';
+      const disputed =
+        String(r.dispute_status || '').toLowerCase() === 'disputed' ||
+        String(r.status || '').toLowerCase().includes('disput');
+      const publicRef = r.public_ref || r.publicRef || String(r.id).replace(/\D/g, '').slice(-5);
+
       setRide({
         id: r.id || id,
-        driver: r.driver_name || r.driver_id || '—',
-        rider: r.rider_name || r.customer_name || r.user_id || '—',
-        route:
-          [r.pickup_address, r.dropoff_address].filter(Boolean).join(' → ') ||
-          'Route unavailable',
+        publicRef,
+        driver,
+        rider,
+        route: [pickup, dropoff].filter(Boolean).join(' → ') || 'Route unavailable',
         fare,
         currency: r.currency || 'GHS',
-        status: r.status || '—',
+        status: disputed ? 'Disputed fare' : r.status || '—',
+        disputed,
       });
       setAdjustAmount(String(fare || ''));
       await loadNotes(r.id || id);
-      await loadRecordingMeta(r.id || id);
     } catch (e: any) {
       setRide(null);
       setNotes([]);
@@ -137,17 +138,7 @@ export default function RideOpsPage() {
     setMessage(
       `Fare adjusted to ${formatCurrency(Number(adjustAmount), ride?.currency || 'GHS')}`
     );
-  };
-
-  const statusOverride = async (status: string) => {
-    if (!ride?.id) return;
-    await axios.post(
-      `${API}/admin/rides/${ride.id}/status-override`,
-      { status, reason: `Admin override to ${status}` },
-      { headers: headers() }
-    );
-    setMessage(`Status overridden to ${status}`);
-    await loadRide(ride.id);
+    setShowAdjust(false);
   };
 
   const addNote = async () => {
@@ -161,37 +152,6 @@ export default function RideOpsPage() {
     await loadNotes(ride.id);
   };
 
-  const flagRecording = async () => {
-    if (!ride?.id) return;
-    await axios.post(
-      `${API}/admin/rides/${ride.id}/recording/flag`,
-      { reason: incidentRef || 'Fare dispute / safety review' },
-      { headers: headers() }
-    );
-    setMessage('Recording flagged for dispute retention');
-    await loadRecordingMeta(ride.id);
-  };
-
-  const viewRecording = async () => {
-    if (!ride?.id || !incidentRef.trim()) {
-      setMessage('Incident reference required (SOS id or DISPUTE-…)');
-      return;
-    }
-    try {
-      const res = await axios.get(`${API}/admin/recordings/${ride.id}`, {
-        headers: headers(),
-        params: { incidentRef: incidentRef.trim() },
-      });
-      setPlaybackUrl(res.data.data?.playbackUrl || null);
-      setMessage('Secure playback URL issued (5 min, inline — not a download)');
-    } catch (e: any) {
-      setMessage(e?.response?.data?.message || e.message || 'Playback denied');
-      setPlaybackUrl(null);
-    }
-  };
-
-  const canViewRecording = Boolean(recordingMeta?.recording?.flagged_for_dispute);
-
   return (
     <AdminShell>
       <div style={styles.lookupBar}>
@@ -199,7 +159,7 @@ export default function RideOpsPage() {
           style={styles.amount}
           value={lookup}
           onChange={(e) => setLookup(e.target.value)}
-          placeholder="Ride id"
+          placeholder="Ride id or #88213"
           onKeyDown={(e) => e.key === 'Enter' && goLookup()}
         />
         <button style={styles.ghost} type="button" onClick={goLookup}>
@@ -217,13 +177,13 @@ export default function RideOpsPage() {
         <>
           <div style={styles.top}>
             <div>
-              <h1 style={styles.h1}>Ride #{ride.id}</h1>
+              <h1 style={styles.h1}>Ride #{ride.publicRef}</h1>
               <p style={styles.meta}>
                 {ride.driver} → {ride.rider} · {ride.route} ·{' '}
                 {formatCurrency(Number(ride.fare), ride.currency || 'GHS')}
               </p>
             </div>
-            <span style={styles.badge}>{ride.status}</span>
+            <span style={ride.disputed ? styles.badgeDispute : styles.badge}>{ride.status}</span>
           </div>
 
           <div style={styles.actions}>
@@ -237,38 +197,33 @@ export default function RideOpsPage() {
             <button
               style={styles.ghost}
               type="button"
-              onClick={() => adjustFare().catch((e) => setMessage(e.message))}
+              onClick={() => setShowAdjust((v) => !v)}
             >
               Adjust fare
             </button>
-            <button
-              style={styles.ghost}
-              type="button"
-              onClick={() => statusOverride('completed').catch((e) => setMessage(e.message))}
-            >
-              Mark completed
-            </button>
-            <input
-              style={styles.amount}
-              value={adjustAmount}
-              onChange={(e) => setAdjustAmount(e.target.value)}
-              placeholder="New fare"
-            />
+            {showAdjust ? (
+              <>
+                <input
+                  style={styles.amount}
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
+                  placeholder="New fare"
+                />
+                <button
+                  style={styles.ghost}
+                  type="button"
+                  onClick={() => adjustFare().catch((e) => setMessage(e.message))}
+                >
+                  Save fare
+                </button>
+              </>
+            ) : null}
           </div>
           {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
 
           <div style={styles.grid}>
             <div style={styles.map}>
               <div style={styles.gridBg} />
-              {playbackUrl ? (
-                <video
-                  key={playbackUrl}
-                  controls
-                  controlsList="nodownload"
-                  style={styles.video}
-                  src={playbackUrl}
-                />
-              ) : null}
             </div>
             <aside style={styles.notes}>
               <p style={styles.notesTitle}>Internal notes</p>
@@ -291,40 +246,6 @@ export default function RideOpsPage() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addNote().catch((err) => setMessage(err.message))}
               />
-
-              <p style={{ ...styles.notesTitle, marginTop: 16 }}>Trip recording</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 12, margin: 0 }}>
-                {recordingMeta?.recording
-                  ? `Status: ${recordingMeta.recording.status}${
-                      recordingMeta.recording.flagged_for_dispute ? ' · flagged' : ''
-                    }`
-                  : 'No recording row yet'}
-              </p>
-              <input
-                style={styles.noteInput}
-                placeholder="Incident ref (SOS uuid or DISPUTE-…)"
-                value={incidentRef}
-                onChange={(e) => setIncidentRef(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  style={styles.ghost}
-                  type="button"
-                  onClick={() => flagRecording().catch((e) => setMessage(e.message))}
-                >
-                  Flag for dispute
-                </button>
-                {canViewRecording ? (
-                  <button
-                    style={styles.ghost}
-                    type="button"
-                    onClick={() => viewRecording().catch((e) => setMessage(e.message))}
-                  >
-                    View recording
-                  </button>
-                ) : null}
-              </div>
-              <OpsNotesPanel entityType="ride" entityId={ride.id} />
             </aside>
           </div>
         </>
@@ -341,17 +262,26 @@ const styles: Record<string, React.CSSProperties> = {
   meta: { color: 'var(--text-secondary)', marginTop: 6 },
   badge: {
     alignSelf: 'flex-start',
-    background: 'rgba(255,59,92,0.2)',
-    color: 'var(--error)',
+    background: 'rgba(255,255,255,0.08)',
+    color: 'var(--text-secondary)',
     borderRadius: 999,
     padding: '6px 12px',
     fontWeight: 700,
     fontSize: 13,
   },
-  actions: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
+  badgeDispute: {
+    alignSelf: 'flex-start',
+    background: 'rgba(255,59,92,0.2)',
+    color: '#f5a8a8',
+    borderRadius: 999,
+    padding: '6px 12px',
+    fontWeight: 700,
+    fontSize: 13,
+  },
+  actions: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
   ghost: {
-    background: 'transparent',
-    border: '1px solid var(--border)',
+    background: '#2a2a2a',
+    border: '1px solid transparent',
     color: 'var(--pure-white)',
     borderRadius: 10,
     padding: '10px 14px',
@@ -377,32 +307,23 @@ const styles: Record<string, React.CSSProperties> = {
   gridBg: {
     position: 'absolute',
     inset: 0,
-    opacity: 0.35,
+    opacity: 0.45,
     backgroundImage:
       'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
-    backgroundSize: '32px 32px',
-  },
-  video: {
-    position: 'relative',
-    zIndex: 1,
-    width: '100%',
-    height: '100%',
-    minHeight: 360,
-    objectFit: 'contain',
-    background: 'var(--jet-black)',
+    backgroundSize: '28px 28px',
   },
   notes: {
-    background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
-    borderRadius: 16,
-    padding: 16,
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 0,
+    padding: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: 12,
   },
   notesTitle: { color: 'var(--text-secondary)', margin: 0, fontSize: 13 },
   noteCard: {
-    background: 'var(--surface)',
+    background: 'var(--surface-elevated)',
     borderRadius: 12,
     padding: 12,
     border: '1px solid var(--border)',
@@ -410,7 +331,7 @@ const styles: Record<string, React.CSSProperties> = {
   noteMeta: { color: 'var(--text-secondary)', fontSize: 12, margin: '8px 0 0' },
   noteInput: {
     marginTop: 'auto',
-    background: 'var(--surface)',
+    background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
     color: 'var(--pure-white)',
     borderRadius: 10,

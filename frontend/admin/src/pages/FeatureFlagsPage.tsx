@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import AdminShell from '../layouts/AdminShell';
-import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -15,7 +14,42 @@ type Flag = {
   enabled: boolean;
 };
 
-/** Admin feature flags — toggle rollouts without removing APIs. */
+function PurpleToggle({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={on}
+      onClick={onClick}
+      style={{
+        width: 48,
+        height: 28,
+        borderRadius: 999,
+        border: 'none',
+        padding: 3,
+        cursor: 'pointer',
+        background: on ? '#7C3AED' : '#333333',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: on ? 'flex-end' : 'flex-start',
+        transition: 'background 0.15s ease',
+      }}
+    >
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 999,
+          background: '#FFFFFF',
+          display: 'block',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+        }}
+      />
+    </button>
+  );
+}
+
+/** Admin feature flags — mockup rollouts with purple toggles. */
 export default function FeatureFlagsPage() {
   const [flags, setFlags] = useState<Flag[]>([]);
   const [error, setError] = useState('');
@@ -81,7 +115,7 @@ export default function FeatureFlagsPage() {
               </div>
               <div style={styles.rollout}>{f.rolloutLabel}</div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <OnOffButton
+                <PurpleToggle
                   on={!!f.enabled}
                   onClick={() => toggle(f.key, !f.enabled)}
                   title={`${f.label}: ${f.enabled ? 'on' : 'off'}`}
@@ -96,24 +130,23 @@ export default function FeatureFlagsPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  h1: { fontSize: 32, fontWeight: 700, marginBottom: 28 },
+  h1: { fontSize: 32, fontWeight: 700, marginBottom: 28, color: '#FFFFFF' },
   table: {
-    background: 'var(--surface-elevated)',
+    background: '#111111',
     borderRadius: 16,
-    border: '1px solid var(--border)',
     overflow: 'hidden',
   },
-  head: { color: 'var(--text-secondary)', fontSize: 13 },
+  head: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
   row: {
     display: 'grid',
     gridTemplateColumns: '1.4fr 1.2fr 100px',
     gap: 16,
     alignItems: 'center',
-    padding: '18px 24px',
-    borderBottom: '1px solid var(--border)',
+    padding: '20px 24px',
+    borderBottom: '1px solid #222',
   },
-  empty: { padding: '24px', color: 'var(--text-secondary)' },
-  label: { fontWeight: 600, fontSize: 16 },
-  phase: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 },
-  rollout: { color: 'var(--text-secondary)' },
+  empty: { padding: '24px', color: 'rgba(255,255,255,0.5)' },
+  label: { fontWeight: 600, fontSize: 16, color: '#FFFFFF' },
+  phase: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 4 },
+  rollout: { color: '#FFFFFF' },
 };

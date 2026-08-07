@@ -48,9 +48,11 @@ function mediaUrl(url?: string | null) {
 export default function AdminShell({
   children,
   activeLabel,
+  hidePageTitle,
 }: {
   children: React.ReactNode;
   activeLabel?: string;
+  hidePageTitle?: boolean;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -179,8 +181,14 @@ export default function AdminShell({
       <div style={styles.mainCol}>
         <header style={styles.header}>
           <div>
-            <p style={styles.headerEyebrow}>MOVR OPS</p>
-            <h2 style={styles.headerTitle}>{activeItem.label}</h2>
+            {!hidePageTitle ? (
+              <>
+                <p style={styles.headerEyebrow}>MOVR OPS</p>
+                <h2 style={styles.headerTitle}>{activeItem.label}</h2>
+              </>
+            ) : (
+              <p style={styles.headerEyebrow}>MOVR OPS</p>
+            )}
           </div>
 
           <div style={styles.headerActions}>

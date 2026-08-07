@@ -355,7 +355,17 @@ export class PaymentService {
     return this.db.query(
       `SELECT id, scope, country_code, provider, is_active, updated_at
        FROM payment_provider_config
-       ORDER BY scope, country_code NULLS FIRST`
+       ORDER BY
+         CASE WHEN scope = 'global' THEN 0 ELSE 1 END,
+         CASE country_code
+           WHEN 'GH' THEN 1
+           WHEN 'NG' THEN 2
+           WHEN 'KE' THEN 3
+           WHEN 'SN' THEN 4
+           WHEN 'STBY' THEN 5
+           ELSE 9
+         END,
+         country_code NULLS FIRST`
     );
   }
 

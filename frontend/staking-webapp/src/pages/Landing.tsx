@@ -17,7 +17,10 @@ export default function Landing() {
 
   const connect = async () => {
     const eth = (window as any).ethereum;
-    if (!eth) return;
+    if (!eth) {
+      alert('Install a Web3 wallet (e.g. MetaMask) to connect');
+      return;
+    }
     const accounts = await eth.request({ method: 'eth_requestAccounts' });
     setAccount(accounts[0]);
   };
@@ -54,6 +57,9 @@ export default function Landing() {
     const live = (stats?.pools || []).find(card.match);
     return {
       ...card,
+      id: live?.id || card.id,
+      title: live?.name || card.title,
+      subtitle: live?.apy_or_benefit_desc || card.subtitle,
       apy:
         live?.base_apy_pct > 0
           ? `${Number(live.base_apy_pct).toFixed(1)}%`
@@ -61,14 +67,16 @@ export default function Landing() {
     };
   });
 
+  const total = Number(stats?.totalStaked || 0);
+
   return (
-    <div>
+    <div style={{ minHeight: '100vh', background: '#000', color: '#fff', padding: '28px 32px 64px' }}>
       <header
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 56,
+          marginBottom: 72,
         }}
       >
         <div style={{ fontSize: 20 }}>
@@ -78,11 +86,11 @@ export default function Landing() {
         <button
           onClick={connect}
           style={{
-            background: '#1A1A1A',
+            background: 'transparent',
             border: '1px solid #2A2A2A',
             color: '#fff',
-            borderRadius: 10,
-            padding: '10px 14px',
+            borderRadius: 999,
+            padding: '10px 16px',
             cursor: 'pointer',
             fontWeight: 600,
           }}
@@ -91,18 +99,20 @@ export default function Landing() {
         </button>
       </header>
 
-      <section style={{ textAlign: 'center', marginBottom: 48 }}>
+      <section style={{ textAlign: 'center', marginBottom: 56 }}>
         <p style={{ color: '#A0A0A0', marginBottom: 8 }}>Total value staked</p>
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.2rem)', margin: 0, fontWeight: 800 }}>
-          {(stats?.totalStaked || 2480000).toLocaleString()} DVT
+          {total.toLocaleString()} DVT
         </h1>
       </section>
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
           gap: 16,
+          maxWidth: 960,
+          margin: '0 auto',
         }}
       >
         {pools.map((p) => (
@@ -110,7 +120,6 @@ export default function Landing() {
             key={p.id}
             style={{
               background: '#121212',
-              border: '1px solid #2A2A2A',
               borderRadius: 16,
               padding: 24,
               display: 'flex',
@@ -131,7 +140,7 @@ export default function Landing() {
                   borderRadius: 999,
                   padding: '12px 16px',
                   border: '1px solid #2A2A2A',
-                  background: '#0A0A0A',
+                  background: 'transparent',
                   color: '#888',
                   fontWeight: 700,
                 }}
@@ -140,13 +149,13 @@ export default function Landing() {
               </button>
             ) : (
               <Link
-                to="/stake"
+                to={`/stake?pool=${encodeURIComponent(String(p.id))}`}
                 style={{
                   display: 'block',
                   textAlign: 'center',
                   borderRadius: 999,
                   padding: '12px 16px',
-                  background: 'linear-gradient(90deg, #6A00FF, #0055FF)',
+                  background: 'linear-gradient(90deg, #2dd4bf, #6A00FF)',
                   color: '#fff',
                   fontWeight: 700,
                   textDecoration: 'none',

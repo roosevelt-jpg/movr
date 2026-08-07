@@ -152,3 +152,21 @@ export function formatLocalTime(
     timeStyle: 'short',
   }).format(d);
 }
+
+/** Relative time for inbox / wallet activity (e.g. "2 min ago"). */
+export function formatRelativeTime(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  const diffMs = Date.now() - d.getTime();
+  if (Number.isNaN(diffMs)) return '';
+  const sec = Math.max(0, Math.round(diffMs / 1000));
+  if (sec < 60) return 'just now';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const days = Math.round(hr / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return formatLocalTime(d);
+}

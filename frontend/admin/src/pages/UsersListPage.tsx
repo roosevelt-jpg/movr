@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Search, Filter } from 'lucide-react';
 import AdminShell from '../layouts/AdminShell';
-import DataTable, { DataTableColumn } from '../components/DataTable';
-import FilterBar from '../components/FilterBar';
 import DetailPanel from '../components/DetailPanel';
 import OpsNotesPanel from '../components/OpsNotesPanel';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
-const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
+const headers = () => ({
+  Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}`,
+});
 
 type TabKey = 'all' | 'customer' | 'driver' | 'merchant';
 
@@ -28,7 +29,7 @@ type UserRow = {
   user_type?: string;
 };
 
-/** Admin users list — search, role tabs, status badges. */
+/** Admin users list — search, role tabs, status badges (mockup). */
 export default function UsersListPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>('all');
@@ -37,17 +38,6 @@ export default function UsersListPage() {
   const [counts, setCounts] = useState({ all: 0, customer: 0, driver: 0, merchant: 0 });
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [error, setError] = useState('');
-
-  const computeCountsFromRows = (list: UserRow[]) => {
-    const next = { all: list.length, customer: 0, driver: 0, merchant: 0 };
-    for (const r of list) {
-      const t = String(r.user_type || '').toLowerCase();
-      if (t === 'driver') next.driver += 1;
-      else if (t === 'merchant') next.merchant += 1;
-      else next.customer += 1;
-    }
-    return next;
-  };
 
   const load = async () => {
     let mapped: UserRow[] = [];
@@ -92,11 +82,9 @@ export default function UsersListPage() {
           driver: Number(cRes.data.data.driver || 0),
           merchant: Number(cRes.data.data.merchant || 0),
         });
-      } else {
-        setCounts(computeCountsFromRows(mapped));
       }
     } catch {
-      setCounts(computeCountsFromRows(mapped));
+      /* keep previous */
     }
   };
 
@@ -104,105 +92,122 @@ export default function UsersListPage() {
     load();
   }, [tab]);
 
-  const openIdentity = (r: UserRow) => {
-    setSelected(r);
-  };
-
   const tabCount = (key: TabKey) => counts[key] ?? 0;
-
-  const columns: DataTableColumn<UserRow>[] = [
-    {
-      key: 'name',
-      header: 'Name',
-      render: (r) => (
-        <span className="inline-flex items-center gap-admin-2 font-semibold">
-          <span className="inline-block w-8 h-8 rounded-full bg-border" />
-          {r.name}
-        </span>
-      ),
-    },
-    { key: 'role', header: 'Role' },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (r) => (
-        <span
-          className={`rounded-pill px-admin-2 py-admin-1 text-admin-xs font-bold ${
-            r.status === 'Active'
-              ? 'bg-movr-green/35 text-success'
-              : 'bg-error/20 text-error'
-          }`}
-        >
-          {r.status}
-        </span>
-      ),
-    },
-    {
-      key: 'joined',
-      header: 'Joined',
-      render: (r) => <span className="text-text-secondary">{r.joined}</span>,
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: (r) => (
-        <button
-          type="button"
-          className="text-motion-blue font-semibold"
-          onClick={(e) => {
-            e.stopPropagation();
-            openIdentity(r);
-          }}
-        >
-          Review
-        </button>
-      ),
-    },
-  ];
 
   return (
     <AdminShell activeLabel="Users">
-      <div className="flex gap-admin-4 items-start">
+      <div className="flex gap-6 items-start min-h-[70vh] bg-black text-white -m-2 p-2 md:p-0">
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between gap-admin-4 flex-wrap mb-admin-4">
-            <h1 className="text-2xl font-bold m-0">Users</h1>
-          </div>
-
-          <FilterBar
-            search={q}
-            onSearchChange={setQ}
-            searchPlaceholder="Search users..."
-            filters={[
-              {
-                key: 'role',
-                label: 'Role',
-                value: tab,
-                options: TAB_DEFS.map((t) => ({
-                  value: t.key,
-                  label: `${t.label} (${tabCount(t.key).toLocaleString()})`,
-                })),
-                onChange: (v) => setTab(v as TabKey),
-              },
-            ]}
-            actions={
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h1 className="text-3xl font-bold m-0 tracking-tight">Users</h1>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && load()}
+                  placeholder="Search users..."
+                  className="w-56 rounded-lg bg-[#1A1A1A] border border-[#2A2A2A] pl-9 pr-3 py-2 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-[#3B5CFF]"
+                />
+              </div>
               <button
                 type="button"
-                onClick={() => load()}
-                className="rounded-md bg-surface-elevated border border-border px-admin-3 py-admin-2 text-admin-sm text-text-primary"
+                onClick={() => setTab('all')}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-2 text-sm text-zinc-300"
               >
-                Search
+                <Filter size={14} /> All roles
               </button>
-            }
-          />
+            </div>
+          </div>
 
-          {error ? <p className="text-error mb-admin-3">{error}</p> : null}
+          <div className="flex gap-6 border-b border-[#2A2A2A] mb-4">
+            {TAB_DEFS.map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={`pb-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    active
+                      ? 'text-white border-[#3B5CFF]'
+                      : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  }`}
+                >
+                  {t.label} ({tabCount(t.key).toLocaleString()})
+                </button>
+              );
+            })}
+          </div>
 
-          <DataTable
-            columns={columns}
-            rows={rows}
-            onRowClick={openIdentity}
-            emptyMessage="No users found"
-          />
+          {error ? <p className="text-red-400 mb-3 text-sm">{error}</p> : null}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-zinc-500 text-sm">
+                  <th className="font-medium py-3 pr-4">Name</th>
+                  <th className="font-medium py-3 pr-4">Role</th>
+                  <th className="font-medium py-3 pr-4">Status</th>
+                  <th className="font-medium py-3 pr-4">Joined</th>
+                  <th className="font-medium py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-zinc-500 text-sm">
+                      No users found
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-t border-[#2A2A2A] hover:bg-[#111] cursor-pointer"
+                      onClick={() => setSelected(r)}
+                    >
+                      <td className="py-4 pr-4">
+                        <span className="inline-flex items-center gap-3 font-semibold">
+                          <span className="inline-block w-9 h-9 rounded-full bg-[#2A2A2A]" />
+                          {r.name}
+                        </span>
+                      </td>
+                      <td className="py-4 pr-4 text-zinc-300">{r.role}</td>
+                      <td className="py-4 pr-4">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                            r.status === 'Active'
+                              ? 'bg-emerald-900/50 text-emerald-400'
+                              : 'bg-red-900/40 text-red-400'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="py-4 pr-4 text-zinc-500">{r.joined}</td>
+                      <td className="py-4 text-right">
+                        <button
+                          type="button"
+                          className="text-[#5B8AFF] font-semibold text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelected(r);
+                          }}
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <DetailPanel

@@ -16,7 +16,7 @@ type KycRow = {
   status: string;
 };
 
-/** KYC approval queue — drivers + merchants; approve/reject publishes on-chain attestation. */
+/** KYC approval queue — mockup-aligned; approve/reject publishes attestation. */
 export default function KycQueuePage() {
   const [rows, setRows] = useState<KycRow[]>([]);
   const [error, setError] = useState('');
@@ -30,11 +30,9 @@ export default function KycQueuePage() {
         id: r.id || r.user_id,
         name: r.name || r.business_name || 'Applicant',
         role: r.role || (r.user_type === 'merchant' ? 'Merchant' : 'Driver'),
-        submitted: r.submitted_at
-          ? new Date(r.submitted_at).toLocaleString()
-          : r.submitted || '—',
+        submitted: r.submitted || (r.submitted_at ? relative(r.submitted_at) : '—'),
         docs: r.docs_label || `${r.docs_uploaded || 0}/${r.docs_required || 3} docs`,
-        status: r.status || 'Pending',
+        status: 'Pending',
       }))
     );
   };
@@ -91,9 +89,9 @@ export default function KycQueuePage() {
                 <span style={styles.avatar} />
                 {r.name}
               </span>
-              <span>{r.role}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{r.role}</span>
               <span style={{ color: 'var(--text-secondary)' }}>{r.submitted}</span>
-              <span style={{ color: 'var(--text-secondary)' }}>{r.docs}</span>
+              <span>{r.docs}</span>
               <span>
                 <span style={styles.badge}>{r.status}</span>
               </span>
@@ -126,13 +124,23 @@ export default function KycQueuePage() {
   );
 }
 
+function relative(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins <= 1 ? '1 min ago' : `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return h === 1 ? '1 hr ago' : `${h} hrs ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? '1 day ago' : `${d} days ago`;
+}
+
 const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, margin: 0 },
   sub: { color: 'var(--text-secondary)', marginTop: 8, marginBottom: 20 },
   table: { borderTop: '1px solid var(--surface-elevated)' },
   header: {
     display: 'grid',
-    gridTemplateColumns: '1.4fr 0.7fr 1fr 0.8fr 0.7fr 1.4fr',
+    gridTemplateColumns: '1.6fr 0.7fr 1fr 0.9fr 0.8fr 1.2fr',
     gap: 8,
     padding: '12px 4px',
     color: 'var(--text-secondary)',
@@ -140,7 +148,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   row: {
     display: 'grid',
-    gridTemplateColumns: '1.4fr 0.7fr 1fr 0.8fr 0.7fr 1.4fr',
+    gridTemplateColumns: '1.6fr 0.7fr 1fr 0.9fr 0.8fr 1.2fr',
     gap: 8,
     padding: '16px 4px',
     borderTop: '1px solid var(--surface-elevated)',
@@ -154,20 +162,21 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     background: 'var(--border)',
     display: 'inline-block',
+    flexShrink: 0,
   },
   badge: {
     borderRadius: 999,
     padding: '4px 10px',
     fontSize: 12,
     fontWeight: 700,
-    background: 'color-mix(in srgb, var(--warning) 22%, transparent)',
-    color: 'var(--warning)',
+    background: 'rgba(180, 140, 20, 0.28)',
+    color: '#E8C547',
   },
-  actions: { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  actions: { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' },
   approve: {
-    background: 'var(--success)',
-    color: 'var(--jet-black)',
-    border: 'none',
+    background: 'transparent',
+    color: 'var(--success)',
+    border: '1px solid var(--success)',
     borderRadius: 8,
     padding: '6px 10px',
     fontWeight: 700,
@@ -184,5 +193,5 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: 12,
   },
-  review: { color: 'var(--motion-blue)', fontWeight: 600, fontSize: 12, alignSelf: 'center' },
+  review: { color: 'var(--motion-blue)', fontWeight: 600, fontSize: 13, textDecoration: 'none' },
 };

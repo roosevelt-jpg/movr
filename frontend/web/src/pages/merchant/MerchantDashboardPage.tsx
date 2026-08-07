@@ -12,7 +12,19 @@ function authHeaders() {
   return { Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` };
 }
 
-/** Merchant orders dashboard — uses shared shell. */
+const PENDING = ['pending_payment', 'paid', 'pending', 'placed', 'awaiting_acceptance'];
+
+function statusLabel(status: string) {
+  const s = String(status).toLowerCase();
+  if (s === 'preparing' || s === 'accepted') return 'Preparing.';
+  if (s === 'out_for_delivery') return 'Out for delivery.';
+  if (s === 'ready_for_pickup') return 'Ready for pickup';
+  if (s === 'completed') return 'Completed';
+  if (s === 'rejected' || s === 'cancelled') return s.charAt(0).toUpperCase() + s.slice(1);
+  return status;
+}
+
+/** Merchant orders dashboard — Accept/Reject, Preparing, Out for delivery, live stats. */
 export default function MerchantDashboardPage() {
   const navigate = useNavigate();
   const { formatMoney } = useLocalCurrency();
@@ -35,31 +47,35 @@ export default function MerchantDashboardPage() {
     load().catch((err) => toast.error(err.message));
   }, []);
 
-  const pendingCount = orders.filter((o) =>
-    ['pending', 'placed', 'awaiting_acceptance'].includes(String(o.status))
-  ).length;
+  const pendingCount = orders.filter((o) => PENDING.includes(String(o.status))).length;
 
   const visible = useMemo(() => {
     if (filter === 'all') return orders;
-    return orders.filter((o) =>
-      ['pending', 'placed', 'awaiting_acceptance'].includes(String(o.status))
-    );
+    return orders.filter((o) => PENDING.includes(String(o.status)));
   }, [orders, filter]);
 
   const stats = useMemo(() => {
     const today = earnings[0];
     const sales = Number(today?.gmv || 0);
-    const count = Number(today?.orders || orders.length || 0);
+    const count = Number(today?.orders || 0);
     return {
       sales,
       orders: count,
       avg: count ? sales / count : 0,
     };
-  }, [earnings, orders]);
+  }, [earnings]);
 
-  const act = async (id: string, action: 'accept' | 'reject') => {
+  const act = async (id: string, action: 'accept' | 'reject' | 'out-for-delivery' | 'preparing') => {
     await axios.patch(`${API}/merchant/orders/${id}/${action}`, {}, { headers: authHeaders() });
-    toast.success(action === 'accept' ? 'Order accepted' : 'Order rejected');
+    toast.success(
+      action === 'accept'
+        ? 'Order accepted'
+        : action === 'reject'
+          ? 'Order rejected'
+          : action === 'out-for-delivery'
+            ? 'Out for delivery'
+            : 'Marked preparing'
+    );
     await load();
   };
 
@@ -83,10 +99,16 @@ export default function MerchantDashboardPage() {
 
   const statusBadge = (status: string) => {
     const s = String(status).toLowerCase();
-    if (s.includes('prepar')) return 'bg-motion-blue/25 text-motion-blue border-motion-blue/40';
+    if (s.includes('prepar') || s === 'accepted')
+      return 'bg-motion-blue/25 text-motion-blue border-motion-blue/40';
     if (s.includes('delivery') || s.includes('courier'))
       return 'bg-warning/15 text-warning border-warning/40';
     return 'bg-border text-text-secondary border-border';
+  };
+
+  const orderRef = (id: string) => {
+    const n = String(id).replace(/-/g, '').slice(-4).toUpperCase();
+    return n || String(id).slice(0, 4).toUpperCase();
   };
 
   return (
@@ -105,7 +127,9 @@ export default function MerchantDashboardPage() {
           <button
             onClick={() => setFilter('pending')}
             className={`rounded-full px-4 py-1.5 text-sm border ${
-              filter === 'pending' ? 'border-motion-blue text-pure-white' : 'border-border text-text-secondary'
+              filter === 'pending'
+                ? 'bg-surface-elevated border-border text-pure-white'
+                : 'border-border text-text-secondary'
             }`}
           >
             Pending ({pendingCount})
@@ -115,7 +139,8 @@ export default function MerchantDashboardPage() {
 
       <div className="space-y-3 mb-8">
         {visible.map((o) => {
-          const pending = ['pending', 'placed', 'awaiting_acceptance'].includes(String(o.status));
+          const pending = PENDING.includes(String(o.status));
+          const preparing = ['accepted', 'preparing'].includes(String(o.status));
           return (
             <div
               key={o.id}
@@ -123,33 +148,43 @@ export default function MerchantDashboardPage() {
             >
               <div>
                 <p className="font-semibold">
-                  Order #{String(o.id).slice(0, 4).toUpperCase()}
+                  Order #{orderRef(o.id)}
                   {o.customer_name ? ` · ${o.customer_name}` : ''}
                 </p>
                 <p className="text-sm text-text-secondary mt-1">
-                  {o.item_count || o.items_count || '—'} items · {formatMoney(Number(o.total || 0))}
+                  {o.item_count ?? '—'} items · {formatMoney(Number(o.total || 0))}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
                 {pending ? (
                   <>
                     <button
-                      className="rounded-lg px-4 py-2 text-sm font-semibold bg-movr-green"
+                      className="rounded-lg px-4 py-2 text-sm font-semibold bg-success text-jet-black"
                       onClick={() => act(o.id, 'accept')}
                     >
                       Accept
                     </button>
                     <button
-                      className="rounded-lg px-4 py-2 text-sm font-semibold border border-error/50 text-error"
+                      className="rounded-lg px-4 py-2 text-sm font-semibold bg-error/80 text-pure-white"
                       onClick={() => act(o.id, 'reject')}
                     >
                       Reject
                     </button>
                   </>
                 ) : (
-                  <span className={`rounded-lg px-3 py-1.5 text-sm border ${statusBadge(o.status)}`}>
-                    {o.status}
-                  </span>
+                  <>
+                    <span className={`rounded-lg px-3 py-1.5 text-sm border ${statusBadge(o.status)}`}>
+                      {statusLabel(o.status)}
+                    </span>
+                    {preparing ? (
+                      <button
+                        className="rounded-lg px-3 py-1.5 text-sm border border-warning/40 text-warning"
+                        onClick={() => act(o.id, 'out-for-delivery')}
+                      >
+                        Out for delivery
+                      </button>
+                    ) : null}
+                  </>
                 )}
                 <button
                   className="text-sm text-motion-blue"
@@ -178,10 +213,7 @@ export default function MerchantDashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          {
-            label: "Today's sales",
-            value: formatMoney(stats.sales),
-          },
+          { label: "Today's sales", value: formatMoney(stats.sales) },
           { label: 'Orders', value: String(stats.orders) },
           { label: 'Avg order', value: formatMoney(stats.avg) },
         ].map((s) => (

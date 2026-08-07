@@ -2,12 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import { formatCurrency, formatLocalTime } from '@movr/design-system/format';
+import { formatCurrency, formatRelativeTime } from '@movr/design-system/format';
 import { useWallet } from '../../context/WalletContext';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-/** Wallet — balance card, points/DVT, send/top-up, recent activity. */
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Wallet — mockup: gradient balance card, Send money / Top up, recent activity badges. */
 export default function WalletScreen({
   onSend,
   onTopUp,
@@ -22,51 +29,77 @@ export default function WalletScreen({
 
   const { balance: ctxBalance, rewardsBalance, transactions, currency, refresh, dvtBalance, refreshDvt } =
     useWallet();
-  const [balance, setBalance] = useState(0);
-  const [points, setPoints] = useState(0);
   const [estimatedDvt, setEstimatedDvt] = useState(0);
-  const [activity, setActivity] = useState<any[]>([]);
+  const [pointsHistory, setPointsHistory] = useState<any[]>([]);
 
   useEffect(() => {
     refresh();
     refreshDvt();
-    setBalance(ctxBalance);
-    setPoints(rewardsBalance);
-    setActivity(
-      transactions.slice(0, 10).map((t) => ({
-        id: t.id,
-        title: t.type || t.reference || 'Transaction',
-        when: t.created_at ? formatLocalTime(t.created_at) : '',
-        amount: Number(t.amount),
-        kind: 'fiat',
-        status: 'Completed',
-      }))
-    );
-    fetch(`${API}/points/estimated-dvt`)
+    fetch(`${API}/points/estimated-dvt`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data?.estimatedDvt != null) setEstimatedDvt(Number(j.data.estimatedDvt));
       })
       .catch(() => undefined);
-  }, [ctxBalance, rewardsBalance, transactions, refresh, refreshDvt]);
+    fetch(`${API}/points/history`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j?.data)) setPointsHistory(j.data.slice(0, 5));
+      })
+      .catch(() => undefined);
+  }, [refresh, refreshDvt]);
 
-  const dvtDisplay = estimatedDvt || dvtBalance || 0;
+  const dvtDisplay = estimatedDvt || dvtBalance || Math.round(Number(rewardsBalance) / 10);
+
+  const activity = [
+    ...transactions.slice(0, 8).map((t) => {
+      const type = String(t.type || '').toLowerCase();
+      const amt = Number(t.amount);
+      const isReward = /reward|points|referral|bonus/.test(type);
+      const title =
+        t.reference ||
+        (type.includes('ride')
+          ? 'Ride'
+          : type.includes('transfer') || type.includes('sent')
+            ? 'Sent'
+            : type.includes('topup')
+              ? 'Top up'
+              : t.type || 'Transaction');
+      return {
+        id: `w-${t.id}`,
+        title,
+        when: formatRelativeTime(t.created_at),
+        amount: amt,
+        kind: 'fiat' as const,
+        status: isReward ? 'Reward' : 'Completed',
+      };
+    }),
+    ...pointsHistory.map((p) => ({
+      id: `p-${p.id}`,
+      title: p.reason || p.activity_type || 'Referral reward',
+      when: formatRelativeTime(p.created_at),
+      amount: Number(p.points || p.amount || 0),
+      kind: 'pts' as const,
+      status: 'Reward' as const,
+    })),
+  ].slice(0, 10);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Wallet</Text>
 
       <View style={styles.balanceCard}>
-        <View style={styles.balanceGlow} />
+        <View style={styles.balanceGlowA} />
+        <View style={styles.balanceGlowB} />
         <Text style={styles.label}>Available balance</Text>
-        <Text style={styles.balance}>{formatCurrency(balance, currency || 'GHS')}</Text>
+        <Text style={styles.balance}>{formatCurrency(ctxBalance, currency || 'GHS')}</Text>
         <View style={styles.divider} />
         <View style={styles.pointsRow}>
           <View>
             <Text style={styles.label}>Movr points</Text>
-            <Text style={styles.points}>{points.toLocaleString()} pts</Text>
+            <Text style={styles.points}>{Number(rewardsBalance).toLocaleString()} pts</Text>
           </View>
-          <Text style={styles.dvt}>≈ {dvtDisplay.toLocaleString()} DVT at TGE</Text>
+          <Text style={styles.dvt}>≈ {Number(dvtDisplay).toLocaleString()} DVT at TGE</Text>
         </View>
       </View>
 
@@ -86,7 +119,7 @@ export default function WalletScreen({
         </Pressable>
       ) : null}
 
-      <Text style={styles.section}>Recent activity</Text>
+      <Text style={styles.section}>RECENT ACTIVITY</Text>
       {activity.length === 0 ? (
         <Text style={styles.empty}>No transactions yet.</Text>
       ) : (
@@ -100,10 +133,14 @@ export default function WalletScreen({
               <Text style={[styles.itemAmt, row.kind === 'pts' && styles.ptsAmt]}>
                 {row.kind === 'pts'
                   ? `${row.amount > 0 ? '+' : ''}${row.amount} pts`
-                  : `${row.amount > 0 ? '+' : '-'}${formatCurrency(Math.abs(row.amount), 'GHS')}`}
+                  : `${row.amount >= 0 ? '' : '-'}${formatCurrency(Math.abs(row.amount), currency || 'GHS')}`}
               </Text>
               <View style={[styles.badge, row.status === 'Reward' && styles.badgeReward]}>
-                <Text style={styles.badgeText}>{row.status}</Text>
+                <Text
+                  style={[styles.badgeText, row.status === 'Reward' && styles.badgeRewardText]}
+                >
+                  {row.status}
+                </Text>
               </View>
             </View>
           </View>
@@ -115,76 +152,94 @@ export default function WalletScreen({
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
-  balanceCard: {
-    borderRadius: radius.lg,
-    padding: spacing[5],
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-    marginBottom: spacing[4],
-  },
-  balanceGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.35,
-  },
-  label: { color: 'rgba(255,255,255,0.7)', fontSize: 13, zIndex: 1 },
-  balance: { color: colors.pureWhite, fontSize: 36, fontWeight: '700', marginTop: 6, zIndex: 1 },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: spacing[4] },
-  pointsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', zIndex: 1 },
-  points: { color: colors.pureWhite, fontSize: 22, fontWeight: '700', marginTop: 4 },
-  dvt: { color: 'rgba(255,255,255,0.75)', fontSize: 13 },
-  actions: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[5] },
-  sendBtn: {
-    flex: 1.4,
-    borderRadius: radius.pill,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.electricViolet,
-    overflow: 'hidden',
-  },
-  sendGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.4,
-  },
-  sendText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-  topUp: {
-    flex: 1,
-    borderRadius: radius.pill,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  topUpText: { color: colors.pureWhite, fontWeight: '700' },
-  section: { color: colors.textSecondary, fontSize: 13, marginBottom: spacing[3] },
-  empty: { color: colors.textSecondary, fontSize: 14 },
-  item: {
-    flexDirection: 'row',
-    padding: spacing[4],
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-    marginBottom: spacing[3],
-  },
-  itemTitle: { color: colors.pureWhite, fontWeight: '600' },
-  itemWhen: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
-  itemAmt: { color: colors.pureWhite, fontWeight: '700' },
-  ptsAmt: { color: colors.motionBlue },
-  badge: {
-    marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(63,112,72,0.35)',
-  },
-  badgeReward: { backgroundColor: 'rgba(106,0,255,0.35)' },
-  badgeText: { color: colors.pureWhite, fontSize: 11, fontWeight: '600' },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+    balanceCard: {
+      borderRadius: 24,
+      padding: spacing[5],
+      backgroundColor: '#0a1628',
+      overflow: 'hidden',
+      marginBottom: spacing[4],
+    },
+    balanceGlowA: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.45,
+    },
+    balanceGlowB: {
+      position: 'absolute',
+      right: -40,
+      top: -40,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: colors.electricViolet,
+      opacity: 0.35,
+    },
+    label: { color: 'rgba(255,255,255,0.7)', fontSize: 13, zIndex: 1 },
+    balance: { color: colors.pureWhite, fontSize: 36, fontWeight: '700', marginTop: 6, zIndex: 1 },
+    divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: spacing[4] },
+    pointsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
+      zIndex: 1,
+    },
+    points: { color: colors.pureWhite, fontSize: 22, fontWeight: '700', marginTop: 4 },
+    dvt: { color: '#8eb6ff', fontSize: 13, fontWeight: '600' },
+    actions: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[5] },
+    sendBtn: {
+      flex: 1.35,
+      borderRadius: radius.lg,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.electricViolet,
+      overflow: 'hidden',
+    },
+    sendGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.45,
+    },
+    sendText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
+    topUp: {
+      flex: 1,
+      borderRadius: radius.lg,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceElevated,
+    },
+    topUpText: { color: colors.pureWhite, fontWeight: '700' },
+    section: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      letterSpacing: 0.8,
+      fontWeight: '600',
+      marginBottom: spacing[3],
+    },
+    empty: { color: colors.textSecondary, fontSize: 14 },
+    item: {
+      flexDirection: 'row',
+      padding: spacing[4],
+      borderRadius: radius.lg,
+      backgroundColor: colors.surfaceElevated,
+      marginBottom: spacing[3],
+    },
+    itemTitle: { color: colors.pureWhite, fontWeight: '600' },
+    itemWhen: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
+    itemAmt: { color: colors.pureWhite, fontWeight: '700' },
+    ptsAmt: { color: colors.motionBlue },
+    badge: {
+      marginTop: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      backgroundColor: 'rgba(0,217,122,0.18)',
+    },
+    badgeReward: { backgroundColor: 'rgba(0,85,255,0.22)' },
+    badgeText: { color: colors.success, fontSize: 11, fontWeight: '700' },
+    badgeRewardText: { color: colors.motionBlue },
+  });
 }

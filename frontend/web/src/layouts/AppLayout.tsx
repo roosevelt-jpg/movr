@@ -186,6 +186,11 @@ const AppLayout: React.FC = () => {
     </>
   );
 
+  // Ride booking shell matches mockup full-bleed (own header/sidebar)
+  if (location.pathname === '/dashboard') {
+    return <Outlet />;
+  }
+
   return (
     <div className="min-h-screen bg-surface text-text-primary flex font-[Poppins,Montserrat,sans-serif]">
       <aside className="hidden md:flex w-56 shrink-0 border-r border-border bg-jet-black p-4 flex-col sticky top-0 h-screen">

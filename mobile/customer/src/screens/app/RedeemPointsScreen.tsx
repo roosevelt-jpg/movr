@@ -1,29 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-/** Redeem points — catalog + redeem CTA. */
-export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
+/** Redeem points — live catalog + balance (mockup: 1,280 pts). */
+export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) {
   const [balance, setBalance] = useState(0);
   const [catalog, setCatalog] = useState<{ id: string; label: string; points: number }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/points/balance`).then((r) => r.json()).catch(() => null),
-      fetch(`${API}/points/redeem-catalog`).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/points/balance`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`${API}/points/redeem-catalog`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .catch(() => null),
     ]).then(([b, c]) => {
       if (b?.data?.balance != null) setBalance(Number(b.data.balance));
-      if (Array.isArray(c?.data)) {
+      if (Array.isArray(c?.data) && c.data.length) {
         setCatalog(c.data);
-        if (c.data.length) setSelected(c.data[0].id);
+        setSelected(c.data[0].id);
       }
     });
   }, []);
@@ -33,10 +44,11 @@ export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) 
   const redeem = async () => {
     if (!choice) return;
     setMsg('');
+    setLoading(true);
     try {
       const res = await fetch(`${API}/points/redeem`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           rewardId: choice.id,
           points: choice.points,
@@ -49,6 +61,8 @@ export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) 
       setMsg(`Redeemed · ${choice.points} pts`);
     } catch (e: any) {
       setMsg(e?.message || 'Redeem failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,12 +92,12 @@ export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) 
       )}
 
       <Pressable
-        style={[styles.btn, !choice && styles.btnDisabled]}
+        style={[styles.btn, (!choice || loading) && styles.btnDisabled]}
         onPress={redeem}
-        disabled={!choice}
+        disabled={!choice || loading}
       >
         <Text style={styles.btnText}>
-          {choice ? `Redeem · ${choice.points} pts` : 'Redeem'}
+          {loading ? 'Redeeming…' : choice ? `Redeem · ${choice.points} pts` : 'Redeem'}
         </Text>
       </Pressable>
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
@@ -91,35 +105,33 @@ export default function RedeemPointsScreen({ onBack }: { onBack?: () => void }) 
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  back: { color: colors.textSecondary, marginBottom: spacing[3] },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-  sub: { color: colors.textSecondary, marginTop: 8, marginBottom: spacing[5] },
-  empty: { color: colors.textSecondary, marginBottom: spacing[5] },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', padding: spacing[4] },
+  back: { color: 'rgba(255,255,255,0.5)', marginBottom: spacing[3] },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700' },
+  sub: { color: 'rgba(255,255,255,0.55)', marginTop: 8, marginBottom: spacing[5] },
+  empty: { color: 'rgba(255,255,255,0.5)', marginBottom: spacing[5] },
   card: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#1A1A1A',
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 2,
+    borderColor: 'transparent',
     padding: spacing[4],
     marginBottom: spacing[3],
   },
-  cardOn: { borderColor: colors.motionBlue },
-  cardLabel: { color: colors.pureWhite, fontWeight: '600', flex: 1, paddingRight: 8 },
-  cardPts: { color: colors.motionBlue, fontWeight: '600' },
+  cardOn: { borderColor: '#3B5CFF' },
+  cardLabel: { color: '#FFFFFF', fontWeight: '600', flex: 1, paddingRight: 8 },
+  cardPts: { color: '#7EB6FF', fontWeight: '600' },
   btn: {
     marginTop: spacing[4],
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: colors.motionBlue,
+    backgroundColor: '#3B5CFF',
   },
   btnDisabled: { opacity: 0.4 },
-  btnText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  msg: { color: colors.success, textAlign: 'center', marginTop: spacing[3] },
+  btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  msg: { color: '#4ADE80', textAlign: 'center', marginTop: spacing[3] },
 });
-}

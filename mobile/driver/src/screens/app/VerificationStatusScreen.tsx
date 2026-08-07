@@ -1,24 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import { VerifiedBadge } from '@movr/design-system/components/VerifiedBadge';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-type Doc = { key: string; label: string; status: 'verified' | 'in_review' | 'rejected'; reason?: string };
+type Doc = {
+  key: string;
+  label: string;
+  status: 'verified' | 'in_review' | 'rejected';
+  reason?: string;
+};
 
-/** KYC verification status — Verified / In review / Rejected + on-chain badge. */
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** KYC verification status — Verified / In review / Rejected (mockup). */
 export default function VerificationStatusScreen({
   onReupload,
-  userId,
 }: {
   onReupload?: (docKey: string) => void;
   userId?: string;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
   const [docs, setDocs] = useState<Doc[]>([
     { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
     { key: 'driving_license', label: 'Driving license', status: 'in_review' },
@@ -29,12 +38,11 @@ export default function VerificationStatusScreen({
       reason: 'Vehicle registration photo was blurry. Please re-upload a clear photo.',
     },
   ]);
-  const [attestation, setAttestation] = useState<{ status?: string; explorerUrl?: string | null }>(
-    {}
-  );
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    fetch(`${API}/identity/my-documents`)
+  const load = () => {
+    fetch(`${API}/identity/my-documents`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         if (Array.isArray(j.data) && j.data.length) {
@@ -53,46 +61,58 @@ export default function VerificationStatusScreen({
         }
       })
       .catch(() => undefined);
+  };
 
-    if (userId) {
-      fetch(`${API}/kyc/attestation/${userId}`)
-        .then((r) => r.json())
-        .then((j) => {
-          const row = j?.data;
-          if (!row) return;
-          const chain = String(row.chain || 'polygon-amoy');
-          const explorer = row.tx_hash
-            ? chain.includes('amoy')
-              ? `https://amoy.polygonscan.com/tx/${row.tx_hash}`
-              : `https://polygonscan.com/tx/${row.tx_hash}`
-            : null;
-          setAttestation({ status: row.status, explorerUrl: explorer });
-        })
-        .catch(() => undefined);
-    }
-  }, [userId]);
+  useEffect(() => {
+    load();
+  }, []);
 
   const rejected = docs.find((d) => d.status === 'rejected');
 
+  const reupload = async () => {
+    if (!rejected) return;
+    onReupload?.(rejected.key);
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await fetch(`${API}/identity/my-documents/${rejected.key}/reupload`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        setMsg('Document re-submitted for review');
+        load();
+      } else {
+        setMsg('Could not re-upload — try again');
+      }
+    } catch {
+      setMsg('Network error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const badge = (s: Doc['status']) => {
-    if (s === 'verified') return { bg: 'rgba(63,112,72,0.35)', color: colors.success, label: 'Verified' };
-    if (s === 'rejected') return { bg: 'rgba(255,59,92,0.2)', color: colors.error, label: 'Rejected' };
-    return { bg: 'rgba(255,184,0,0.2)', color: colors.warning, label: 'In review' };
+    if (s === 'verified') {
+      return { bg: 'rgba(34,197,94,0.2)', color: '#4ADE80', label: 'Verified' };
+    }
+    if (s === 'rejected') {
+      return { bg: 'rgba(239,68,68,0.2)', color: '#F87171', label: 'Rejected' };
+    }
+    return { bg: 'rgba(234,179,8,0.2)', color: '#FBBF24', label: 'In review' };
   };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
         <View style={styles.clock}>
-          <Text style={{ fontSize: 28 }}>⏱</Text>
+          <Text style={{ fontSize: 28, color: '#FBBF24' }}>⏱</Text>
         </View>
         <Text style={styles.title}>Verification in progress</Text>
         <Text style={styles.sub}>
           We're reviewing your documents. This usually takes less than 24 hours.
         </Text>
-        <View style={{ marginTop: spacing[3] }}>
-          <VerifiedBadge status={attestation.status} explorerUrl={attestation.explorerUrl} />
-        </View>
       </View>
 
       {docs.map((d) => {
@@ -107,61 +127,80 @@ export default function VerificationStatusScreen({
         );
       })}
 
-      {rejected?.reason ? <Text style={styles.reason}>{rejected.reason}</Text> : null}
+      {rejected?.reason ? (
+        <View style={styles.reasonBox}>
+          <Text style={styles.reason}>{rejected.reason}</Text>
+        </View>
+      ) : null}
+
+      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
       {rejected ? (
-        <Pressable style={styles.cta} onPress={() => onReupload?.(rejected.key)}>
-          <View style={styles.ctaGlow} />
-          <Text style={styles.ctaText}>Re-upload document</Text>
+        <Pressable style={styles.cta} onPress={reupload} disabled={busy}>
+          <View style={styles.ctaLeft} />
+          <View style={styles.ctaRight} />
+          <Text style={styles.ctaText}>{busy ? 'Uploading…' : 'Re-upload document'}</Text>
         </Pressable>
       ) : null}
     </ScrollView>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', padding: spacing[4] },
   header: { alignItems: 'center', marginBottom: spacing[6], marginTop: spacing[4] },
   clock: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[4],
   },
-  title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  sub: { color: colors.textSecondary, textAlign: 'center', marginTop: 10, lineHeight: 20 },
+  title: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  sub: {
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 20,
+    paddingHorizontal: 12,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
     padding: spacing[4],
     marginBottom: spacing[3],
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  docLabel: { color: colors.pureWhite, fontWeight: '600', fontSize: 15, flex: 1 },
+  docLabel: { color: '#FFFFFF', fontWeight: '600', fontSize: 15, flex: 1 },
   pill: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
   pillText: { fontSize: 12, fontWeight: '700' },
-  reason: { color: colors.error, marginBottom: spacing[4], lineHeight: 20 },
+  reasonBox: {
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: 14,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+  },
+  reason: { color: '#F87171', textAlign: 'center', lineHeight: 20 },
+  msg: { color: '#A1A1AA', textAlign: 'center', marginBottom: spacing[3] },
   cta: {
+    marginTop: spacing[2],
     borderRadius: radius.pill,
     overflow: 'hidden',
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.electricViolet,
+    backgroundColor: '#6345ED',
   },
-  ctaGlow: {
+  ctaLeft: { ...StyleSheet.absoluteFillObject, backgroundColor: '#6345ED' },
+  ctaRight: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.7,
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
-}

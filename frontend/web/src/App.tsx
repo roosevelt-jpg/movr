@@ -1,6 +1,6 @@
 // frontend/web/src/App.tsx
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -49,6 +49,7 @@ import MerchantAnalyticsPage from './pages/merchant/MerchantAnalyticsPage';
 import MerchantPayoutsPage from './pages/merchant/MerchantPayoutsPage';
 import MerchantStakingPage from './pages/merchant/MerchantStakingPage';
 import MerchantLandingPage from './pages/public/MerchantLandingPage';
+import DriverLandingPage from './pages/public/DriverLandingPage';
 import DownloadAppPage from './pages/public/DownloadAppPage';
 import TermsPage from './pages/public/TermsPage';
 import HelpCentrePage from './pages/public/HelpCentrePage';
@@ -88,6 +89,34 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   return <>{children}</>;
 };
 
+/** Redirect to /offline when the browser reports offline (skip when already there). */
+const OfflineGate: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const goOffline = () => {
+      if (location.pathname !== '/offline') {
+        navigate('/offline', { replace: false, state: { from: location.pathname } });
+      }
+    };
+    const goOnline = () => {
+      if (location.pathname === '/offline') {
+        navigate(-1);
+      }
+    };
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    if (!navigator.onLine && location.pathname !== '/offline') goOffline();
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  }, [location.pathname, navigate]);
+
+  return null;
+};
+
 const App: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
 
@@ -95,11 +124,14 @@ const App: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
       <Router>
+        <OfflineGate />
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/merchants" element={<MerchantLandingPage />} />
           <Route path="/for-merchants" element={<MerchantLandingPage />} />
+          <Route path="/drivers" element={<DriverLandingPage />} />
+          <Route path="/for-drivers" element={<DriverLandingPage />} />
           <Route path="/download" element={<DownloadAppPage />} />
           <Route path="/get-app" element={<DownloadAppPage />} />
           <Route path="/terms" element={<TermsPage />} />

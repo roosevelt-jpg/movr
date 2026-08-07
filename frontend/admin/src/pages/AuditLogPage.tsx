@@ -15,14 +15,16 @@ type AuditRow = {
 function relativeTime(iso?: string) {
   if (!iso) return '';
   const diff = Date.now() - new Date(iso).getTime();
-  const h = Math.floor(diff / 3600000);
-  if (h < 1) return 'Just now';
-  if (h < 24) return `${h} hrs ago`;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return h === 1 ? '1 hr ago' : `${h} hrs ago`;
   const d = Math.floor(h / 24);
   return d === 1 ? '1 day ago' : `${d} days ago`;
 }
 
-/** Admin audit log table. */
+/** Admin audit log table — live from audit_log. */
 export default function AuditLogPage() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [error, setError] = useState('');
@@ -35,13 +37,12 @@ export default function AuditLogPage() {
         setRows(
           data.map((a: any) => ({
             admin:
+              a.admin_name ||
               [a.first_name, a.last_name].filter(Boolean).join(' ') ||
               a.email ||
               'Admin',
-            action: a.action?.replace(/_/g, ' ') || a.reason || 'Action',
-            entity: a.resource_type
-              ? `${a.resource_type}${a.resource_id ? ` #${String(a.resource_id).slice(0, 8)}` : ''}`
-              : '—',
+            action: a.action_label || a.reason || a.action?.replace(/_/g, ' ') || 'Action',
+            entity: a.entity_label || '—',
             time: relativeTime(a.created_at),
           }))
         );

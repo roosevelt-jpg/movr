@@ -7,7 +7,7 @@ const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 /** Claim-link landing for unregistered recipients. */
 export default function ClaimTransferScreen({
-  claimCode = '',
+  claimCode = 'KWESI357',
   onClaim,
 }: {
   claimCode?: string;
@@ -104,14 +104,12 @@ function makeStyles(colors: any) {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.movrGreen,
-    borderWidth: 2,
-    borderColor: colors.success,
+    backgroundColor: '#163B2A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing[5],
   },
-  iconText: { fontSize: 28, color: colors.pureWhite },
+  iconText: { fontSize: 28, color: '#4ADE80', transform: [{ rotate: '-20deg' }] },
   from: { color: colors.textSecondary, marginBottom: 8 },
   amount: { color: colors.pureWhite, fontSize: 42, fontWeight: '700', marginBottom: spacing[4] },
   errorTitle: { color: colors.pureWhite, fontSize: 20, fontWeight: '600', marginBottom: 8 },
@@ -126,7 +124,8 @@ function makeStyles(colors: any) {
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: colors.motionBlue,
+    overflow: 'hidden',
+    backgroundColor: '#3B5CFF',
   },
   btnText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
 });

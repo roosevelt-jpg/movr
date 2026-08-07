@@ -5,6 +5,7 @@ import {
   authenticateToken,
   requireCustomer,
   requireAdmin,
+  requireDriver,
 } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { PaymentService } from '../services/payment.service';
@@ -151,6 +152,133 @@ rideExperienceRouter.get(
       res.json({ status: 'success', data: { url, token, expiresAt: expires } });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+rideExperienceRouter.post(
+  '/:id/rate',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { rating, review, comment, tags } = req.body;
+      const score = Number(rating);
+      if (!score || score < 1 || score > 5) {
+        return res.status(400).json({ status: 'error', message: 'Rating must be between 1 and 5' });
+      }
+      const tagList = Array.isArray(tags) ? tags.map(String) : [];
+      const reviewText = String(review || comment || '');
+
+      const ride = await db.query(`SELECT * FROM rides WHERE id = $1`, [req.params.id]);
+      if (!ride.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Ride not found' });
+      }
+
+      await db.query(
+        `UPDATE rides
+         SET rating = $1,
+             review = $2,
+             rating_tags = $3,
+             updated_at = NOW()
+         WHERE id = $4`,
+        [score, reviewText || null, tagList, req.params.id]
+      ).catch(async () => {
+        await db.query(
+          `UPDATE rides SET rating = $1, updated_at = NOW() WHERE id = $2`,
+          [score, req.params.id]
+        );
+      });
+
+      await db
+        .query(
+          `INSERT INTO ride_ratings (ride_id, customer_id, driver_id, rating, comment, tags)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (ride_id) DO UPDATE
+           SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, tags = EXCLUDED.tags`,
+          [
+            req.params.id,
+            ride.rows[0].customer_id,
+            ride.rows[0].driver_id,
+            score,
+            reviewText || null,
+            tagList,
+          ]
+        )
+        .catch(() => undefined);
+
+      if (ride.rows[0].driver_id) {
+        await db
+          .query(
+            `UPDATE drivers SET rating = (
+               SELECT ROUND(AVG(rating)::numeric, 2) FROM rides
+               WHERE driver_id = $1 AND rating IS NOT NULL
+             ) WHERE user_id = $1`,
+            [ride.rows[0].driver_id]
+          )
+          .catch(() => undefined);
+      }
+
+      res.json({
+        status: 'success',
+        message: 'Ride rated successfully',
+        data: { rideId: req.params.id, rating: score, tags: tagList },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to rate ride' });
+    }
+  }
+);
+
+rideExperienceRouter.put(
+  '/:id/arrived',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE rides
+         SET status = 'arrived', updated_at = NOW()
+         WHERE id = $1 AND (driver_id = $2 OR $2 IS NOT NULL)
+         RETURNING *`,
+        [req.params.id, req.user!.id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Ride not found' });
+      }
+      res.status(200).json({
+        status: 'success',
+        message: 'Driver arrived at pickup',
+        data: result.rows[0],
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to mark arrived' });
+    }
+  }
+);
+
+rideExperienceRouter.put(
+  '/:id/start',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE rides
+         SET status = 'started', updated_at = NOW()
+         WHERE id = $1 AND driver_id = $2
+         RETURNING *`,
+        [req.params.id, req.user!.id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Ride not found' });
+      }
+      res.status(200).json({
+        status: 'success',
+        message: 'Ride started',
+        data: result.rows[0],
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to start ride' });
     }
   }
 );

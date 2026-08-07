@@ -7,7 +7,7 @@ import { uploadCatalogImage } from '../../lib/media';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
-/** Merchant onboarding — 3-step flow; Step 2 matches KYC mockup. */
+/** Merchant onboarding — Step 2 matches Business registration KYC mockup. */
 export default function MerchantOnboardingPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -22,6 +22,7 @@ export default function MerchantOnboardingPage() {
     documentUrl: '',
     registrationNumber: 'BN-2024-88213',
   });
+  const [certFile, setCertFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadingCert, setUploadingCert] = useState(false);
 
@@ -33,19 +34,24 @@ export default function MerchantOnboardingPage() {
     if (!file) return;
     setUploadingCert(true);
     try {
-      // Register may not have token yet — upload after register in finish(), or use temp local preview.
-      // Prefer direct upload when a merchant token already exists; otherwise stash File for finish().
-      (window as any).__MOVR_PENDING_CERT__ = file;
+      setCertFile(file);
       set('documentUrl', '');
-      toast.success(`Selected ${file.name} — will upload on submit`);
+      toast.success(`Selected ${file.name}`);
     } finally {
       setUploadingCert(false);
     }
   };
 
+  const hasCertificate = Boolean(certFile || form.documentUrl);
+
   const finish = async () => {
     if (!form.email.trim() && !form.phone.trim()) {
       toast.error('Add an email or phone number');
+      return;
+    }
+    if (!hasCertificate) {
+      toast.error('Upload a registration certificate');
+      setStep(2);
       return;
     }
     setLoading(true);
@@ -56,16 +62,16 @@ export default function MerchantOnboardingPage() {
       localStorage.setItem('movr_merchant', JSON.stringify(res.data.data.merchant));
 
       let fileUrl = form.documentUrl;
-      const pending: File | undefined = (window as any).__MOVR_PENDING_CERT__;
-      if (pending) {
-        fileUrl = await uploadCatalogImage(pending, token);
-        delete (window as any).__MOVR_PENDING_CERT__;
+      if (certFile) {
+        fileUrl = await uploadCatalogImage(certFile, token);
         set('documentUrl', fileUrl);
+        setCertFile(null);
       }
 
       if (!fileUrl) {
         toast.error('Upload a registration certificate file to continue');
         setLoading(false);
+        setStep(2);
         return;
       }
 
@@ -76,6 +82,7 @@ export default function MerchantOnboardingPage() {
           documentNumber: form.registrationNumber,
           fileUrl,
           businessRegistrationNumber: form.registrationNumber,
+          businessName: form.businessName,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -94,35 +101,34 @@ export default function MerchantOnboardingPage() {
       {[1, 2, 3].map((n) => (
         <React.Fragment key={n}>
           <div
-            className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${
-              n < step
-                ? 'bg-movr-gradient'
-                : n === step
-                  ? 'bg-movr-gradient'
-                  : 'bg-border text-text-secondary'
+            className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white ${
+              n <= step ? 'bg-[#6345ED]' : 'bg-[#2A2A2A] text-zinc-400'
             }`}
           >
-            {n < step ? <Check size={16} /> : n}
+            {n < step ? <Check size={16} strokeWidth={3} /> : n}
           </div>
           {n < 3 ? (
-            <div
-              className={`w-16 h-0.5 ${n < step ? 'bg-movr-green' : 'bg-border'}`}
-            />
+            <div className={`w-16 h-0.5 ${n < step ? 'bg-[#22C55E]' : 'bg-[#2A2A2A]'}`} />
           ) : null}
         </React.Fragment>
       ))}
     </div>
   );
 
+  const fieldClass =
+    'w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 text-white placeholder:text-zinc-500 outline-none focus:border-[#6345ED]';
+
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center px-4 py-10 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 py-10 font-[Poppins,Montserrat,sans-serif]">
       <div className="w-full max-w-md">
         <StepDots />
 
         {step === 1 ? (
           <div className="space-y-4">
-            <h1 className="text-3xl font-bold">Create your account</h1>
-            <p className="text-text-secondary">Step 1 of 3 · Account details</p>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">Create your account</h1>
+              <p className="text-zinc-400 mt-2">Step 1 of 3 · Account details</p>
+            </div>
             {(
               [
                 ['email', 'Email', 'email', 'merchant@business.com'],
@@ -132,10 +138,10 @@ export default function MerchantOnboardingPage() {
               ] as const
             ).map(([key, label, type, placeholder]) => (
               <div key={key}>
-                <label className="block text-sm text-text-secondary mb-2">{label}</label>
+                <label className="block text-sm text-zinc-400 mb-2">{label}</label>
                 <input
                   type={type}
-                  className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
+                  className={fieldClass}
                   placeholder={placeholder || undefined}
                   value={form[key]}
                   onChange={(e) => set(key, e.target.value)}
@@ -143,7 +149,7 @@ export default function MerchantOnboardingPage() {
                 />
               </div>
             ))}
-            <p className="text-xs text-text-secondary">Provide at least an email or a phone number.</p>
+            <p className="text-xs text-zinc-500">Provide at least an email or a phone number.</p>
             <button
               type="button"
               onClick={() => {
@@ -157,7 +163,7 @@ export default function MerchantOnboardingPage() {
                 }
                 setStep(2);
               }}
-              className="w-full rounded-xl py-3.5 font-semibold bg-movr-gradient"
+              className="w-full rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF]"
             >
               Continue
             </button>
@@ -165,34 +171,34 @@ export default function MerchantOnboardingPage() {
         ) : null}
 
         {step === 2 ? (
-          <div className="space-y-4">
-            <h1 className="text-3xl font-bold">Business registration</h1>
-            <p className="text-text-secondary">Step 2 of 3 · KYC verification</p>
+          <div className="space-y-5">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">Business registration</h1>
+              <p className="text-zinc-400 mt-2">Step 2 of 3 · KYC verification</p>
+            </div>
             <div>
-              <label className="block text-sm text-text-secondary mb-2">Business name</label>
+              <label className="block text-sm text-zinc-400 mb-2">Business name</label>
               <input
-                className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
+                className={fieldClass}
                 value={form.businessName}
                 onChange={(e) => set('businessName', e.target.value)}
               />
             </div>
             <div>
-              <label className="block text-sm text-text-secondary mb-2">
-                Business registration number
-              </label>
+              <label className="block text-sm text-zinc-400 mb-2">Business registration number</label>
               <input
-                className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
+                className={fieldClass}
                 value={form.registrationNumber}
                 onChange={(e) => set('registrationNumber', e.target.value)}
               />
             </div>
-            <label className="w-full rounded-xl border border-dashed border-[var(--border)] bg-surface-elevated py-10 flex flex-col items-center gap-2 text-text-secondary hover:border-electric-violet cursor-pointer">
+            <label className="w-full rounded-xl border border-dashed border-zinc-500 bg-transparent py-12 flex flex-col items-center gap-2 text-zinc-400 hover:border-[#6345ED] cursor-pointer transition-colors">
               <Upload size={22} />
-              <span>
+              <span className="text-sm">
                 {uploadingCert
                   ? 'Preparing…'
-                  : form.documentUrl || (typeof window !== 'undefined' && (window as any).__MOVR_PENDING_CERT__)
-                    ? 'Certificate selected · tap to replace'
+                  : hasCertificate
+                    ? `${certFile?.name || 'Certificate selected'} · tap to replace`
                     : 'Upload registration certificate'}
               </span>
               <input
@@ -202,31 +208,38 @@ export default function MerchantOnboardingPage() {
                 onChange={onCertSelected}
               />
             </label>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="rounded-xl px-5 py-3 border border-border"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="flex-1 rounded-xl py-3.5 font-semibold bg-movr-gradient"
-              >
-                Continue
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!form.businessName.trim()) {
+                  toast.error('Enter a business name');
+                  return;
+                }
+                if (!form.registrationNumber.trim()) {
+                  toast.error('Enter a registration number');
+                  return;
+                }
+                if (!hasCertificate) {
+                  toast.error('Upload a registration certificate');
+                  return;
+                }
+                setStep(3);
+              }}
+              className="w-full rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF]"
+            >
+              Continue
+            </button>
           </div>
         ) : null}
 
         {step === 3 ? (
           <div className="space-y-4">
-            <h1 className="text-3xl font-bold">Store category</h1>
-            <p className="text-text-secondary">Step 3 of 3 · Almost done</p>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">Store category</h1>
+              <p className="text-zinc-400 mt-2">Step 3 of 3 · Almost done</p>
+            </div>
             <select
-              className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
+              className={fieldClass}
               value={form.category}
               onChange={(e) => set('category', e.target.value)}
             >
@@ -238,7 +251,7 @@ export default function MerchantOnboardingPage() {
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="rounded-xl px-5 py-3 border border-border"
+                className="rounded-xl px-5 py-3 border border-[#2A2A2A]"
               >
                 Back
               </button>
@@ -246,7 +259,7 @@ export default function MerchantOnboardingPage() {
                 type="button"
                 disabled={loading}
                 onClick={finish}
-                className="flex-1 rounded-xl py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
+                className="flex-1 rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF] disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create storefront'}
               </button>
@@ -254,9 +267,9 @@ export default function MerchantOnboardingPage() {
           </div>
         ) : null}
 
-        <p className="text-sm text-text-secondary text-center mt-8">
+        <p className="text-sm text-zinc-400 text-center mt-8">
           Already registered?{' '}
-          <Link className="text-motion-blue" to="/merchant/login">
+          <Link className="text-[#5B8AFF]" to="/merchant/login">
             Sign in
           </Link>
         </p>

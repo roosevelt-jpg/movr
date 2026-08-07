@@ -10,6 +10,8 @@ import {
   BarChart3,
   CreditCard,
   Download,
+  Award,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatCurrency } from '../lib/currency';
 import { useLocalCurrency } from '../hooks/useLocalCurrency';
@@ -24,6 +26,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; className?: str
   truck: Truck,
   chart: BarChart3,
   card: CreditCard,
+  award: Award,
+  shield: ShieldCheck,
 };
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
@@ -75,7 +79,7 @@ function PhoneRideMock() {
       </div>
       <div className="px-3 space-y-2 pb-4">
         <div className="rounded-xl bg-surface-elevated h-9 flex items-center px-3 text-xs text-text-secondary">
-          Pickup · Current location
+          Pickup
         </div>
         <div className="rounded-xl bg-surface-elevated h-9 flex items-center px-3 text-xs text-text-secondary">
           Enter destination
@@ -333,12 +337,23 @@ export function CmsCtaBanner({ payload }: { payload: any }) {
   return (
     <section id={payload.anchor || 'drivers'} className="max-w-6xl mx-auto px-6 pb-16">
       <div className="rounded-2xl bg-movr-gradient p-8 md:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-active-glow">
-        <p className="text-xl md:text-2xl font-bold max-w-2xl leading-snug">{payload.body}</p>
+        <div className="max-w-2xl">
+          {payload.headline ? (
+            <p className="text-xl md:text-2xl font-bold leading-snug text-pure-white">
+              {payload.headline}
+            </p>
+          ) : null}
+          <p
+            className={`${payload.headline ? 'mt-2 text-pure-white/85 text-sm md:text-base' : 'text-xl md:text-2xl font-bold'} leading-snug`}
+          >
+            {payload.body}
+          </p>
+        </div>
         {payload.button ? (
           <button
             type="button"
             onClick={() => go(navigate, payload.button.href)}
-            className="shrink-0 rounded-full px-7 py-3.5 bg-jet-black font-semibold"
+            className="shrink-0 rounded-full px-7 py-3.5 bg-jet-black font-semibold text-pure-white"
           >
             {payload.button.label}
           </button>
@@ -518,39 +533,48 @@ export function CmsOnboarding({ payload }: { payload: any }) {
   const slides = payload.slides || [];
   const slide = slides[i] || {};
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center px-6 text-center">
-      <h1 className="text-3xl font-bold mb-3">{slide.title}</h1>
-      <p className="text-text-secondary max-w-md mb-8">{slide.body}</p>
-      <div className="flex gap-2 mb-8">
-        {slides.map((_: any, idx: number) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => setI(idx)}
-            className={`w-2 h-2 rounded-full ${idx === i ? 'bg-motion-blue' : 'bg-[var(--border)]'}`}
-          />
-        ))}
+    <div className="min-h-screen flex flex-col items-center justify-between px-6 py-12 text-center bg-black text-white">
+      <div className="flex-1 flex flex-col items-center justify-center max-w-md">
+        <div className="w-40 h-40 rounded-2xl bg-[#1a1a1a] flex items-center justify-center mb-10 text-5xl text-[#3B5CFF]">
+          🚐
+        </div>
+        <h1 className="text-2xl md:text-3xl font-bold mb-3">{slide.title}</h1>
+        <p className="text-white/55 max-w-md leading-relaxed">{slide.body}</p>
       </div>
-      {i < slides.length - 1 ? (
-        <button
-          type="button"
-          onClick={() => setI((x) => x + 1)}
-          className="rounded-full px-8 py-3 font-semibold bg-movr-gradient"
-        >
-          Next
-        </button>
-      ) : payload.cta ? (
-        <button
-          type="button"
-          onClick={() => {
-            localStorage.setItem('movr_onboarding_done', '1');
-            go(navigate, payload.cta.href);
-          }}
-          className="rounded-full px-8 py-3 font-semibold bg-movr-gradient"
-        >
-          {payload.cta.label}
-        </button>
-      ) : null}
+      <div className="w-full max-w-md">
+        <div className="flex gap-2 mb-8 justify-center items-center">
+          {slides.map((_: any, idx: number) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setI(idx)}
+              className={
+                idx === i ? 'h-2 w-7 rounded-full bg-movr-gradient' : 'w-2 h-2 rounded-full bg-white/20'
+              }
+            />
+          ))}
+        </div>
+        {i < slides.length - 1 ? (
+          <button
+            type="button"
+            onClick={() => setI((x) => x + 1)}
+            className="w-full rounded-full px-8 py-4 font-semibold bg-movr-gradient"
+          >
+            Next
+          </button>
+        ) : payload.cta ? (
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem('movr_onboarding_done', '1');
+              go(navigate, payload.cta.href);
+            }}
+            className="w-full rounded-full px-8 py-4 font-semibold bg-movr-gradient"
+          >
+            {payload.cta.label}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

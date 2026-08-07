@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
@@ -22,10 +22,9 @@ function speak(text: string) {
       const u = new SpeechSynthesisUtterance(text);
       synth.cancel();
       synth.speak(u);
-      return;
     }
   } catch {
-    /* native TTS optional */
+    /* optional */
   }
 }
 
@@ -57,7 +56,7 @@ function listenOnce(): Promise<string> {
   });
 }
 
-/** Speak-to-order — STT + confirm → createRideRequest sourceChannel=voice (Phase 23). */
+/** Voice booking — Listening mic, transcript, Economy/Comfort card, Book CTA (Phase 23). */
 export default function VoiceBookingScreen() {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
@@ -67,6 +66,7 @@ export default function VoiceBookingScreen() {
   const [result, setResult] = useState<any>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [booking, setBooking] = useState(false);
 
   const parse = async (text: string) => {
     const res = await fetch(`${API}/voice/parse-intent`, {
@@ -86,9 +86,8 @@ export default function VoiceBookingScreen() {
       speak(json.data.prompt || 'Where are you going?');
     } else if (json.data?.options?.[0]) {
       const o = json.data.options[0];
-      const surge = json.data.surgeReason ? ` ${json.data.surgeReason}.` : '';
       speak(
-        `Pickup ${json.data.pickup?.address || 'current location'} to ${json.data.destination?.address}. ${o.name}, ${o.price} ${json.data.currency || 'GHS'}.${surge} Say yes or tap book.`
+        `Pickup ${json.data.pickup?.address || 'current location'} to ${json.data.destination?.address}. ${o.name}, ${formatCurrency(o.price, json.data.currency || 'GHS')}.`
       );
     }
   };
@@ -104,61 +103,63 @@ export default function VoiceBookingScreen() {
       setListening(false);
       await parse(text);
     } catch {
-      // Fallback sample when device STT unavailable (dev / Expo Go)
       const sample = "I'm going from Osu to the airport";
       setTranscript(sample);
       setListening(false);
-      setMessage('Using demo utterance — enable mic permissions for live STT');
+      setMessage('Demo utterance — enable mic for live STT');
       await parse(sample);
     }
   };
 
   const selectedOpt = result?.options?.find((o: any) => o.code === selected) || result?.options?.[0];
 
-  useEffect(() => {
-    if (selectedOpt && result?.pickup) {
-      // visual card is source of truth; TTS already ran on parse
-    }
-  }, [selectedOpt, result]);
-
   const confirm = async (spoken?: string) => {
     if (!result?.pickup || !result?.destination) return;
-    const res = await fetch(`${API}/voice/confirm`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        pickupLat: result.pickup.lat,
-        pickupLng: result.pickup.lng,
-        dropoffLat: result.destination.lat,
-        dropoffLng: result.destination.lng,
-        pickupAddress: result.pickup.address,
-        dropoffAddress: result.destination.address,
-        rideType: selected,
-        spoken: spoken || 'yes',
-      }),
-    });
-    const json = await res.json();
-    if (json.status === 'success') {
-      setMessage('Ride booked');
-      speak('Ride booked. Finding a driver.');
-    } else {
-      setMessage(json.message || 'Booking failed');
+    setBooking(true);
+    try {
+      const res = await fetch(`${API}/voice/confirm`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          pickupLat: result.pickup.lat,
+          pickupLng: result.pickup.lng,
+          dropoffLat: result.destination.lat,
+          dropoffLng: result.destination.lng,
+          pickupAddress: result.pickup.address,
+          dropoffAddress: result.destination.address,
+          rideType: selected,
+          vehicleTypeCode: selected,
+          spoken: spoken || 'yes',
+          countryCode: 'GH',
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setMessage('Ride booked — finding a driver');
+        speak('Ride booked. Finding a driver.');
+      } else {
+        setMessage(json.message || 'Booking failed');
+      }
+    } finally {
+      setBooking(false);
     }
   };
 
   return (
     <View style={styles.root}>
-      <Pressable onPress={startListen} style={[styles.mic, listening && styles.micActive]}>
-        <View style={styles.micGlow} />
-        <Text style={styles.micGlyph}>🎤</Text>
-      </Pressable>
-      <Text style={styles.status}>{listening ? 'Listening...' : 'Tap to speak'}</Text>
-      <Text style={styles.quote}>
-        {transcript ? `“${transcript}”` : '“I\'m going from Osu to the airport”'}
-      </Text>
-      {message ? <Text style={styles.warn}>{message}</Text> : null}
-
-      {result?.needsClarification ? <Text style={styles.warn}>{result.prompt}</Text> : null}
+      <View style={styles.top}>
+        <Pressable onPress={startListen} style={[styles.mic, listening && styles.micActive]}>
+          <View style={styles.micGlowOuter} />
+          <View style={styles.micGlowInner} />
+          <Text style={styles.micGlyph}>🎤</Text>
+        </Pressable>
+        <Text style={styles.status}>{listening ? 'Listening...' : 'Tap mic to speak'}</Text>
+        <Text style={styles.quote}>
+          {transcript ? `“${transcript}”` : '“I\'m going from Osu to the airport”'}
+        </Text>
+        {message ? <Text style={styles.warn}>{message}</Text> : null}
+        {result?.needsClarification ? <Text style={styles.warn}>{result.prompt}</Text> : null}
+      </View>
 
       {result?.options ? (
         <View style={styles.card}>
@@ -166,11 +167,6 @@ export default function VoiceBookingScreen() {
           <Text style={styles.route}>
             {result.pickup?.address || 'Osu'} → {result.destination?.address || 'Kotoka Airport'}
           </Text>
-          {result.surgeReason ? (
-            <Text style={{ color: colors.warning, marginBottom: spacing[2], fontSize: 12 }}>
-              {result.surgeReason}
-            </Text>
-          ) : null}
 
           <FlatList
             data={result.options}
@@ -186,7 +182,7 @@ export default function VoiceBookingScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.optionName}>{item.name}</Text>
                     <Text style={styles.optionMeta}>
-                      {item.etaMinutes} min away
+                      {item.etaMinutes != null ? `${item.etaMinutes} min away` : 'Nearby'}
                       {item.isRecommended ? ' · Best value' : ''}
                     </Text>
                   </View>
@@ -198,26 +194,16 @@ export default function VoiceBookingScreen() {
             }}
           />
 
-          <Pressable style={styles.cta} onPress={() => confirm('yes')}>
+          <Pressable
+            style={[styles.cta, booking && { opacity: 0.6 }]}
+            disabled={booking}
+            onPress={() => confirm('yes')}
+          >
             <View style={styles.ctaGlow} />
             <Text style={styles.ctaText}>
               Book {selectedOpt?.name || 'ride'} ·{' '}
               {formatCurrency(selectedOpt?.price || 0, result.currency || 'GHS')}
             </Text>
-          </Pressable>
-          <Pressable
-            style={{ marginTop: spacing[2], padding: spacing[2] }}
-            onPress={async () => {
-              try {
-                const heard = await listenOnce();
-                if (/^(yes|book|confirm)/i.test(heard.trim())) await confirm(heard);
-                else setMessage('Say yes to confirm');
-              } catch {
-                setMessage('Tap Book to confirm');
-              }
-            }}
-          >
-            <Text style={{ color: colors.motionBlue, textAlign: 'center' }}>Or say “yes”</Text>
           </Pressable>
         </View>
       ) : null}
@@ -227,73 +213,98 @@ export default function VoiceBookingScreen() {
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.jetBlack,
-    padding: spacing[4],
-    alignItems: 'center',
-  },
-  mic: {
-    marginTop: spacing[6],
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.electricViolet,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  micActive: { transform: [{ scale: 1.06 }] },
-  micGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.5,
-  },
-  micGlyph: { fontSize: 32, zIndex: 1 },
-  status: { color: colors.textSecondary, marginTop: spacing[4], fontSize: 15 },
-  quote: {
-    color: colors.pureWhite,
-    fontStyle: 'italic',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: spacing[2],
-    marginBottom: spacing[5],
-    paddingHorizontal: spacing[4],
-  },
-  warn: { color: colors.warning, marginBottom: spacing[3], textAlign: 'center' },
-  card: {
-    width: '100%',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.lg,
-    padding: spacing[4],
-  },
-  routeLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  route: { color: colors.pureWhite, fontSize: 16, fontWeight: '600', marginVertical: spacing[2] },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  optionActive: { opacity: 1 },
-  optionName: { color: colors.pureWhite, fontWeight: '600' },
-  optionMeta: { color: colors.textSecondary, fontSize: 12 },
-  price: { color: colors.pureWhite, fontWeight: '700' },
-  priceMuted: { color: colors.textSecondary },
-  cta: {
-    marginTop: spacing[4],
-    backgroundColor: colors.electricViolet,
-    borderRadius: radius.md,
-    paddingVertical: spacing[3],
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  ctaGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.35,
-  },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-});
+    root: {
+      flex: 1,
+      backgroundColor: colors.jetBlack,
+      padding: spacing[4],
+      justifyContent: 'space-between',
+    },
+    top: { alignItems: 'center', paddingTop: spacing[8] },
+    mic: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      backgroundColor: colors.electricViolet,
+    },
+    micActive: { transform: [{ scale: 1.06 }] },
+    micGlowOuter: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.55,
+    },
+    micGlowInner: {
+      position: 'absolute',
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.electricViolet,
+      opacity: 0.9,
+    },
+    micGlyph: { fontSize: 34, zIndex: 1 },
+    status: { color: colors.textSecondary, marginTop: spacing[4], fontSize: 15 },
+    quote: {
+      color: colors.pureWhite,
+      fontStyle: 'italic',
+      fontSize: 16,
+      textAlign: 'center',
+      marginTop: spacing[2],
+      paddingHorizontal: spacing[4],
+    },
+    warn: { color: colors.warning, marginTop: spacing[3], textAlign: 'center', fontSize: 13 },
+    card: {
+      width: '100%',
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: 24,
+      padding: spacing[5],
+      marginBottom: spacing[4],
+    },
+    routeLabel: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+    route: {
+      color: colors.pureWhite,
+      fontSize: 18,
+      fontWeight: '700',
+      marginTop: spacing[2],
+      marginBottom: spacing[4],
+    },
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing[3],
+      paddingHorizontal: spacing[3],
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      marginBottom: spacing[2],
+    },
+    optionActive: {
+      borderColor: colors.motionBlue,
+      backgroundColor: 'rgba(0,85,255,0.08)',
+    },
+    optionName: { color: colors.pureWhite, fontWeight: '700' },
+    optionMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+    price: { color: colors.pureWhite, fontWeight: '700' },
+    priceMuted: { color: colors.textSecondary },
+    cta: {
+      marginTop: spacing[3],
+      borderRadius: radius.pill,
+      paddingVertical: spacing[4],
+      alignItems: 'center',
+      backgroundColor: colors.electricViolet,
+      overflow: 'hidden',
+    },
+    ctaGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.4,
+    },
+    ctaText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1, fontSize: 15 },
+  });
 }

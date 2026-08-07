@@ -163,3 +163,57 @@ ordersRouter.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     res.status(400).json({ status: 'error', message: error.message });
   }
 });
+
+/** Wishlist (product favorites) */
+cartRouter.get('/wishlist', async (req: AuthRequest, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT w.product_id, w.created_at, p.name, p.price, p.image_url, p.store_id
+       FROM product_wishlist w
+       JOIN products p ON p.id = w.product_id
+       WHERE w.user_id = $1
+       ORDER BY w.created_at DESC`,
+      [req.user!.id]
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+cartRouter.get('/wishlist/:productId', async (req: AuthRequest, res: Response) => {
+  try {
+    const row = await db.query(
+      `SELECT 1 FROM product_wishlist WHERE user_id = $1 AND product_id = $2`,
+      [req.user!.id, req.params.productId]
+    );
+    res.json({ status: 'success', data: { wished: Boolean(row.rows[0]) } });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+cartRouter.post('/wishlist/:productId', async (req: AuthRequest, res: Response) => {
+  try {
+    await db.query(
+      `INSERT INTO product_wishlist (user_id, product_id) VALUES ($1,$2)
+       ON CONFLICT DO NOTHING`,
+      [req.user!.id, req.params.productId]
+    );
+    res.status(201).json({ status: 'success', data: { wished: true } });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+cartRouter.delete('/wishlist/:productId', async (req: AuthRequest, res: Response) => {
+  try {
+    await db.query(`DELETE FROM product_wishlist WHERE user_id = $1 AND product_id = $2`, [
+      req.user!.id,
+      req.params.productId,
+    ]);
+    res.json({ status: 'success', data: { wished: false } });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});

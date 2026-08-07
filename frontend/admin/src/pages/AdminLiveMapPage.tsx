@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 import AdminShell from '../layouts/AdminShell';
+import AdminOpsNav from '../components/AdminOpsNav';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const SOCKET_URL =
@@ -16,30 +17,27 @@ type Marker = {
   kind?: string;
 };
 
+type FilterKey = 'rides' | 'parcels' | 'shops' | 'rentals';
+
 const KIND_COLOR: Record<string, string> = {
-  ride: 'var(--motion-blue)',
-  rides: 'var(--motion-blue)',
-  parcel: 'var(--movr-green)',
-  parcels: 'var(--movr-green)',
-  delivery: 'var(--movr-green)',
-  shop: 'var(--warning)',
-  shops: 'var(--warning)',
-  rental: 'var(--electric-violet)',
-  rentals: 'var(--electric-violet)',
+  ride: '#3B82F6',
+  rides: '#3B82F6',
+  parcel: '#22C55E',
+  parcels: '#22C55E',
+  delivery: '#22C55E',
+  shop: '#EAB308',
+  shops: '#EAB308',
+  rental: '#A855F7',
+  rentals: '#A855F7',
 };
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-/** Admin live ops map — Socket.io rooms + filter toggles (Phase 17). */
+/** Admin live ops map — filters + markers (Phase 17). */
 export default function AdminLiveMapPage() {
-  const [filters, setFilters] = useState({
-    rides: true,
-    parcels: true,
-    shops: true,
-    rentals: true,
-  });
+  const [active, setActive] = useState<FilterKey>('rides');
   const [counts, setCounts] = useState({ rides: 0, parcels: 0, shops: 0, rentals: 0 });
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [live, setLive] = useState(false);
@@ -64,7 +62,7 @@ export default function AdminLiveMapPage() {
     refreshRest();
     const poll = setInterval(refreshRest, 15000);
     return () => clearInterval(poll);
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -101,9 +99,6 @@ export default function AdminLiveMapPage() {
     socket.on('ride:location', (payload: any) => upsert(payload, 'ride'));
     socket.on('delivery:location', (payload: any) => upsert({ ...payload, id: payload.orderId }, 'parcel'));
     socket.on('rental:location', (payload: any) => upsert({ ...payload, id: payload.rentalId }, 'rental'));
-    socket.on('location:updated', (payload: any) => {
-      if (payload?.role === 'driver' || payload?.kind) upsert(payload, payload.kind || 'ride');
-    });
 
     return () => {
       socket.emit('admin:live:leave');
@@ -112,13 +107,9 @@ export default function AdminLiveMapPage() {
     };
   }, []);
 
-  const total =
-    (filters.rides ? counts.rides : 0) +
-    (filters.parcels ? counts.parcels : 0) +
-    (filters.shops ? counts.shops : 0) +
-    (filters.rentals ? counts.rentals : 0);
+  const total = counts.rides + counts.parcels + counts.shops + counts.rentals;
 
-  const pills: Array<{ key: keyof typeof filters; label: string; count: number }> = [
+  const pills: Array<{ key: FilterKey; label: string; count: number }> = [
     { key: 'rides', label: 'Rides', count: counts.rides },
     { key: 'parcels', label: 'Parcels', count: counts.parcels },
     { key: 'shops', label: 'Shops', count: counts.shops },
@@ -128,22 +119,28 @@ export default function AdminLiveMapPage() {
   const visible = useMemo(() => {
     return markers.filter((m) => {
       const kind = String(m.kind || 'ride').toLowerCase();
-      if (kind.includes('parcel') || kind.includes('deliver')) return filters.parcels;
-      if (kind.includes('shop') || kind.includes('store')) return filters.shops;
-      if (kind.includes('rental')) return filters.rentals;
-      return filters.rides;
+      if (active === 'parcels') return kind.includes('parcel') || kind.includes('deliver');
+      if (active === 'shops') return kind.includes('shop') || kind.includes('store');
+      if (active === 'rentals') return kind.includes('rental');
+      return (
+        !kind.includes('parcel') &&
+        !kind.includes('deliver') &&
+        !kind.includes('shop') &&
+        !kind.includes('store') &&
+        !kind.includes('rental')
+      );
     });
-  }, [markers, filters]);
+  }, [markers, active]);
 
   const withCoords = visible.filter(
     (m) => m.lat != null && m.lng != null && !Number.isNaN(Number(m.lat)) && !Number.isNaN(Number(m.lng))
   );
-  const withoutCoords = visible.filter(
-    (m) => m.lat == null || m.lng == null || Number.isNaN(Number(m.lat)) || Number.isNaN(Number(m.lng))
-  );
 
   const bounds = useMemo(() => {
-    if (!withCoords.length) return null;
+    // Accra default viewport when sparse
+    if (!withCoords.length) {
+      return { minLat: 5.52, maxLat: 5.68, minLng: -0.26, maxLng: -0.12 };
+    }
     const lats = withCoords.map((m) => Number(m.lat));
     const lngs = withCoords.map((m) => Number(m.lng));
     let minLat = Math.min(...lats);
@@ -164,40 +161,35 @@ export default function AdminLiveMapPage() {
   const positioned = withCoords.map((m) => {
     const lat = Number(m.lat);
     const lng = Number(m.lng);
-    let left = 50;
-    let top = 50;
-    if (bounds) {
-      left = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100;
-      top = ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100;
-    }
+    const left = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100;
+    const top = ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100;
     const kind = String(m.kind || 'ride').toLowerCase();
     return {
       ...m,
-      left: `${clamp(left, 4, 96)}%`,
-      top: `${clamp(top, 4, 96)}%`,
-      color: KIND_COLOR[kind] || 'var(--motion-blue)',
+      left: `${clamp(left, 6, 94)}%`,
+      top: `${clamp(top, 6, 94)}%`,
+      color: KIND_COLOR[kind] || '#3B82F6',
     };
   });
 
   return (
-    <AdminShell activeLabel="Live map">
+    <AdminShell activeLabel="Live map" hidePageTitle>
+      <AdminOpsNav />
       <div style={styles.filters}>
         {pills.map((p) => (
           <button
             key={p.key}
+            type="button"
             style={{
               ...styles.pill,
-              ...(filters[p.key] ? styles.pillOn : {}),
+              ...(active === p.key ? styles.pillOn : {}),
             }}
-            onClick={() => setFilters((f) => ({ ...f, [p.key]: !f[p.key] }))}
+            onClick={() => setActive(p.key)}
           >
             {p.label} ({p.count})
           </button>
         ))}
-        <span style={styles.liveDot}>
-          <span style={{ ...styles.dotInline, background: live ? 'var(--success)' : 'var(--text-secondary)' }} />
-          {live ? 'Live' : 'Reconnecting…'}
-        </span>
+        <span style={styles.liveHint}>{live ? '● Live' : '○ Offline'}</span>
       </div>
 
       <div style={styles.map}>
@@ -209,25 +201,15 @@ export default function AdminLiveMapPage() {
             style={{
               ...styles.dot,
               background: m.color,
+              boxShadow: `0 0 12px ${m.color}`,
               left: m.left,
               top: m.top,
             }}
           />
         ))}
-        {visible.length === 0 ? (
-          <div style={styles.empty}>No active markers</div>
-        ) : null}
-        {withoutCoords.length > 0 ? (
-          <div style={styles.list}>
-            {withoutCoords.map((m) => (
-              <div key={m.id} style={styles.listItem}>
-                {m.kind || 'item'} #{String(m.id).slice(0, 8)} · {m.status || '—'}
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {positioned.length === 0 ? <div style={styles.empty}>No active markers</div> : null}
         <div style={styles.badge}>
-          Accra region · {total} active · sockets: rides/deliveries/rentals
+          Accra region · {total} active
         </div>
       </div>
     </AdminShell>
@@ -237,48 +219,41 @@ export default function AdminLiveMapPage() {
 const styles: Record<string, React.CSSProperties> = {
   filters: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
   pill: {
-    border: '1px solid var(--border)',
+    border: '1px solid #333',
     borderRadius: 999,
-    padding: '8px 14px',
-    background: 'transparent',
-    color: 'var(--text-secondary)',
+    padding: '8px 16px',
+    background: '#141414',
+    color: '#888',
     cursor: 'pointer',
     fontWeight: 600,
+    fontSize: 14,
   },
   pillOn: {
-    background: 'var(--surface-elevated)',
-    borderColor: 'var(--surface-elevated)',
-    color: 'var(--pure-white)',
+    background: 'linear-gradient(90deg, rgba(142,45,226,0.35), rgba(74,0,224,0.35))',
+    border: '1px solid #8E2DE2',
+    color: '#fff',
   },
-  liveDot: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    color: 'var(--text-secondary)',
-    fontSize: 13,
-    marginLeft: 8,
-  },
-  dotInline: { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' },
+  liveHint: { marginLeft: 8, fontSize: 12, color: '#666' },
   map: {
     position: 'relative',
     height: '70vh',
     borderRadius: 16,
-    border: '1px solid var(--border)',
-    background: 'var(--surface)',
+    background: '#1A1A1A',
     overflow: 'hidden',
   },
   grid: {
     position: 'absolute',
     inset: 0,
-    opacity: 0.35,
+    opacity: 0.45,
     backgroundImage:
-      'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
-    backgroundSize: '32px 32px',
+      'linear-gradient(#2a2a2a 1px, transparent 1px), linear-gradient(90deg, #2a2a2a 1px, transparent 1px)',
+    backgroundSize: '28px 28px',
+    transform: 'skewY(-2deg) scale(1.05)',
   },
   dot: {
     position: 'absolute',
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     borderRadius: '50%',
   },
   empty: {
@@ -287,31 +262,20 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: 'var(--text-secondary)',
+    color: '#888',
     pointerEvents: 'none',
+    zIndex: 1,
   },
-  list: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    maxWidth: 280,
-    maxHeight: '60%',
-    overflow: 'auto',
-    background: 'rgba(0,0,0,0.85)',
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    padding: 10,
-  },
-  listItem: { fontSize: 12, color: 'var(--text-secondary)', padding: '4px 0' },
   badge: {
     position: 'absolute',
     left: 16,
     bottom: 16,
-    background: 'var(--jet-black)',
-    border: '1px solid var(--border)',
+    background: '#0a0a0a',
     borderRadius: 999,
-    padding: '8px 12px',
+    padding: '8px 14px',
     fontSize: 13,
     fontWeight: 600,
+    color: '#fff',
+    zIndex: 2,
   },
 };

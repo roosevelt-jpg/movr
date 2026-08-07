@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API_ROOT = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(
+  /\/api\/v1\/?$/,
+  ''
+);
 
 const MENU = `MOVR
 --------------------
@@ -16,80 +18,74 @@ const MENU = `MOVR
 Reply with a number`;
 
 /**
- * USSD-style text menu — numeric replies map to channel/ussd + app actions.
+ * USSD-style text menu — live POST /webhooks/ussd (JSON).
  */
 export default function UssdMenuScreen({
-  onBookRide,
-  onTrackOrder,
-  onWallet,
-  onPlaces,
-  onHelp,
+  phone = '+233240000000',
+  sessionId = 'demo-ussd',
 }: {
   onBookRide?: () => void;
   onTrackOrder?: () => void;
   onWallet?: () => void;
   onPlaces?: () => void;
   onHelp?: () => void;
+  phone?: string;
+  sessionId?: string;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
   const [input, setInput] = useState('');
-  const [log, setLog] = useState<string[]>([MENU]);
+  const [screen, setScreen] = useState(MENU);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    // Reset USSD session to menu on mount
+    fetch(`${API_ROOT}/webhooks/ussd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ phoneNumber: phone, text: '', sessionId, format: 'json' }),
+    })
+      .then((r) => r.json())
+      .then((body) => {
+        if (body?.message || body?.data?.text) {
+          setScreen(body.message || body.data.text);
+        }
+      })
+      .catch(() => setScreen(MENU));
+  }, [phone, sessionId]);
 
   const reply = async (n: string) => {
     const choice = n.trim();
-    setLog((l) => [...l, `> ${choice}`]);
+    if (!choice) return;
     setInput('');
+    setScreen((prev) => `${prev}\n\n> ${choice}`);
 
     try {
-      await fetch(`${API.replace('/api/v1', '')}/webhooks/ussd`, {
+      const res = await fetch(`${API_ROOT}/webhooks/ussd`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          phoneNumber: '+233240000000',
+          phoneNumber: phone,
           text: choice,
-          sessionId: 'demo-ussd',
+          sessionId,
+          format: 'json',
         }),
       });
+      const json = await res.json();
+      const text = json?.message || json?.data?.text || 'Invalid. Reply 1-5';
+      setScreen(text);
     } catch {
-      /* local demo */
+      setScreen('Network error. Try again.');
     }
-
-    if (choice === '1') {
-      setLog((l) => [...l, 'Enter pickup,destination\ne.g. Osu, Kotoka Airport']);
-      onBookRide?.();
-    } else if (choice === '2') {
-      setLog((l) => [...l, 'Enter order ID to track']);
-      onTrackOrder?.();
-    } else if (choice === '3') {
-      setLog((l) => [...l, 'Wallet: GH₵0.00 (open app for details)']);
-      onWallet?.();
-    } else if (choice === '4') {
-      setLog((l) => [...l, 'Saved: Home, Work, Osu']);
-      onPlaces?.();
-    } else if (choice === '5') {
-      setLog((l) => [...l, 'Help: Call 0800-MOVR or open in-app Help']);
-      onHelp?.();
-    } else if (choice.includes(',')) {
-      setLog((l) => [
-        ...l,
-        'Economy GH₵45 · ETA 4 min\nReply YES to confirm',
-      ]);
-    } else if (choice.toUpperCase() === 'YES') {
-      setLog((l) => [
-        ...l,
-        'Booked! Kwesi Boateng, GR 4471-22, arriving in 4 min. Fare GH₵45.',
-      ]);
-    } else {
-      setLog((l) => [...l, 'Invalid. Reply 1-5']);
-    }
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
   };
 
   return (
     <View style={styles.root}>
-      <ScrollView style={styles.term} contentContainerStyle={{ padding: 16 }}>
-        <Text style={styles.mono}>{log.join('\n\n')}</Text>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.term}
+        contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+      >
+        <Text style={styles.mono}>{screen}</Text>
       </ScrollView>
       <View style={styles.row}>
         <TextInput
@@ -98,7 +94,8 @@ export default function UssdMenuScreen({
           onChangeText={setInput}
           keyboardType="default"
           placeholder="Reply with a number"
-          placeholderTextColor={colors.movrGreen}
+          placeholderTextColor="#3d7a3d"
+          autoCapitalize="characters"
           onSubmitEditing={() => reply(input)}
         />
         <Pressable style={styles.send} onPress={() => reply(input)}>
@@ -109,37 +106,38 @@ export default function UssdMenuScreen({
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.movrGreen },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0a2e0a' },
   term: { flex: 1 },
   mono: {
     fontFamily: 'Courier',
-    color: colors.success,
-    fontSize: 14,
-    lineHeight: 22,
+    color: '#39ff14',
+    fontSize: 15,
+    lineHeight: 24,
   },
   row: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: colors.movrGreen,
+    borderTopColor: '#1a4d1a',
     padding: 8,
     gap: 8,
+    backgroundColor: '#062006',
   },
   input: {
     flex: 1,
-    color: colors.success,
+    color: '#39ff14',
     fontFamily: 'Courier',
     padding: 10,
-    backgroundColor: colors.surface,
+    backgroundColor: '#0a2e0a',
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#1a4d1a',
   },
   send: {
-    backgroundColor: colors.movrGreen,
+    backgroundColor: '#1a4d1a',
     borderRadius: 4,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },
-  sendText: { color: colors.success, fontWeight: '700' },
+  sendText: { color: '#39ff14', fontWeight: '700' },
 });
-}

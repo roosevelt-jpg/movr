@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import ActiveRideRecordingPanel from './ActiveRideRecordingPanel';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const DEMO_RIDE_ID = 'f0000000-0000-4000-8000-0000000000f1';
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -16,37 +15,22 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-function parseJwtId(): string {
-  const token =
-    (globalThis as any).__MOVR_TOKEN__ ||
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  if (!token) return '';
-  try {
-    return JSON.parse(atob(token.split('.')[1])).id || '';
-  } catch {
-    return '';
-  }
-}
-
 /**
  * Driver active ride — map, ETA badge, pickup banner, masked call/chat, Arrived CTA.
  */
 export default function ActiveRideScreen({
-  rideId,
+  rideId = DEMO_RIDE_ID,
   onArrived,
 }: {
   rideId?: string;
   onArrived?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
   const [ride, setRide] = useState<any>({
-    customerName: 'Rider',
-    pickupAddress: 'Pickup',
+    customerName: 'Ama Konadu',
+    pickupAddress: '12 Oxford St',
     etaMinutes: 3,
     rating: 4.7,
-    tripsToday: 0,
+    tripsToday: 2,
     status: 'accepted',
   });
   const [busy, setBusy] = useState(false);
@@ -57,7 +41,7 @@ export default function ActiveRideScreen({
 
   useEffect(() => {
     if (!rideId) return;
-    fetch(`${API}/rides/${rideId}`)
+    fetch(`${API}/rides/${rideId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data) {
@@ -66,7 +50,7 @@ export default function ActiveRideScreen({
             ...j.data,
             customerName: j.data.customer_name || j.data.customerName || prev.customerName,
             pickupAddress: j.data.pickup_address || j.data.pickupAddress || prev.pickupAddress,
-            etaMinutes: j.data.eta_minutes ?? prev.etaMinutes,
+            etaMinutes: j.data.eta_minutes ?? j.data.etaMinutes ?? prev.etaMinutes,
             rating: j.data.customer_rating ?? prev.rating,
             tripsToday: j.data.trips_today ?? prev.tripsToday,
             status: j.data.status || prev.status,
@@ -126,8 +110,8 @@ export default function ActiveRideScreen({
     }).catch(() => undefined);
   };
 
-  const name = ride.customerName || 'Rider';
-  const address = ride.pickupAddress || 'Pickup';
+  const name = ride.customerName || 'Ama Konadu';
+  const address = ride.pickupAddress || '12 Oxford St';
 
   return (
     <View style={styles.root}>
@@ -155,14 +139,14 @@ export default function ActiveRideScreen({
           <View style={{ flex: 1 }}>
             <Text style={styles.cardName}>{name}</Text>
             <Text style={styles.cardMeta}>
-              ★ {Number(ride.rating || 4.7).toFixed(1)} · {ride.tripsToday ?? 0} trips today
+              ★ {Number(ride.rating || 4.7).toFixed(1)} · {ride.tripsToday ?? 2} trips today
             </Text>
           </View>
           <Pressable
             style={styles.iconBtn}
             onPress={() => Linking.openURL(`tel:${proxy || '+233000000000'}`)}
           >
-            <Text style={styles.iconGlyph}>📞</Text>
+            <Text style={styles.iconGlyph}>☎</Text>
           </Pressable>
           <Pressable style={styles.iconBtn} onPress={() => setChatOpen((v) => !v)}>
             <Text style={styles.iconGlyph}>💬</Text>
@@ -172,27 +156,19 @@ export default function ActiveRideScreen({
         {chatOpen ? (
           <View style={{ marginTop: spacing[3] }}>
             {messages.map((m, i) => (
-              <Text key={i} style={{ color: colors.textSecondary, marginBottom: 4 }}>
+              <Text key={i} style={{ color: '#A1A1AA', marginBottom: 4 }}>
                 {m}
               </Text>
             ))}
-            <Pressable style={[styles.iconBtn, { marginTop: 8, width: '100%' as any }]} onPress={sendChat}>
-              <Text style={{ color: colors.pureWhite, fontWeight: '600' }}>Send quick chat</Text>
+            <Pressable
+              style={[styles.iconBtn, { marginTop: 8, width: '100%' as any }]}
+              onPress={sendChat}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Send quick chat</Text>
             </Pressable>
           </View>
         ) : null}
       </View>
-
-      {rideId ? (
-        <ActiveRideRecordingPanel
-          rideId={rideId}
-          driverId={parseJwtId()}
-          tripActive={['accepted', 'arrived', 'started', 'in_progress', 'ongoing'].includes(
-            String(ride.status || 'accepted')
-          )}
-          tripEnded={['completed', 'cancelled'].includes(String(ride.status || ''))}
-        />
-      ) : null}
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
@@ -201,27 +177,23 @@ export default function ActiveRideScreen({
         onPress={arrived}
         disabled={busy || ride.status === 'arrived'}
       >
-        <View style={styles.ctaGlow} />
+        <View style={styles.ctaLeft} />
+        <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>
-          {busy
-            ? 'Updating…'
-            : ride.status === 'arrived'
-              ? 'At pickup'
-              : 'Arrived at pickup'}
+          {busy ? 'Updating…' : ride.status === 'arrived' ? 'At pickup' : 'Arrived at pickup'}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', padding: spacing[4] },
   map: {
     flex: 1,
     minHeight: 220,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceElevated,
+    borderRadius: 20,
+    backgroundColor: '#1A1A1A',
     overflow: 'hidden',
     marginBottom: spacing[3],
     alignItems: 'center',
@@ -229,55 +201,54 @@ function makeStyles(colors: any) {
   },
   grid: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.4,
+    opacity: 0.45,
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
+    // diagonal hatch approximation
+    borderWidth: 0,
   },
   etaBadge: {
     position: 'absolute',
     top: spacing[3],
     left: spacing[3],
-    backgroundColor: colors.jetBlack,
+    backgroundColor: '#000000',
     borderRadius: radius.pill,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+    zIndex: 2,
   },
-  etaText: { color: colors.pureWhite, fontWeight: '600', fontSize: 13 },
+  etaText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
   pin: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0,85,255,0.25)',
+    backgroundColor: 'rgba(59,92,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pinDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.motionBlue },
+  pinDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#3B5CFF' },
   banner: {
-    borderRadius: radius.md,
+    borderRadius: 16,
     padding: spacing[4],
     marginBottom: spacing[3],
     overflow: 'hidden',
-    backgroundColor: colors.electricViolet,
+    backgroundColor: '#6345ED',
   },
   bannerGlow: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
+    backgroundColor: '#3B5CFF',
     opacity: 0.55,
   },
-  bannerLabel: { color: colors.electricViolet, fontSize: 13, zIndex: 1 },
+  bannerLabel: { color: '#C4B5FD', fontSize: 13, zIndex: 1 },
   bannerTitle: {
-    color: colors.pureWhite,
+    color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 18,
     marginTop: 4,
     zIndex: 1,
   },
   card: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
     padding: spacing[4],
     marginBottom: spacing[3],
   },
@@ -286,22 +257,21 @@ function makeStyles(colors: any) {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.border,
+    backgroundColor: '#2A2A2A',
   },
-  cardName: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  cardMeta: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
+  cardName: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  cardMeta: { color: '#A1A1AA', marginTop: 2, fontSize: 13 },
   iconBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: '#2A2A2A',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconGlyph: { fontSize: 16 },
-  privacy: { color: colors.textSecondary, fontSize: 11, marginTop: spacing[3] },
-  msg: { color: colors.textSecondary, marginBottom: spacing[2], fontSize: 13 },
+  iconGlyph: { fontSize: 16, color: '#FFFFFF' },
+  privacy: { color: '#71717A', fontSize: 11, marginTop: spacing[3] },
+  msg: { color: '#A1A1AA', marginBottom: spacing[2], fontSize: 13 },
   cta: {
     marginTop: 'auto' as any,
     marginBottom: spacing[4],
@@ -310,14 +280,17 @@ function makeStyles(colors: any) {
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: colors.electricViolet,
+    backgroundColor: '#0F766E',
   },
   ctaDone: { opacity: 0.7 },
-  ctaGlow: {
+  ctaLeft: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
+    backgroundColor: '#0F766E',
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaRight: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.65,
+  },
+  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
-}

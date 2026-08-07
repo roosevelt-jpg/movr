@@ -1,24 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-/** 5-digit OTP verify screen. */
+/** 5-digit OTP verify screen (mockup). */
 export default function OtpVerifyScreen({
   phone = '+233 24 000 0000',
+  purpose = 'signup',
   onVerified,
 }: {
   phone?: string;
-  onVerified?: () => void;
+  purpose?: 'signup' | 'reset';
+  onVerified?: (payload?: { resetToken?: string }) => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
-  const [digits, setDigits] = useState(['4', '8', '2', '', '']);
+  const [digits, setDigits] = useState(['', '', '', '', '']);
   const [seconds, setSeconds] = useState(42);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const refs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -36,25 +35,36 @@ export default function OtpVerifyScreen({
   };
 
   const verify = async () => {
+    const code = digits.join('');
+    if (code.length < 5) {
+      setError('Enter the 5-digit code');
+      return;
+    }
     setLoading(true);
+    setError('');
     try {
-      await fetch(`${API}/auth/verify-otp`, {
+      const res = await fetch(`${API}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code: digits.join('') }),
-      }).catch(() => undefined);
-      onVerified?.();
+        body: JSON.stringify({ phone, code, purpose }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Invalid code');
+      onVerified?.({ resetToken: json.data?.resetToken });
+    } catch (e: any) {
+      setError(e.message || 'Verification failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const resend = () => {
+  const resend = async () => {
     setSeconds(42);
-    fetch(`${API}/auth/resend-otp`, {
+    setError('');
+    await fetch(`${API}/auth/resend-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ phone, purpose }),
     }).catch(() => undefined);
   };
 
@@ -79,6 +89,11 @@ export default function OtpVerifyScreen({
             maxLength={1}
             value={d}
             onChangeText={(t) => setDigit(i, t)}
+            onKeyPress={({ nativeEvent }) => {
+              if (nativeEvent.key === 'Backspace' && !digits[i] && i > 0) {
+                refs.current[i - 1]?.focus();
+              }
+            }}
           />
         ))}
       </View>
@@ -91,48 +106,67 @@ export default function OtpVerifyScreen({
         </Text>
       </Pressable>
 
+      {error ? <Text style={styles.err}>{error}</Text> : null}
+
       <Pressable style={styles.cta} onPress={verify} disabled={loading}>
-        <View style={styles.ctaGlow} />
+        <View style={styles.ctaLeft} />
+        <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>{loading ? 'Verifying…' : 'Verify'}</Text>
       </Pressable>
     </View>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 80 },
-  icon: { fontSize: 36, textAlign: 'center', marginBottom: 16, color: colors.motionBlue },
-  title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  sub: { color: colors.textSecondary, textAlign: 'center', marginTop: 10, marginBottom: 32 },
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#000000',
+    paddingHorizontal: spacing[5],
+    paddingTop: 80,
+  },
+  icon: { fontSize: 40, textAlign: 'center', marginBottom: 20, color: '#5B8AFF' },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  sub: {
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 36,
+    fontSize: 15,
+  },
   row: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
   box: {
     width: 52,
     height: 56,
     borderRadius: 12,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: 'transparent',
-    color: colors.pureWhite,
+    color: '#FFFFFF',
     textAlign: 'center',
     fontSize: 22,
     fontWeight: '700',
   },
-  boxFocus: { borderColor: colors.motionBlue },
-  resend: { color: colors.textSecondary, textAlign: 'center', marginBottom: 28 },
+  boxFocus: { borderColor: '#3B5CFF' },
+  resend: { color: '#A1A1AA', textAlign: 'center', marginBottom: 28 },
+  err: { color: '#F87171', textAlign: 'center', marginBottom: 12 },
   cta: {
     borderRadius: radius.pill,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: colors.movrGreen,
+    backgroundColor: '#0F766E',
   },
-  ctaGlow: {
+  ctaLeft: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0F766E' },
+  ctaRight: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.55,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.7,
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
 });
-}

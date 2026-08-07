@@ -6,9 +6,28 @@ import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
-const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
+const headers = () => ({
+  Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}`,
+});
 
-/** Merchant order detail — items, delivery, mark ready / print. */
+function relativePlaced(iso?: string, customerShort?: string) {
+  if (!iso) return customerShort ? `· ${customerShort}` : '';
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString('en-GH', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const when = sameDay ? `Placed today, ${time}` : `Placed ${d.toLocaleDateString()} ${time}`;
+  return customerShort ? `${when} · ${customerShort}` : when;
+}
+
+/** Merchant order detail — Order #4821 mockup wired. */
 export default function MerchantOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -28,26 +47,25 @@ export default function MerchantOrderDetailPage() {
         setNotFound(true);
         return;
       }
-      const name = o.customer_name || 'Customer';
-      const when = o.created_at
-        ? `Placed ${new Date(o.created_at).toLocaleString()} · ${name}`
-        : '';
+      const short = o.customer_short || o.customer_name || 'Customer';
       setOrder({
-        id: String(o.id).slice(0, 4).toUpperCase() || id,
+        id: o.public_ref || o.display_ref || String(o.id).replace(/\D/g, '').slice(-4) || id,
         rawId: o.id,
-        status: o.status || 'Preparing',
-        placedLabel: when,
+        status: o.status || 'preparing',
+        placedLabel: relativePlaced(o.created_at, short),
         total: Number(o.total || 0),
         items: Array.isArray(o.items) ? o.items : [],
         delivery: {
-          line1: o.delivery_mode === 'merchant_own' ? 'Merchant own delivery' : 'Movr courier · assigned',
-          line2: o.delivery_address || '',
+          line1:
+            o.delivery_mode === 'merchant_own'
+              ? 'Merchant own delivery'
+              : 'Movr courier · assigned',
+          line2: o.delivery_address || o.delivery_recipient || '',
           line3: o.fulfillment_type === 'pickup' ? 'Pickup' : 'Standard delivery',
         },
       });
     } catch (e: any) {
-      const status = e?.response?.status;
-      if (status === 404) {
+      if (e?.response?.status === 404) {
         setNotFound(true);
         setOrder(null);
       } else {
@@ -65,16 +83,16 @@ export default function MerchantOrderDetailPage() {
 
   const markReady = async () => {
     try {
-      await axios.patch(`${API}/merchant/orders/${order.rawId || id}/ready`, {}, { headers: headers() });
+      await axios.patch(
+        `${API}/merchant/orders/${order.rawId || id}/ready`,
+        {},
+        { headers: headers() }
+      );
       toast.success('Marked ready for pickup');
       setOrder((o: any) => ({ ...o, status: 'ready_for_pickup' }));
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Failed to mark ready');
     }
-  };
-
-  const printReceipt = () => {
-    window.print();
   };
 
   if (loading) {
@@ -91,12 +109,11 @@ export default function MerchantOrderDetailPage() {
         <button
           type="button"
           onClick={() => navigate('/merchant/dashboard')}
-          className="text-sm text-text-secondary mb-4 hover:text-pure-white"
+          className="text-sm text-text-secondary mb-4"
         >
           ← Orders
         </button>
         <h1 className="text-3xl font-bold">Order not found</h1>
-        <p className="text-text-secondary mt-2">This order does not exist or is no longer available.</p>
         <Link to="/merchant/dashboard" className="inline-block mt-6 text-motion-blue text-sm">
           Back to list
         </Link>
@@ -104,19 +121,19 @@ export default function MerchantOrderDetailPage() {
     );
   }
 
-  const statusClass =
-    String(order.status).toLowerCase().includes('prepar')
-      ? 'bg-motion-blue/25 text-motion-blue'
-      : String(order.status).toLowerCase().includes('ready')
-        ? 'bg-movr-green/30 text-success'
-        : 'bg-border text-text-secondary';
+  const preparing = String(order.status).toLowerCase().includes('prepar');
+  const statusClass = preparing
+    ? 'bg-[#1e3a5f] text-[#7eb6ff]'
+    : String(order.status).toLowerCase().includes('ready')
+      ? 'bg-movr-green/30 text-success'
+      : 'bg-border text-text-secondary';
 
   return (
     <MerchantShell activePath="/merchant/dashboard">
       <button
         type="button"
         onClick={() => navigate('/merchant/dashboard')}
-        className="text-sm text-text-secondary mb-4 hover:text-pure-white"
+        className="text-sm text-text-secondary mb-4"
       >
         ← Orders
       </button>
@@ -124,10 +141,12 @@ export default function MerchantOrderDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold">Order #{order.id}</h1>
-          {order.placedLabel ? <p className="text-text-secondary mt-1">{order.placedLabel}</p> : null}
+          {order.placedLabel ? (
+            <p className="text-text-secondary mt-1">{order.placedLabel}</p>
+          ) : null}
         </div>
-        <span className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize ${statusClass}`}>
-          {String(order.status).replace(/_/g, ' ')}
+        <span className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize ${statusClass}`}>
+          {preparing ? 'Preparing' : String(order.status).replace(/_/g, ' ')}
         </span>
       </div>
 
@@ -137,21 +156,21 @@ export default function MerchantOrderDetailPage() {
           {order.items.length === 0 ? (
             <p className="text-text-secondary">No items on this order.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-border">
               {order.items.map((item: any, i: number) => (
-                <li key={i} className="flex justify-between gap-4 text-pure-white">
+                <li key={i} className="flex justify-between gap-4 py-3 text-pure-white">
                   <span>
                     {item.product_name}
                     {item.quantity ? ` ×${item.quantity}` : ''}
                   </span>
-                  <span className="font-medium shrink-0">
-                    {formatMoney(Number(item.unit_price ?? item.line_total ?? 0))}
+                  <span className="font-semibold shrink-0">
+                    {formatMoney(Number(item.line_total ?? item.unit_price ?? 0))}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          <div className="border-t border-border mt-4 pt-4 flex justify-between font-bold text-lg">
+          <div className="border-t border-border mt-2 pt-4 flex justify-between font-bold text-lg">
             <span>Total</span>
             <span>{formatMoney(Number(order.total))}</span>
           </div>
@@ -159,10 +178,12 @@ export default function MerchantOrderDetailPage() {
 
         <div>
           <p className="text-sm text-text-secondary mb-3">Delivery</p>
-          <div className="rounded-2xl bg-surface-elevated border border-border p-5 space-y-1 text-text-secondary">
-            <p>{order.delivery.line1}</p>
-            {order.delivery.line2 ? <p>{order.delivery.line2}</p> : null}
-            <p>{order.delivery.line3}</p>
+          <div className="rounded-2xl bg-surface-elevated p-5 space-y-1.5">
+            <p className="text-text-secondary">{order.delivery.line1}</p>
+            {order.delivery.line2 ? (
+              <p className="text-pure-white font-medium">{order.delivery.line2}</p>
+            ) : null}
+            <p className="text-text-secondary">{order.delivery.line3}</p>
           </div>
         </div>
       </div>
@@ -171,20 +192,20 @@ export default function MerchantOrderDetailPage() {
         <button
           type="button"
           onClick={markReady}
-          className="rounded-full px-6 py-3 font-semibold bg-movr-gradient"
+          className="rounded-full px-6 py-3 font-semibold text-white"
+          style={{
+            background: 'linear-gradient(90deg, #6B21A8 0%, #3B5CFF 100%)',
+          }}
         >
           Mark ready for pickup
         </button>
         <button
           type="button"
-          onClick={printReceipt}
-          className="rounded-full px-6 py-3 font-semibold border border-border bg-surface-elevated"
+          onClick={() => window.print()}
+          className="rounded-full px-6 py-3 font-semibold bg-[#1a1a1a] text-white"
         >
           Print receipt
         </button>
-        <Link to="/merchant/dashboard" className="rounded-full px-6 py-3 text-text-secondary text-sm self-center">
-          Back to list
-        </Link>
       </div>
     </MerchantShell>
   );

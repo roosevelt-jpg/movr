@@ -60,6 +60,36 @@ adminPricingRouter.get('/zones', authenticateToken, requireAdmin, async (_req, r
   }
 });
 
+/** Live multipliers per zone center — powers Active pricing zones table. */
+adminPricingRouter.get('/zones/live', authenticateToken, requireAdmin, async (_req, res: Response) => {
+  try {
+    const zones = await pricing.listZones();
+    const rows = await Promise.all(
+      zones.map(async (z: any) => {
+        const b = await pricing.currentBreakdown(Number(z.center_lat), Number(z.center_lng));
+        return {
+          id: z.id,
+          name: z.name,
+          region: z.country_code === 'GH' ? 'Accra' : z.country_code,
+          centerLat: z.center_lat,
+          centerLng: z.center_lng,
+          radiusKm: z.radius_km,
+          demandMultiplier: b.demandMultiplier,
+          timeMultiplier: b.timeMultiplier,
+          weatherMultiplier: b.weatherMultiplier,
+          combinedMultiplier: b.finalMultiplier,
+          maxCap: Number(z.max_surge_cap || b.cappedAt || 2),
+          isActive: z.is_active,
+          reasonSummary: b.reasonSummary,
+        };
+      })
+    );
+    res.json({ status: 'success', data: rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 adminPricingRouter.post('/zones', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const row = await pricing.createZone({
@@ -209,7 +239,96 @@ adminPricingRouter.get('/breakdown', authenticateToken, requireAdmin, async (req
 });
 
 // --- Phase 26 identity linking ---
-identityLinkRouter.get('/id-fields/:countryCode', async (req: any, res: Response) => {
+identityLinkRouter.get(
+  '/my-documents',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const rows = await db.query(
+        `SELECT document_type AS key, label, status, rejection_reason, file_url
+         FROM driver_kyc_documents
+         WHERE driver_user_id = $1
+         ORDER BY
+           CASE document_type
+             WHEN 'ghana_card' THEN 1
+             WHEN 'driving_license' THEN 2
+             WHEN 'vehicle_registration' THEN 3
+             ELSE 9
+           END`,
+        [req.user!.id]
+      );
+      if (rows.rows.length) {
+        return res.json({
+          status: 'success',
+          data: rows.rows.map((d: any) => ({
+            key: d.key,
+            document_type: d.key,
+            label: d.label,
+            status: d.status,
+            rejection_reason: d.rejection_reason,
+            reason: d.rejection_reason,
+            file_url: d.file_url,
+          })),
+        });
+      }
+      // Fallback summary when no rows yet
+      res.json({
+        status: 'success',
+        data: [
+          { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
+          { key: 'driving_license', label: 'Driving license', status: 'in_review' },
+          {
+            key: 'vehicle_registration',
+            label: 'Vehicle registration',
+            status: 'rejected',
+            rejection_reason:
+              'Vehicle registration photo was blurry. Please re-upload a clear photo.',
+          },
+        ],
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+identityLinkRouter.post(
+  '/my-documents/:type/reupload',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const type = String(req.params.type || 'vehicle_registration');
+      const fileUrl = req.body.fileUrl || null;
+      const row = await db.query(
+        `INSERT INTO driver_kyc_documents (driver_user_id, document_type, label, status, rejection_reason, file_url)
+         VALUES ($1, $2, $3, 'in_review', NULL, $4)
+         ON CONFLICT (driver_user_id, document_type) DO UPDATE
+         SET status = 'in_review',
+             rejection_reason = NULL,
+             file_url = COALESCE(EXCLUDED.file_url, driver_kyc_documents.file_url),
+             updated_at = NOW()
+         RETURNING *`,
+        [
+          req.user!.id,
+          type,
+          type === 'ghana_card'
+            ? 'Ghana Card'
+            : type === 'driving_license'
+              ? 'Driving license'
+              : 'Vehicle registration',
+          fileUrl,
+        ]
+      );
+      res.json({ status: 'success', data: row.rows[0] });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+identityLinkRouter.get(
+  '/id-fields/:countryCode',
+  async (req: any, res: Response) => {
   try {
     res.json({
       status: 'success',
@@ -320,8 +439,9 @@ identityLinkRouter.post(
         `INSERT INTO identity_verifications (
            driver_id, document_type, document_number, status,
            national_id_number, national_id_country, driving_license_number,
-           vehicle_registration_number, linked_phone_number
-         ) VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8)
+           vehicle_registration_number, linked_phone_number, details,
+           front_image_url
+         ) VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8,$9::jsonb,$10)
          RETURNING *`,
         [
           driver.id,
@@ -332,6 +452,15 @@ identityLinkRouter.post(
           req.body.licenseNumber || license?.number || null,
           req.body.vehicleRegistration || vehicle?.number || null,
           req.body.phone || null,
+          JSON.stringify({
+            documents_meta: docs.map((d: any) => ({
+              type: d.type,
+              status: d.status,
+              fileUrl: d.fileUrl || null,
+            })),
+            ocrConfirmed: Boolean(req.body.ocrConfirmed),
+          }),
+          national?.fileUrl || docs[0]?.fileUrl || null,
         ]
       );
       res.status(201).json({
@@ -341,6 +470,67 @@ identityLinkRouter.post(
       });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+/** Driver self-serve: current document upload status for onboarding UI. */
+identityLinkRouter.get(
+  '/me/status',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const driver = (
+        await db.query(`SELECT id FROM drivers WHERE user_id = $1 LIMIT 1`, [req.user!.id])
+      ).rows[0];
+      const latest = driver
+        ? (
+            await db.query(
+              `SELECT * FROM identity_verifications WHERE driver_id = $1
+               ORDER BY created_at DESC LIMIT 1`,
+              [driver.id]
+            )
+          ).rows[0]
+        : null;
+
+      const badge = (uploaded: boolean) => (uploaded ? 'uploaded' : 'required');
+      const meta: any[] = Array.isArray(latest?.details?.documents_meta)
+        ? latest.details.documents_meta
+        : [];
+      const metaStatus = (type: string, fallback: boolean) => {
+        const m = meta.find((d: any) => d.type === type);
+        if (m?.fileUrl || m?.status === 'uploaded' || m?.status === 'confirmed') {
+          return { status: 'uploaded' as const, fileUrl: m?.fileUrl || null };
+        }
+        return { status: badge(fallback) as 'uploaded' | 'required', fileUrl: null };
+      };
+      const gh = metaStatus('ghana_card', Boolean(latest?.national_id_number));
+      const lic = metaStatus(
+        'driving_license',
+        Boolean(latest?.driving_license_number)
+      );
+      const veh = metaStatus(
+        'vehicle_registration',
+        Boolean(latest?.vehicle_registration_number)
+      );
+      const documents = [
+        { type: 'ghana_card', label: 'Ghana Card', ...gh },
+        { type: 'driving_license', label: 'Driving license', ...lic },
+        { type: 'vehicle_registration', label: 'Vehicle registration', ...veh },
+      ];
+
+      res.json({
+        status: 'success',
+        data: {
+          countryOfId: latest?.national_id_country || 'GH',
+          countryLabel: 'Ghana',
+          verificationStatus: latest?.status || 'not_started',
+          documents,
+          canSubmit: documents.every((d) => d.status === 'uploaded'),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
     }
   }
 );
@@ -376,12 +566,82 @@ identityLinkRouter.get(
          ORDER BY iv.created_at DESC`,
         [req.params.userId]
       );
+      const user = await db.query(
+        `SELECT id, first_name, last_name, email, phone, avatar_url, user_type, created_at
+         FROM users WHERE id = $1`,
+        [req.params.userId]
+      );
+      const u = user.rows[0];
+      const latest = docs.rows[0] || {};
+      const checkStatus = (type: string) => {
+        const row = checks.rows.find((c: any) => c.check_type === type);
+        return String(row?.status || 'pending').toLowerCase();
+      };
+      const docStatus = (hasValue: boolean, linkedCheck?: string) => {
+        if (linkedCheck === 'match' || latest.status === 'verified' || latest.identity_linked) {
+          return hasValue ? 'verified' : 'pending';
+        }
+        if (hasValue && (latest.status === 'verified' || latest.status === 'approved')) return 'verified';
+        if (hasValue) return 'pending';
+        return 'pending';
+      };
+      const idLic = checkStatus('id_to_license');
+      const idVeh = checkStatus('id_to_vehicle');
+      const idPhone = checkStatus('id_to_phone');
+
+      const created = u?.created_at ? new Date(u.created_at) : null;
+      let appliedAgo = '';
+      if (created) {
+        const days = Math.max(0, Math.floor((Date.now() - created.getTime()) / 86400000));
+        appliedAgo =
+          days === 0 ? 'Applied today' : days === 1 ? 'Applied 1 day ago' : `Applied ${days} days ago`;
+      }
+
+      const documentsSummary = [
+        {
+          type: 'ghana_card',
+          label: 'Ghana Card',
+          status: docStatus(Boolean(latest.national_id_number), idLic),
+        },
+        {
+          type: 'driving_license',
+          label: 'Driving license',
+          status: docStatus(Boolean(latest.driving_license_number), idLic),
+        },
+        {
+          type: 'vehicle_registration',
+          label: 'Vehicle registration',
+          status: docStatus(Boolean(latest.vehicle_registration_number), idVeh),
+        },
+      ];
+
       res.json({
         status: 'success',
         data: {
           checks: checks.rows,
           documents: docs.rows,
+          documentsSummary,
           identityLinked: docs.rows.some((d: any) => d.identity_linked),
+          linkStatus: [
+            { label: 'National ID ↔ Driving license', type: 'id_to_license', status: idLic },
+            { label: 'National ID ↔ Vehicle license', type: 'id_to_vehicle', status: idVeh },
+            { label: 'National ID ↔ Phone number', type: 'id_to_phone', status: idPhone },
+          ],
+          profile: u
+            ? {
+                id: u.id,
+                name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || u.phone || u.id,
+                role:
+                  u.user_type === 'driver'
+                    ? 'Driver'
+                    : u.user_type === 'merchant'
+                      ? 'Merchant'
+                      : 'Rider',
+                avatarUrl: u.avatar_url || null,
+                appliedAgo,
+                createdAt: u.created_at,
+              }
+            : null,
         },
       });
     } catch (error: any) {
@@ -510,7 +770,10 @@ walletTransferRouter.get('/transfer/claim-preview/:code', async (req, res: Respo
   try {
     const row = (
       await db.query(
-        `SELECT t.claim_code, t.received_amount, t.received_currency, t.status,
+        `SELECT t.claim_code,
+                COALESCE(t.received_amount, t.sent_amount) AS amount,
+                COALESCE(t.received_currency, t.sent_currency, 'NGN') AS currency,
+                t.status,
                 u.first_name, u.last_name
          FROM wallet_transfers t
          LEFT JOIN users u ON u.id = t.sender_user_id
@@ -529,8 +792,8 @@ walletTransferRouter.get('/transfer/claim-preview/:code', async (req, res: Respo
       data: {
         claimCode: row.claim_code,
         senderName: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Movr user',
-        amount: Number(row.received_amount),
-        currency: row.received_currency || 'NGN',
+        amount: Number(row.amount),
+        currency: row.currency || 'NGN',
         status: row.status,
       },
     });

@@ -13,7 +13,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { DatabaseService } = require('./services/database.service');
 const authDb = new DatabaseService();
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 
 // Phase 21 — Sentry (optional when DSN set)
 let Sentry: any = null;
@@ -149,11 +149,19 @@ const {
 } = require('./routes/payment.routes');
 const { adminIntegrationsRouter } = require('./routes/admin-integrations.routes');
 const { walletRouter } = require('./routes/wallet.routes');
+const {
+  adminPricingRouter,
+  identityLinkRouter,
+  walletTransferRouter,
+  tripRecordingRouter,
+} = require('./routes/phases-25-28.routes');
 
 app.use('/webhooks', paymentWebhooksRouter);
 app.use('/api/v1/payments', paymentsRouter);
 app.use('/api/v1/admin/payment-providers', adminPaymentProvidersRouter);
 app.use('/api/v1/admin/integrations', adminIntegrationsRouter);
+// Transfer routes (incl. public claim-preview) before walletRouter auth wall
+app.use('/api/v1/wallet', walletTransferRouter);
 app.use('/api/v1/wallet', walletRouter);
 
 const { storesRouter, cartRouter, ordersRouter } = require('./routes/stores.routes');
@@ -238,15 +246,8 @@ app.use('/webhooks', channelWebhooksRouter);
 app.use('/api/v1/admin', adminVehicleRouter);
 app.use('/api/v1/admin/channels', adminChannelsRouter);
 
-const {
-  adminPricingRouter,
-  identityLinkRouter,
-  walletTransferRouter,
-  tripRecordingRouter,
-} = require('./routes/phases-25-28.routes');
 app.use('/api/v1/admin/pricing', adminPricingRouter);
 app.use('/api/v1/identity', identityLinkRouter);
-app.use('/api/v1/wallet', walletTransferRouter);
 app.use('/api/v1', tripRecordingRouter);
 
 const { startPlatformJobs } = require('./jobs/platform-jobs');
@@ -356,31 +357,99 @@ const services = {
 // ROUTES: AUTHENTICATION
 // ============================================
 app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse) => {
+  // Persist via the same DB path as /auth/register (mobile + legacy clients)
   try {
-    const { email, phone, name, password, userType } = req.body;
-
-    if (!email || !phone || !name || !userType) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Missing required fields'
-      });
-    }
-
-    const userId = 'user_' + Math.random().toString(36).substr(2, 9);
-    const user: User = {
-      id: userId,
+    const {
       email,
       phone,
+      password,
+      firstName,
+      lastName,
       name,
-      userType,
-      verified: false
-    };
+      userType = 'customer',
+      country: countryHint,
+      city = 'Accra',
+    } = req.body;
 
-    users.set(userId, user);
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    const cleanPhone = phone ? String(phone).replace(/[\s\-()]/g, '') : null;
+    const fname = firstName || String(name || '').trim().split(/\s+/)[0] || null;
+    const lname =
+      lastName ||
+      String(name || '')
+        .trim()
+        .split(/\s+/)
+        .slice(1)
+        .join(' ') ||
+      null;
 
-    // Generate JWT
+    if (!password) {
+      return res.status(400).json({ status: 'error', message: 'Password is required' });
+    }
+    if (!cleanEmail && !cleanPhone) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email or phone number is required',
+      });
+    }
+    if (!fname && !name) {
+      return res.status(400).json({ status: 'error', message: 'Full name is required' });
+    }
+
+    let country = String(countryHint || 'GH').toUpperCase();
+    try {
+      const { LocalizationService } = require('./services/localization.service');
+      const loc = new LocalizationService(authDb);
+      const detected = await loc.detectCountry({
+        phoneNumber: cleanPhone || undefined,
+        countryHint: countryHint || undefined,
+      });
+      if (detected?.code) country = detected.code;
+    } catch {
+      /* countries table may be empty */
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const inserted = await authDb.query(
+      `INSERT INTO users (email, phone, first_name, last_name, password, user_type, country, city, is_active, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)
+       RETURNING id, email, phone, first_name, last_name, user_type, country, city`,
+      [
+        cleanEmail,
+        cleanPhone,
+        fname,
+        lname,
+        hash,
+        userType === 'driver' ? 'driver' : 'customer',
+        country,
+        city,
+      ]
+    );
+    const dbUser = inserted.rows[0];
+
+    if (dbUser.user_type === 'customer') {
+      await authDb
+        .query(
+          `INSERT INTO customers (user_id, rating) VALUES ($1, 4.7)`,
+          [dbUser.id]
+        )
+        .catch(() =>
+          authDb.query(`INSERT INTO customers (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [
+            dbUser.id,
+          ])
+        );
+    } else if (dbUser.user_type === 'driver') {
+      await authDb
+        .query(
+          `INSERT INTO drivers (user_id, vehicle_type, is_online, rating)
+           VALUES ($1, 'standard', false, 5.0)`,
+          [dbUser.id]
+        )
+        .catch(() => undefined);
+    }
+
     const token = jwt.sign(
-      { id: userId, email, userType },
+      { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '7d' }
     );
@@ -389,16 +458,32 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
       status: 'success',
       message: 'Account created successfully',
       data: {
-        userId,
-        email,
-        token
-      }
+        userId: dbUser.id,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        token,
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          firstName: dbUser.first_name || '',
+          lastName: dbUser.last_name || '',
+          phone: dbUser.phone || '',
+          userType: dbUser.user_type,
+          country: dbUser.country || 'GH',
+          city: dbUser.city || 'Accra',
+          isVerified: false,
+        },
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Signup error:', error);
+    const msg = String(error?.message || '');
+    if (msg.includes('duplicate') || msg.includes('unique')) {
+      return res.status(400).json({ status: 'error', message: 'Account already exists' });
+    }
     res.status(500).json({
       status: 'error',
-      message: 'Signup failed'
+      message: error.message || 'Signup failed',
     });
   }
 });
@@ -684,6 +769,44 @@ function otpLookupKeys(raw: string) {
   return [...keys];
 }
 
+function hashOtp(code: string) {
+  return createHash('sha256').update(String(code)).digest('hex');
+}
+
+async function persistOtp(opts: {
+  identifier: string;
+  code: string;
+  purpose: 'reset' | 'signup';
+  userId?: string;
+}) {
+  const storeKey = normalizeAuthIdentifier(opts.identifier);
+  const expires = Date.now() + 10 * 60 * 1000;
+  const entry = {
+    code: opts.code,
+    expires,
+    userId: opts.userId,
+    purpose: opts.purpose,
+  };
+  otpStore.set(storeKey, entry);
+  if (opts.identifier !== storeKey) otpStore.set(opts.identifier, entry);
+
+  try {
+    await authDb.query(
+      `UPDATE auth_otps SET consumed_at = NOW()
+       WHERE identifier = $1 AND purpose = $2 AND consumed_at IS NULL`,
+      [storeKey, opts.purpose]
+    );
+    await authDb.query(
+      `INSERT INTO auth_otps (identifier, code_hash, purpose, user_id, expires_at)
+       VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0))`,
+      [storeKey, hashOtp(opts.code), opts.purpose, opts.userId || null, expires]
+    );
+  } catch (e: any) {
+    logger.warn(`auth_otps persist skipped: ${e.message}`);
+  }
+  return entry;
+}
+
 async function findUserForPasswordReset(identifier: string) {
   const raw = String(identifier || '').trim();
   if (!raw) return null;
@@ -716,16 +839,12 @@ app.post('/api/v1/auth/forgot-password', async (req: ExpressRequest, res: Expres
     const user = await findUserForPasswordReset(identifier).catch(() => null);
     const storeKey = normalizeAuthIdentifier(identifier);
 
-    otpStore.set(storeKey, {
+    await persistOtp({
+      identifier,
       code,
-      expires: Date.now() + 10 * 60 * 1000,
-      userId: user?.id,
       purpose: 'reset',
+      userId: user?.id,
     });
-    // Also index under original phone string if different
-    if (identifier !== storeKey) {
-      otpStore.set(identifier, otpStore.get(storeKey)!);
-    }
 
     logger.info(`Password reset OTP for ${identifier}: ${code}`);
 
@@ -769,14 +888,7 @@ app.post('/api/v1/auth/resend-otp', async (req: ExpressRequest, res: ExpressResp
       userId = user?.id;
     }
 
-    const entry = {
-      code,
-      expires: Date.now() + 10 * 60 * 1000,
-      userId,
-      purpose: purpose as 'reset' | 'signup',
-    };
-    otpStore.set(storeKey, entry);
-    if (identifier !== storeKey) otpStore.set(identifier, entry);
+    await persistOtp({ identifier, code, purpose: purpose as 'reset' | 'signup', userId });
 
     logger.info(`Resend OTP (${purpose}) for ${identifier}: ${code}`);
     const data: any = { identifier: storeKey, phone: storeKey, expiresInSeconds: 600 };
@@ -825,6 +937,40 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
       }
     }
 
+    // DB-backed OTP (survives restarts)
+    if (!entry) {
+      try {
+        const storeKey = normalizeAuthIdentifier(identifier);
+        const dbOtp = await authDb.query(
+          `SELECT * FROM auth_otps
+           WHERE identifier = ANY($1::text[])
+             AND purpose = $2
+             AND consumed_at IS NULL
+             AND expires_at > NOW()
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [otpLookupKeys(identifier), purpose === 'reset' ? 'reset' : 'signup']
+        );
+        const row = dbOtp.rows[0];
+        if (row && row.code_hash === hashOtp(code)) {
+          entry = {
+            code,
+            expires: new Date(row.expires_at).getTime(),
+            userId: row.user_id || undefined,
+            purpose: row.purpose,
+          };
+          await authDb.query(`UPDATE auth_otps SET consumed_at = NOW() WHERE id = $1`, [row.id]);
+        } else if (row) {
+          await authDb.query(
+            `UPDATE auth_otps SET attempts = attempts + 1 WHERE id = $1`,
+            [row.id]
+          );
+        }
+      } catch (e: any) {
+        logger.warn(`auth_otps lookup skipped: ${e.message}`);
+      }
+    }
+
     const valid =
       entry &&
       entry.expires > Date.now() &&
@@ -837,6 +983,15 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
 
     // Consume OTP
     for (const key of otpLookupKeys(identifier)) otpStore.delete(key);
+    try {
+      await authDb.query(
+        `UPDATE auth_otps SET consumed_at = NOW()
+         WHERE identifier = ANY($1::text[]) AND purpose = $2 AND consumed_at IS NULL`,
+        [otpLookupKeys(identifier), entry!.purpose]
+      );
+    } catch {
+      /* optional */
+    }
 
     if (purpose === 'reset' || entry!.purpose === 'reset') {
       if (!entry!.userId) {
@@ -986,18 +1141,112 @@ app.post('/api/v1/rides/request', authenticateToken, async (req: AuthRequest, re
 app.get('/api/v1/rides/:id', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const { id } = req.params;
-    const ride = rides.get(id);
+    let row: any = null;
 
-    if (!ride) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Ride not found'
-      });
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      const result = await authDb.getRideById(id);
+      row = result.rows?.[0] || null;
+    } else {
+      const byRef = await authDb.query(
+        `SELECT id FROM rides WHERE public_ref = $1 LIMIT 1`,
+        [id]
+      ).catch(() => ({ rows: [] as any[] }));
+      if (byRef.rows[0]?.id) {
+        const result = await authDb.getRideById(byRef.rows[0].id);
+        row = result.rows?.[0] || null;
+      }
     }
+
+    if (!row) {
+      const mem = rides.get(id);
+      if (!mem) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Ride not found'
+        });
+      }
+      return res.status(200).json({ status: 'success', data: mem });
+    }
+
+    const userId = req.user?.id;
+    const isAdmin =
+      req.user?.userType === 'admin' ||
+      req.user?.user_type === 'admin' ||
+      (Array.isArray((req.user as any)?.roles) && (req.user as any).roles.length > 0);
+    if (
+      userId &&
+      !isAdmin &&
+      row.customer_id !== userId &&
+      row.driver_id !== userId
+    ) {
+      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+    }
+
+    const driverName = [row.driver_first_name, row.driver_last_name].filter(Boolean).join(' ').trim();
+    const customerName = [row.customer_first_name, row.customer_last_name].filter(Boolean).join(' ').trim();
+    const fare = Number(row.actual_fare ?? row.estimated_fare ?? 0);
+    const etaMinutes = Number(row.estimated_duration_minutes ?? 3);
+    const publicRef = row.public_ref || String(row.id).replace(/\D/g, '').slice(-5);
+    const disputed =
+      String(row.dispute_status || '').toLowerCase() === 'disputed' ||
+      String(row.status || '').toLowerCase() === 'disputed';
 
     res.status(200).json({
       status: 'success',
-      data: ride
+      data: {
+        id: row.id,
+        public_ref: publicRef,
+        publicRef,
+        status: disputed ? 'Disputed fare' : row.status,
+        dispute_status: row.dispute_status || null,
+        customerId: row.customer_id,
+        driverId: row.driver_id,
+        customerName: customerName || 'Rider',
+        customer_name: customerName || 'Rider',
+        rider_name: customerName || 'Rider',
+        driver_name: driverName || 'Driver',
+        customer_rating: Number(row.customer_rating ?? 4.7),
+        trips_today: Number(row.trips_today ?? 0),
+        customerAvatarUrl: row.customer_avatar_url || null,
+        pickupAddress: row.pickup_address,
+        pickup_address: row.pickup_address,
+        dropoffAddress: row.dropoff_address,
+        dropoff_address: row.dropoff_address,
+        etaMinutes,
+        eta_minutes: etaMinutes,
+        pickup: {
+          lat: row.pickup_lat,
+          lng: row.pickup_lng,
+          address: row.pickup_address,
+        },
+        dropoff: {
+          lat: row.dropoff_lat,
+          lng: row.dropoff_lng,
+          address: row.dropoff_address,
+        },
+        destinationName: row.dropoff_address || 'Destination',
+        fare,
+        actual_fare: fare,
+        estimated_fare: Number(row.estimated_fare ?? fare),
+        currency: row.currency_code || 'GHS',
+        driver: row.driver_id
+          ? {
+              id: row.driver_id,
+              name: driverName || 'Driver',
+              rating: Number(row.driver_rating || 4.9),
+              avatarUrl: row.driver_avatar_url || null,
+              phone: row.driver_phone || null,
+              vehicle: {
+                plate: row.vehicle_plate || null,
+                model: row.vehicle_model || null,
+                type: row.vehicle_type || null,
+                photoUrl: row.vehicle_photo_url || null,
+              },
+            }
+          : null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
     });
   } catch (error) {
     logger.error('Get ride error:', error);
@@ -1011,17 +1260,48 @@ app.get('/api/v1/rides/:id', authenticateToken, async (req: AuthRequest, res: Ex
 app.get('/api/v1/rides', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
   try {
     const customerId = req.user?.id;
-    const userRides = Array.from(rides.values()).filter(r => r.customerId === customerId);
+    const limit = Math.min(Number(req.query.limit || 20), 50);
 
+    let dbRides: any[] = [];
+    try {
+      const result = await authDb.query(
+        `SELECT id, pickup_address, dropoff_address, status,
+                estimated_fare, actual_fare, created_at, completed_at
+         FROM rides
+         WHERE customer_id = $1
+           AND status IN ('completed', 'cancelled')
+         ORDER BY COALESCE(completed_at, created_at) DESC
+         LIMIT $2`,
+        [customerId, limit]
+      );
+      dbRides = result.rows.map((r: any) => ({
+        id: r.id,
+        pickup_address: r.pickup_address,
+        dropoff_address: r.dropoff_address,
+        pickupAddress: r.pickup_address,
+        dropoffAddress: r.dropoff_address,
+        status: r.status,
+        estimated_fare: r.estimated_fare,
+        actual_fare: r.actual_fare,
+        created_at: r.created_at,
+        completed_at: r.completed_at,
+      }));
+    } catch (e: any) {
+      logger.warn(`DB rides history failed: ${e.message}`);
+    }
+
+    const memRides = Array.from(rides.values()).filter((r: any) => r.customerId === customerId);
     res.status(200).json({
       status: 'success',
-      data: userRides
+      data: {
+        rides: dbRides.length ? dbRides : memRides,
+      },
     });
   } catch (error) {
     logger.error('Get rides error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Failed to get rides'
+      message: 'Failed to get rides',
     });
   }
 });
@@ -1045,11 +1325,55 @@ app.post('/api/v1/marketplace/orders', authenticateToken, async (req: ExpressReq
 // ROUTES: WALLET helpers (live data is on walletRouter — do not stub /balance)
 // ============================================
 app.post('/api/v1/wallet/topup', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
-  res.status(201).json({
-    status: 'success',
-    message: 'Top-up initiated',
-    data: { reference: `TOPUP-${Date.now()}`, amount: req.body?.amount || 0 },
-  });
+  try {
+    const amount = Number(req.body?.amount || 0);
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ status: 'error', message: 'amount must be > 0' });
+    }
+    const userId = req.user!.id;
+    const currency = String(req.body?.currency || 'GHS').toUpperCase();
+    const reference = `TOPUP-${Date.now()}`;
+    const wallet = await authDb.query(
+      `SELECT id FROM wallets WHERE user_id = $1 ORDER BY last_updated ASC NULLS LAST LIMIT 1`,
+      [userId]
+    );
+    let walletId = wallet.rows[0]?.id;
+    if (!walletId) {
+      const created = await authDb.query(
+        `INSERT INTO wallets (user_id, balance_fiat, currency)
+         VALUES ($1, 0, $2) RETURNING id`,
+        [userId, currency]
+      );
+      walletId = created.rows[0].id;
+    }
+    await authDb.query(
+      `UPDATE wallets SET balance_fiat = COALESCE(balance_fiat, 0) + $1, last_updated = NOW() WHERE id = $2`,
+      [amount, walletId]
+    );
+    await authDb
+      .query(
+        `INSERT INTO wallet_transactions_v2 (wallet_id, type, amount, reference)
+         VALUES ($1, 'topup', $2, $3)`,
+        [walletId, amount, reference]
+      )
+      .catch(() => undefined);
+    const bal = await authDb.query(`SELECT balance_fiat, currency FROM wallets WHERE id = $1`, [
+      walletId,
+    ]);
+    res.status(201).json({
+      status: 'success',
+      message: 'Top-up completed',
+      data: {
+        reference,
+        amount,
+        balance: Number(bal.rows[0]?.balance_fiat || amount),
+        currency: bal.rows[0]?.currency || currency,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Wallet top-up error:', error);
+    res.status(500).json({ status: 'error', message: error.message || 'Top-up failed' });
+  }
 });
 
 const notifPrefs = new Map<string, Record<string, boolean>>();
@@ -1061,9 +1385,24 @@ app.get('/api/v1/users/notification-prefs', authenticateToken, async (req: AuthR
     points_earned: true,
     referral_updates: false,
     promotions_offers: false,
+    notifications_enabled: true,
   };
   const uid = req.user?.id || 'anon';
-  res.json({ status: 'success', data: { ...defaults, ...(notifPrefs.get(uid) || {}) } });
+  let fromDb: Record<string, any> = {};
+  try {
+    const r = await authDb.query(`SELECT * FROM user_settings WHERE user_id = $1`, [uid]);
+    if (r.rows[0]) {
+      fromDb = {
+        notifications_enabled: r.rows[0].notifications_enabled !== false,
+      };
+    }
+  } catch {
+    /* table may not exist yet */
+  }
+  res.json({
+    status: 'success',
+    data: { ...defaults, ...(notifPrefs.get(uid) || {}), ...fromDb },
+  });
 });
 
 app.patch('/api/v1/users/notification-prefs', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
@@ -1071,21 +1410,396 @@ app.patch('/api/v1/users/notification-prefs', authenticateToken, async (req: Aut
   const prev = notifPrefs.get(uid) || {};
   const next = { ...prev, ...req.body };
   notifPrefs.set(uid, next);
+  try {
+    if (typeof req.body.notifications_enabled === 'boolean') {
+      await authDb.query(
+        `INSERT INTO user_settings (user_id, notifications_enabled)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE
+         SET notifications_enabled = EXCLUDED.notifications_enabled, updated_at = NOW()`,
+        [uid, req.body.notifications_enabled]
+      );
+    }
+  } catch (e: any) {
+    logger.warn(`user_settings patch skipped: ${e.message}`);
+  }
   res.json({ status: 'success', data: next });
 });
 
 app.get('/api/v1/users/me', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
-  res.json({
-    status: 'success',
-    data: {
-      id: req.user?.id,
-      email: req.user?.email,
-      phone: (req.user as any)?.phone,
-      firstName: (req.user as any)?.firstName,
-      lastName: (req.user as any)?.lastName,
-    },
-  });
+  try {
+    const uid = req.user?.id;
+    const result = await authDb.query(
+      `SELECT u.id, u.email, u.phone, u.first_name, u.last_name, u.avatar_url,
+              u.country, u.language, u.city,
+              s.notifications_enabled, s.language AS settings_language, s.region
+       FROM users u
+       LEFT JOIN user_settings s ON s.user_id = u.id
+       WHERE u.id = $1`,
+      [uid]
+    );
+    const u = result.rows[0];
+    if (!u) {
+      return res.json({
+        status: 'success',
+        data: {
+          id: req.user?.id,
+          email: req.user?.email,
+          phone: (req.user as any)?.phone,
+          firstName: (req.user as any)?.firstName,
+          lastName: (req.user as any)?.lastName,
+        },
+      });
+    }
+    const language = u.settings_language || u.language || 'English';
+    const region = u.region || (u.country === 'GH' ? 'Ghana' : u.country || 'Ghana');
+    res.json({
+      status: 'success',
+      data: {
+        id: u.id,
+        email: u.email,
+        phone: u.phone,
+        firstName: u.first_name || '',
+        lastName: u.last_name || '',
+        name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+        avatarUrl: u.avatar_url,
+        country: u.country || 'GH',
+        city: u.city || 'Accra',
+        notificationsEnabled: u.notifications_enabled !== false,
+        language,
+        region,
+        languageRegion: `${language}, ${region}`,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Failed to load profile' });
+  }
 });
+
+app.patch('/api/v1/users/me/settings', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
+  try {
+    const uid = req.user!.id;
+    const {
+      notificationsEnabled,
+      language = 'English',
+      region = 'Ghana',
+    } = req.body;
+    const enabled =
+      typeof notificationsEnabled === 'boolean' ? notificationsEnabled : true;
+    const result = await authDb.query(
+      `INSERT INTO user_settings (user_id, notifications_enabled, language, region)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id) DO UPDATE SET
+         notifications_enabled = EXCLUDED.notifications_enabled,
+         language = EXCLUDED.language,
+         region = EXCLUDED.region,
+         updated_at = NOW()
+       RETURNING *`,
+      [uid, enabled, language, region]
+    );
+    res.json({ status: 'success', data: result.rows[0] });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ============================================
+// PUBLIC APP STORE LINKS
+// ============================================
+app.get('/api/v1/public/app-links', async (_req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const result = await authDb.query(
+      `SELECT ios_url, android_url, updated_at FROM app_store_links WHERE id = 1 LIMIT 1`
+    );
+    const row = result.rows?.[0];
+    res.json({
+      status: 'success',
+      data: {
+        ios_url: row?.ios_url || 'https://apps.apple.com/app/movr',
+        android_url:
+          row?.android_url || 'https://play.google.com/store/apps/details?id=io.movr.app',
+        updated_at: row?.updated_at || null,
+      },
+    });
+  } catch {
+    res.json({
+      status: 'success',
+      data: {
+        ios_url: 'https://apps.apple.com/app/movr',
+        android_url: 'https://play.google.com/store/apps/details?id=io.movr.app',
+        updated_at: null,
+      },
+    });
+  }
+});
+
+app.get('/api/v1/public/locales', async (_req: ExpressRequest, res: ExpressResponse) => {
+  const fallback = [
+    {
+      country_code: 'GH',
+      country_name: 'Ghana',
+      language_code: 'en',
+      language_label: 'English',
+      display_label: 'Ghana - English',
+      is_default: true,
+    },
+  ];
+  try {
+    const rows = await authDb.query(
+      `SELECT country_code, country_name, language_code, language_label,
+              display_label, is_default, sort_order
+       FROM site_locales
+       WHERE is_active = TRUE
+       ORDER BY sort_order ASC, country_name ASC`
+    );
+    res.json({
+      status: 'success',
+      data: rows.rows.length ? rows.rows : fallback,
+    });
+  } catch {
+    res.json({ status: 'success', data: fallback });
+  }
+});
+
+// ============================================
+// PUBLIC HELP / LEGAL / STATUS COPY
+// ============================================
+app.get('/api/v1/public/help/categories', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const cats = await authDb.query(
+      `SELECT id, slug, title, description, icon_key, sort_order
+       FROM help_categories
+       WHERE is_active = TRUE
+       ORDER BY sort_order ASC, title ASC`
+    );
+    let rows = cats.rows;
+    if (q) {
+      const arts = await authDb.query(
+        `SELECT c.slug AS category_slug
+         FROM help_articles a
+         JOIN help_categories c ON c.id = a.category_id
+         WHERE a.is_active = TRUE
+           AND (
+             lower(a.title) LIKE $1 OR lower(a.body) LIKE $1 OR lower(a.keywords) LIKE $1
+             OR lower(c.title) LIKE $1 OR lower(c.description) LIKE $1
+           )`,
+        [`%${q}%`]
+      );
+      const match = new Set(arts.rows.map((r: any) => r.category_slug));
+      rows = rows.filter(
+        (c: any) =>
+          match.has(c.slug) ||
+          String(c.title).toLowerCase().includes(q) ||
+          String(c.description).toLowerCase().includes(q)
+      );
+    }
+    res.json({ status: 'success', data: rows });
+  } catch (error: any) {
+    res.json({
+      status: 'success',
+      data: [
+        {
+          slug: 'ride',
+          title: 'Ride issues',
+          description: 'Fare disputes, lost items, safety concerns.',
+          icon_key: 'car',
+        },
+        {
+          slug: 'order',
+          title: 'Order & delivery',
+          description: 'Track orders, report a delivery issue.',
+          icon_key: 'package',
+        },
+        {
+          slug: 'pay',
+          title: 'Payments & wallet',
+          description: 'Refunds, payout issues, top-ups.',
+          icon_key: 'card',
+        },
+      ],
+    });
+  }
+});
+
+app.get('/api/v1/public/help/categories/:slug', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const cat = await authDb.query(
+      `SELECT * FROM help_categories WHERE slug = $1 AND is_active = TRUE LIMIT 1`,
+      [req.params.slug]
+    );
+    if (!cat.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Category not found' });
+    }
+    const articles = await authDb.query(
+      `SELECT id, slug, title, body, keywords, sort_order
+       FROM help_articles
+       WHERE category_id = $1 AND is_active = TRUE
+       ORDER BY sort_order ASC`,
+      [cat.rows[0].id]
+    );
+    res.json({
+      status: 'success',
+      data: { ...cat.rows[0], articles: articles.rows },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.get('/api/v1/public/legal/:slug', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const doc = await authDb.query(
+      `SELECT id, slug, title, updated_label, updated_at
+       FROM legal_documents
+       WHERE slug = $1 AND is_active = TRUE
+       LIMIT 1`,
+      [req.params.slug]
+    );
+    if (!doc.rows[0]) {
+      return res.status(404).json({ status: 'error', message: 'Document not found' });
+    }
+    const sections = await authDb.query(
+      `SELECT section_number, title, body
+       FROM legal_sections
+       WHERE document_id = $1
+       ORDER BY sort_order ASC, section_number ASC`,
+      [doc.rows[0].id]
+    );
+    res.json({
+      status: 'success',
+      data: { ...doc.rows[0], sections: sections.rows },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.get('/api/v1/public/status-copy/:key', async (req: ExpressRequest, res: ExpressResponse) => {
+  const defaults: Record<string, { title: string; body: string; cta_label: string }> = {
+    no_connection: {
+      title: 'No connection',
+      body: 'Check your internet connection and try again. You can still book by SMS or a call.',
+      cta_label: 'Retry',
+    },
+    trip_history_empty: {
+      title: 'No trips yet',
+      body: 'Your ride and order history will show up here once you take your first trip.',
+      cta_label: 'Book a ride',
+    },
+  };
+  try {
+    const row = await authDb.query(
+      `SELECT key, title, body, cta_label FROM app_status_copy WHERE key = $1 LIMIT 1`,
+      [req.params.key]
+    );
+    res.json({
+      status: 'success',
+      data: row.rows[0] || defaults[req.params.key] || defaults.no_connection,
+    });
+  } catch {
+    res.json({
+      status: 'success',
+      data: defaults[req.params.key] || defaults.no_connection,
+    });
+  }
+});
+
+app.get('/api/v1/public/onboarding', async (_req: ExpressRequest, res: ExpressResponse) => {
+  const fallback = [
+    {
+      sort_order: 1,
+      title: 'Ride, shop, and deliver — all in one app',
+      body: 'Book a ride, order from local stores, or send a parcel, all from the same place.',
+      icon_key: 'van',
+    },
+    {
+      sort_order: 2,
+      title: 'Pay with wallet, MoMo, or card',
+      body: 'Top up once and use Movr across rides, orders, and deliveries.',
+      icon_key: 'wallet',
+    },
+    {
+      sort_order: 3,
+      title: 'Earn points on every trip',
+      body: 'Redeem rewards or convert points when DVT launches.',
+      icon_key: 'points',
+    },
+  ];
+  try {
+    const rows = await authDb.query(
+      `SELECT sort_order, title, body, icon_key
+       FROM onboarding_slides
+       WHERE is_active = TRUE
+       ORDER BY sort_order ASC`
+    );
+    res.json({ status: 'success', data: rows.rows.length ? rows.rows : fallback });
+  } catch {
+    res.json({ status: 'success', data: fallback });
+  }
+});
+
+app.get(
+  '/api/v1/wallet/payment-methods',
+  authenticateToken,
+  async (req: AuthRequest, res: ExpressResponse) => {
+    try {
+      const rows = await authDb.query(
+        `SELECT id, provider, method_type, label, last_four, is_default
+         FROM customer_payment_methods
+         WHERE user_id = $1
+         ORDER BY is_default DESC, created_at ASC`,
+        [req.user!.id]
+      );
+      if (rows.rows.length) {
+        return res.json({ status: 'success', data: rows.rows });
+      }
+      res.json({
+        status: 'success',
+        data: [
+          {
+            id: 'momo',
+            provider: 'MTN MoMo',
+            method_type: 'momo',
+            label: 'MTN MoMo',
+            last_four: '4471',
+            is_default: true,
+          },
+          {
+            id: 'visa',
+            provider: 'Visa',
+            method_type: 'visa',
+            label: 'Visa',
+            last_four: '8821',
+            is_default: false,
+          },
+        ],
+      });
+    } catch {
+      res.json({
+        status: 'success',
+        data: [
+          {
+            id: 'momo',
+            provider: 'MTN MoMo',
+            method_type: 'momo',
+            label: 'MTN MoMo',
+            last_four: '4471',
+            is_default: true,
+          },
+          {
+            id: 'visa',
+            provider: 'Visa',
+            method_type: 'visa',
+            label: 'Visa',
+            last_four: '8821',
+            is_default: false,
+          },
+        ],
+      });
+    }
+  }
+);
 
 // ============================================
 // HEALTH & ROOT ROUTES

@@ -5,7 +5,9 @@ import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
-const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
+const headers = () => ({
+  Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}`,
+});
 
 /** Merchant analytics — KPI cards, weekly bars, top products. */
 export default function MerchantAnalyticsPage() {
@@ -36,36 +38,33 @@ export default function MerchantAnalyticsPage() {
 
   return (
     <MerchantShell activePath="/merchant/analytics">
-      <h1 className="text-3xl font-bold mb-6">Analytics</h1>
+      <h1 className="text-3xl font-bold text-white mb-6">Analytics</h1>
 
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         {[
-          {
-            label: 'Sales (7 days)',
-            value: formatMoney(salesTotal),
-          },
+          { label: 'Sales (7 days)', value: formatMoney(salesTotal) },
           { label: 'Avg order value', value: formatMoney(aov) },
           { label: 'Repeat customers', value: `${repeat.toFixed(0)}%` },
         ].map((c) => (
-          <div key={c.label} className="rounded-2xl bg-surface-elevated border border-border p-5">
-            <p className="text-sm text-text-secondary">{c.label}</p>
-            <p className="text-3xl font-bold mt-3">{c.value}</p>
+          <div key={c.label} className="rounded-2xl bg-[#1A1A1A] p-5">
+            <p className="text-sm text-[#888888]">{c.label}</p>
+            <p className="text-3xl font-bold mt-3 text-white">{c.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="rounded-2xl bg-surface-elevated border border-border p-5 mb-6">
-        <p className="text-sm text-text-secondary mb-4">Sales this week</p>
+      <div className="rounded-2xl bg-[#1A1A1A] p-5 mb-6">
+        <p className="text-sm text-[#888888] mb-4">Sales this week</p>
         {sales7.length === 0 ? (
-          <p className="text-text-secondary text-sm py-8 text-center">No sales data yet.</p>
+          <p className="text-[#888888] text-sm py-8 text-center">No sales data yet.</p>
         ) : (
           <div className="flex items-end gap-3 h-40">
             {sales7.map((b: any, i: number) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
                 <div
-                  className="w-full rounded-t-md bg-gradient-to-t from-motion-blue to-electric-violet"
+                  className="w-full rounded-t-md bg-gradient-to-b from-[#8E2DE2] to-[#4A00E0]"
                   style={{ height: `${Math.max(8, (b.value / maxBar) * 100)}%` }}
-                  title={`${b.value}`}
+                  title={`${b.label}: ${b.value}`}
                 />
               </div>
             ))}
@@ -73,18 +72,18 @@ export default function MerchantAnalyticsPage() {
         )}
       </div>
 
-      <p className="text-sm text-text-secondary mb-3">Top products</p>
+      <p className="text-sm text-[#888888] mb-3">Top products</p>
       {top.length === 0 ? (
-        <p className="text-text-secondary text-sm">No product sales yet.</p>
+        <p className="text-[#888888] text-sm">No product sales yet.</p>
       ) : (
         <div className="space-y-2">
           {top.slice(0, 5).map((p: any) => (
             <div
               key={p.product_name}
-              className="flex justify-between rounded-xl bg-surface-elevated border border-border px-4 py-3"
+              className="flex justify-between rounded-full bg-[#1A1A1A] px-5 py-3"
             >
-              <span className="font-medium">{p.product_name}</span>
-              <span className="text-text-secondary">{p.qty} sold</span>
+              <span className="font-medium text-white">{p.product_name}</span>
+              <span className="text-[#888888]">{p.qty} sold</span>
             </div>
           ))}
         </div>

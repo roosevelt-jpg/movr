@@ -41,6 +41,14 @@ export class PointsService {
   }
 
   async getBalance(userId: string) {
+    const wallet = await this.db.query(
+      `SELECT COALESCE(points_balance, balance_points, 0) AS pts
+       FROM wallets WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+    if (wallet.rows[0]) {
+      return Number(wallet.rows[0].pts || 0);
+    }
     const sum = await this.db.query(
       `SELECT COALESCE(SUM(points_earned), 0) AS total FROM points_ledger WHERE user_id = $1`,
       [userId]
@@ -55,11 +63,64 @@ export class PointsService {
        GROUP BY activity_type ORDER BY points DESC`,
       [userId]
     );
+    const byActivityMonth = await this.db.query(
+      `SELECT activity_type, COALESCE(SUM(points_earned), 0) AS points, COUNT(*)::int AS events
+       FROM points_ledger
+       WHERE user_id = $1
+         AND created_at >= date_trunc('month', NOW())
+         AND points_earned > 0
+       GROUP BY activity_type ORDER BY points DESC`,
+      [userId]
+    );
     const recent = await this.db.query(
       `SELECT * FROM points_ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
       [userId]
     );
-    return { byActivity: byActivity.rows, recent: recent.rows };
+    return {
+      byActivity: byActivity.rows,
+      byActivityMonth: byActivityMonth.rows,
+      recent: recent.rows,
+    };
+  }
+
+  async getSummary(userId: string) {
+    const balance = await this.getBalance(userId);
+    const estimate = await this.estimatedDvt(userId);
+    const history = await this.getHistory(userId);
+    const labelMap: Record<string, string> = {
+      ride_completed: 'Rides',
+      ride: 'Rides',
+      order_completed: 'Orders',
+      order: 'Orders',
+      delivery_completed: 'Orders',
+      referral_qualified: 'Referrals',
+      referral_confirmed: 'Referrals',
+      referral: 'Referrals',
+      staking_accrual: 'Staking pool',
+      staking: 'Staking pool',
+      stake_created: 'Staking pool',
+    };
+    const buckets: Record<string, number> = {
+      Rides: 0,
+      Orders: 0,
+      Referrals: 0,
+      'Staking pool': 0,
+    };
+    for (const r of history.byActivityMonth) {
+      const label = labelMap[String(r.activity_type || '').toLowerCase()];
+      if (label && label in buckets) buckets[label] += Number(r.points || 0);
+    }
+    return {
+      totalPoints: balance,
+      estimatedDvt: estimate.estimatedDvt,
+      conversionRate: estimate.conversionRate,
+      breakdown: [
+        { category: 'Rides', points: buckets.Rides, timeframe: 'This month' },
+        { category: 'Orders', points: buckets.Orders, timeframe: 'This month' },
+        { category: 'Referrals', points: buckets.Referrals, timeframe: 'This month' },
+        { category: 'Staking pool', points: buckets['Staking pool'], timeframe: 'This month' },
+      ],
+    };
   }
 
   async estimatedDvt(userId: string) {

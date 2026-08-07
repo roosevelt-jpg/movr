@@ -1,48 +1,77 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
-import { useTheme, useThemeColors } from '@movr/design-system/ThemeProvider';
-import type { ThemePreference } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-/** Profile / settings — ACCOUNT + SUPPORT + appearance + Sign out. */
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** Profile / settings — ACCOUNT + SUPPORT + Sign out (mockup). */
 export default function ProfileSettingsScreen({
   onSignOut,
   onEditProfile,
   onHelp,
   onPrivacy,
   onNotifications,
-  onSupport,
 }: {
   onSignOut?: () => void;
   onEditProfile?: () => void;
   onHelp?: () => void;
   onPrivacy?: () => void;
   onNotifications?: () => void;
-  onSupport?: () => void;
 }) {
-  const colors = useThemeColors();
-  const { preference, mode, setPreference } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
   const [name, setName] = useState('Ama Konadu');
   const [phone, setPhone] = useState('+233 24 000 0000');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notifications, setNotifications] = useState('On');
   const [region, setRegion] = useState('English, Ghana');
 
   useEffect(() => {
-    fetch(`${API}/users/me`)
+    fetch(`${API}/users/me`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const u = j.data || j;
         if (u.firstName || u.name) {
           setName(u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim());
         }
-        if (u.phone) setPhone(u.phone);
+        if (u.phone) {
+          const p = String(u.phone);
+          setPhone(p.replace(/^\+233(\d{2})(\d{3})(\d{4})$/, '+233 $1 $2 $3') || p);
+        }
+        if (u.avatarUrl) setAvatarUrl(u.avatarUrl);
+        if (u.languageRegion) setRegion(u.languageRegion);
+        else if (u.language || u.region) {
+          setRegion(`${u.language || 'English'}, ${u.region || 'Ghana'}`);
+        }
+        if (typeof u.notificationsEnabled === 'boolean') {
+          setNotifications(u.notificationsEnabled ? 'On' : 'Off');
+        }
       })
       .catch(() => undefined);
   }, []);
+
+  const toggleNotifications = async () => {
+    const nextOn = notifications !== 'On';
+    setNotifications(nextOn ? 'On' : 'Off');
+    onNotifications?.();
+    await fetch(`${API}/users/me/settings`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        notificationsEnabled: nextOn,
+        language: 'English',
+        region: 'Ghana',
+      }),
+    }).catch(() => undefined);
+  };
 
   const Row = ({
     icon,
@@ -62,45 +91,37 @@ export default function ProfileSettingsScreen({
     </Pressable>
   );
 
+  const signOut = () => {
+    try {
+      delete (globalThis as any).__MOVR_TOKEN__;
+      if (typeof localStorage !== 'undefined') localStorage.removeItem('movr_token');
+    } catch {
+      /* ignore */
+    }
+    onSignOut?.();
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
-        <View style={styles.avatar} />
-        <View>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatar} />
+        )}
+        <View style={{ flex: 1 }}>
           <Text style={styles.name}>{name}</Text>
           <Text style={styles.phone}>{phone}</Text>
         </View>
       </View>
 
-      <Text style={styles.section}>APPEARANCE</Text>
-      <View style={styles.themeRow}>
-        {(['system', 'light', 'dark'] as ThemePreference[]).map((p) => (
-          <Pressable
-            key={p}
-            onPress={() => setPreference(p)}
-            style={[styles.themeChip, preference === p && styles.themeChipOn]}
-          >
-            <Text style={[styles.themeChipText, preference === p && styles.themeChipTextOn]}>
-              {p === 'system' ? `Auto (${mode})` : p === 'light' ? 'Light' : 'Dark'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
       <Text style={styles.section}>ACCOUNT</Text>
+      <View style={styles.divider} />
       <View style={styles.group}>
-        <Row icon="✏️" label="Edit profile" onPress={onEditProfile} />
+        <Row icon="✎" label="Edit profile" onPress={onEditProfile} />
+        <Row icon="🔔" label="Notifications" value={notifications} onPress={toggleNotifications} />
         <Row
-          icon="🔔"
-          label="Notifications"
-          value={notifications}
-          onPress={() => {
-            onNotifications?.();
-            setNotifications('On');
-          }}
-        />
-        <Row
-          icon="🌐"
+          icon="🗺"
           label="Language & region"
           value={region}
           onPress={() => setRegion('English, Ghana')}
@@ -108,74 +129,61 @@ export default function ProfileSettingsScreen({
       </View>
 
       <Text style={styles.section}>SUPPORT</Text>
+      <View style={styles.divider} />
       <View style={styles.group}>
-        <Row icon="❓" label="Help centre" onPress={onHelp} />
-        <Row icon="💬" label="Chat with support" onPress={onSupport} />
+        <Row icon="?" label="Help centre" onPress={onHelp} />
         <Row icon="🛡" label="Privacy & security" onPress={onPrivacy} />
       </View>
 
-      <Pressable onPress={onSignOut} style={styles.signOut}>
+      <Pressable onPress={signOut} style={styles.signOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useThemeColors>) {
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.jetBlack, paddingHorizontal: spacing[4] },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 16,
-      paddingTop: spacing[6],
-      paddingBottom: spacing[5],
-    },
-    avatar: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: colors.border,
-    },
-    name: { color: colors.textPrimary, fontSize: 22, fontWeight: '700' },
-    phone: { color: colors.textSecondary, marginTop: 4, fontSize: 14 },
-    section: {
-      color: colors.textSecondary,
-      fontSize: 12,
-      letterSpacing: 1,
-      fontWeight: '600',
-      marginBottom: 10,
-      marginTop: 8,
-    },
-    themeRow: { flexDirection: 'row', gap: 8, marginBottom: spacing[5] },
-    themeChip: {
-      flex: 1,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceElevated,
-      paddingVertical: 10,
-      alignItems: 'center',
-    },
-    themeChipOn: {
-      borderColor: colors.motionBlue,
-      backgroundColor: 'rgba(0, 85, 255, 0.12)',
-    },
-    themeChipText: { color: colors.textSecondary, fontWeight: '600', fontSize: 12 },
-    themeChipTextOn: { color: colors.textPrimary },
-    group: { marginBottom: spacing[5] },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-    },
-    rowIcon: { width: 28, fontSize: 16 },
-    rowLabel: { flex: 1, color: colors.textPrimary, fontSize: 16 },
-    rowValue: { color: colors.textSecondary, fontSize: 14 },
-    chev: { color: colors.textSecondary, fontSize: 22, fontWeight: '300' },
-    signOut: { alignItems: 'center', marginTop: spacing[4] },
-    signOutText: { color: colors.error, fontSize: 16, fontWeight: '600' },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', paddingHorizontal: spacing[5] },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingTop: spacing[6],
+    paddingBottom: spacing[6],
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#2A2A2A',
+  },
+  name: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
+  phone: { color: '#A1A1AA', marginTop: 4, fontSize: 14 },
+  section: {
+    color: '#71717A',
+    fontSize: 12,
+    letterSpacing: 1.2,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#2A2A2A',
+    marginBottom: 4,
+  },
+  group: { marginBottom: spacing[5] },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2A2A2A',
+  },
+  rowIcon: { width: 28, fontSize: 16, color: '#A1A1AA' },
+  rowLabel: { flex: 1, color: '#FFFFFF', fontSize: 16 },
+  rowValue: { color: '#A1A1AA', fontSize: 14 },
+  chev: { color: '#71717A', fontSize: 22, fontWeight: '300' },
+  signOut: { alignItems: 'center', marginTop: spacing[6] },
+  signOutText: { color: '#F07178', fontSize: 16, fontWeight: '600' },
+});

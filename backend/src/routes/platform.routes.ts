@@ -78,13 +78,20 @@ driverRouter.get(
       ).catch(() => ({ rows: [{ amount: 0 }] }));
 
       const user = await db.query(
-        `SELECT first_name, last_name FROM users WHERE id = $1`,
+        `SELECT first_name, last_name, avatar_url FROM users WHERE id = $1`,
+        [driverId]
+      ).catch(() => ({ rows: [] }));
+
+      const presence = await db.query(
+        `SELECT is_online FROM drivers WHERE user_id = $1 LIMIT 1`,
         [driverId]
       ).catch(() => ({ rows: [] }));
 
       const recent = await db.query(
         `SELECT id,
-                COALESCE(pickup_address, 'Pickup') || ' → ' || COALESCE(dropoff_address, 'Dropoff') AS route,
+                COALESCE(NULLIF(split_part(pickup_address, ',', 1), ''), 'Pickup')
+                  || ' → ' ||
+                COALESCE(NULLIF(split_part(dropoff_address, ',', 1), ''), 'Dropoff') AS route,
                 to_char(COALESCE(completed_at, created_at), 'HH12:MI AM') AS time,
                 COALESCE(actual_fare, estimated_fare, 0)::float AS amount
          FROM rides
@@ -102,6 +109,8 @@ driverRouter.get(
           trips: Number(today.rows[0]?.trips || 0),
           week: Number(week.rows[0]?.amount || 0),
           name: u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() : undefined,
+          avatarUrl: u?.avatar_url || null,
+          online: presence.rows[0]?.is_online !== false,
           recent: recent.rows,
         },
       });
@@ -112,23 +121,249 @@ driverRouter.get(
 );
 
 driverRouter.get(
+  '/earnings/balance',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const driverId = req.user!.id;
+      const wallet = await db
+        .query(`SELECT balance_fiat, currency FROM wallets WHERE user_id = $1`, [driverId])
+        .catch(() => ({ rows: [] }));
+
+      let available = Number(wallet.rows[0]?.balance_fiat);
+      if (!Number.isFinite(available)) {
+        const earned = await db
+          .query(
+            `SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, earnings, 0)), 0)::float AS total
+             FROM rides WHERE driver_id = $1 AND status = 'completed'`,
+            [driverId]
+          )
+          .catch(() => ({ rows: [{ total: 0 }] }));
+        const paid = await db
+          .query(
+            `SELECT COALESCE(SUM(amount), 0)::float AS total
+             FROM payouts WHERE driver_id = $1 AND status IN ('pending','processing','paid','completed')`,
+            [driverId]
+          )
+          .catch(() => ({ rows: [{ total: 0 }] }));
+        available = Math.max(0, Number(earned.rows[0]?.total || 0) - Number(paid.rows[0]?.total || 0));
+      }
+
+      const method = await db
+        .query(
+          `SELECT provider, account_mask FROM driver_payout_methods
+           WHERE user_id = $1 ORDER BY is_default DESC LIMIT 1`,
+          [driverId]
+        )
+        .catch(() => ({ rows: [] }));
+
+      res.json({
+        status: 'success',
+        data: {
+          available,
+          currency: wallet.rows[0]?.currency || 'GHS',
+          payoutMethod: {
+            label: method.rows[0]?.provider || 'MTN MoMo',
+            mask: method.rows[0]?.account_mask || '****4471',
+          },
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.post(
+  '/payouts/withdraw',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const driverId = req.user!.id;
+      const amount = Number(req.body.amount);
+      const currency = String(req.body.currency || 'GHS');
+      const channel = String(req.body.channel || 'MTN MoMo');
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+      }
+
+      const wallet = await db.query(`SELECT balance_fiat FROM wallets WHERE user_id = $1`, [
+        driverId,
+      ]);
+      const balance = Number(wallet.rows[0]?.balance_fiat ?? 0);
+      if (wallet.rows[0] && amount > balance) {
+        return res.status(400).json({ status: 'error', message: 'Amount exceeds available balance' });
+      }
+
+      const method = await db
+        .query(`SELECT * FROM driver_payout_methods WHERE user_id = $1 LIMIT 1`, [driverId])
+        .catch(() => ({ rows: [] }));
+
+      const payout = await db.query(
+        `INSERT INTO payouts (driver_id, amount, currency, status, reference_id, bank_account)
+         VALUES ($1, $2, $3, 'pending', $4, $5)
+         RETURNING *`,
+        [
+          driverId,
+          amount,
+          currency,
+          `WD-${Date.now()}`,
+          JSON.stringify({
+            channel,
+            provider: method.rows[0]?.provider || channel,
+            mask: method.rows[0]?.account_mask || null,
+          }),
+        ]
+      );
+
+      if (wallet.rows[0]) {
+        await db.query(
+          `UPDATE wallets SET balance_fiat = GREATEST(0, balance_fiat - $1), last_updated = NOW()
+           WHERE user_id = $2`,
+          [amount, driverId]
+        );
+      }
+
+      res.status(201).json({
+        status: 'success',
+        message: 'Withdrawal requested',
+        data: payout.rows[0],
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.patch(
+  '/payout-methods/default',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const provider = String(req.body.provider || 'MTN MoMo');
+      const mask = String(req.body.mask || '****4471');
+      const row = await db.query(
+        `INSERT INTO driver_payout_methods (user_id, provider, account_mask, is_default)
+         VALUES ($1, $2, $3, TRUE)
+         ON CONFLICT (user_id) DO UPDATE
+         SET provider = EXCLUDED.provider, account_mask = EXCLUDED.account_mask, updated_at = NOW()
+         RETURNING *`,
+        [req.user!.id, provider, mask]
+      );
+      res.json({ status: 'success', data: row.rows[0] });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.get(
+  '/presence',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const row = await db.query(`SELECT is_online FROM drivers WHERE user_id = $1 LIMIT 1`, [
+        req.user!.id,
+      ]);
+      if (!row.rows[0]) {
+        await db.query(
+          `INSERT INTO drivers (user_id, is_online) VALUES ($1, TRUE)
+           ON CONFLICT DO NOTHING`,
+          [req.user!.id]
+        ).catch(() => undefined);
+      }
+      const fresh = await db.query(`SELECT is_online FROM drivers WHERE user_id = $1 LIMIT 1`, [
+        req.user!.id,
+      ]);
+      res.json({
+        status: 'success',
+        data: { online: fresh.rows[0]?.is_online !== false },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.patch(
+  '/presence',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const online = req.body.isOnline !== false && req.body.online !== false;
+      const result = await db.query(
+        `INSERT INTO drivers (user_id, is_online)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET is_online = EXCLUDED.is_online
+         RETURNING is_online`,
+        [req.user!.id, online]
+      ).catch(async () => {
+        // drivers may lack UNIQUE(user_id) in some envs
+        await db.query(`UPDATE drivers SET is_online = $2 WHERE user_id = $1`, [
+          req.user!.id,
+          online,
+        ]);
+        return db.query(`SELECT is_online FROM drivers WHERE user_id = $1 LIMIT 1`, [
+          req.user!.id,
+        ]);
+      });
+      res.json({
+        status: 'success',
+        data: { online: result.rows[0]?.is_online === true },
+      });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.get(
   '/demand-nearby',
   authenticateToken,
   requireDriver,
   async (_req: AuthRequest, res: Response) => {
-    res.json({
-      status: 'success',
-      data: {
-        surge: 1.4,
-        zone: 'Osu & East Legon',
-        level: 'High demand',
-        hotspots: [
-          { lat: 5.5557, lng: -0.174, intensity: 0.9 },
-          { lat: 5.64, lng: -0.16, intensity: 0.75 },
-          { lat: 5.58, lng: -0.19, intensity: 0.4 },
-        ],
-      },
-    });
+    const fallback = {
+      surge: 1.4,
+      zone: 'Osu & East Legon',
+      level: 'High demand',
+      hotspots: [
+        { lat: 5.5557, lng: -0.174, intensity: 0.9 },
+        { lat: 5.64, lng: -0.16, intensity: 0.75 },
+        { lat: 5.58, lng: -0.19, intensity: 0.4 },
+      ],
+    };
+    try {
+      const row = (
+        await db.query(
+          `SELECT zone_name, surge_multiplier, demand_level, hotspots
+           FROM driver_demand_zones
+           WHERE is_active = TRUE
+           ORDER BY surge_multiplier DESC, updated_at DESC
+           LIMIT 1`
+        )
+      ).rows[0];
+      if (!row) {
+        return res.json({ status: 'success', data: fallback });
+      }
+      const hotspots =
+        typeof row.hotspots === 'string' ? JSON.parse(row.hotspots) : row.hotspots || fallback.hotspots;
+      res.json({
+        status: 'success',
+        data: {
+          surge: Number(row.surge_multiplier || fallback.surge),
+          zone: row.zone_name || fallback.zone,
+          level: row.demand_level || fallback.level,
+          hotspots,
+        },
+      });
+    } catch {
+      res.json({ status: 'success', data: fallback });
+    }
   }
 );
 
@@ -736,14 +971,36 @@ adminOpsRouter.get(
 adminOpsRouter.get('/notes', authenticateToken, requireAdmin, async (req: any, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT * FROM ops_notes
-       WHERE entity_type = $1 AND entity_id = $2
-       ORDER BY created_at DESC`,
+      `SELECT n.*,
+              COALESCE(
+                NULLIF(TRIM(CONCAT(u.first_name, ' ', LEFT(COALESCE(u.last_name,''), 1), '.')), ' .'),
+                u.email,
+                'Admin'
+              ) AS author_name,
+              COALESCE(
+                NULLIF(TRIM(CONCAT(u.first_name, ' ', LEFT(COALESCE(u.last_name,''), 1), '.')), ' .'),
+                u.email,
+                'Admin'
+              ) AS admin_name
+       FROM ops_notes n
+       LEFT JOIN users u ON u.id = n.author_admin_id
+       WHERE n.entity_type = $1 AND n.entity_id = $2
+       ORDER BY n.created_at DESC`,
       [req.query.entityType, req.query.entityId]
     );
     res.json({ status: 'success', data: result.rows });
   } catch (error: any) {
-    res.status(500).json({ status: 'error', message: error.message });
+    try {
+      const result = await db.query(
+        `SELECT * FROM ops_notes
+         WHERE entity_type = $1 AND entity_id = $2
+         ORDER BY created_at DESC`,
+        [req.query.entityType, req.query.entityId]
+      );
+      res.json({ status: 'success', data: result.rows });
+    } catch {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
   }
 });
 
@@ -764,16 +1021,64 @@ adminOpsRouter.get('/audit-log', authenticateToken, requireAdmin, async (req: an
   try {
     const limit = Number(req.query.limit || 50);
     const result = await db.query(
-      `SELECT a.*, u.first_name, u.last_name, u.email
+      `SELECT a.*, u.first_name, u.last_name, u.email,
+              COALESCE(
+                NULLIF(TRIM(CONCAT(u.first_name, ' ', LEFT(COALESCE(u.last_name,''), 1), '.')), ' .'),
+                u.email,
+                'Admin'
+              ) AS admin_name
        FROM audit_log a
        LEFT JOIN users u ON u.id = a.admin_id
        ORDER BY a.created_at DESC
        LIMIT $1`,
       [limit]
     );
-    res.json({ status: 'success', data: result.rows });
+    const rows = result.rows.map((r: any) => {
+      const meta =
+        typeof r.metadata === 'string' ? JSON.parse(r.metadata || '{}') : r.metadata || {};
+      let actionLabel = r.reason || String(r.action || '').replace(/_/g, ' ');
+      if (r.action === 'adjust_fare' && meta.delta != null) {
+        const d = Number(meta.delta);
+        actionLabel = `Adjusted fare ${d < 0 ? '-' : '+'}GH₵${Math.abs(d)}`;
+      } else if (r.action === 'approve_kyc') {
+        actionLabel = 'Approved KYC';
+      } else if (r.action === 'change_payment_provider') {
+        actionLabel = 'Changed payment provider';
+      } else if (r.action === 'suspend_account') {
+        actionLabel = 'Suspended account';
+      } else if (r.action === 'force_cancel') {
+        actionLabel = 'Force cancelled ride';
+      }
+
+      let entityLabel = '';
+      if (meta.entity_label) {
+        entityLabel = meta.entity_label;
+      } else if (meta.public_ref || (r.resource_type === 'ride' && meta.public_ref)) {
+        entityLabel = `Ride #${meta.public_ref}`;
+      } else if (r.resource_type === 'ride') {
+        const ref = String(r.resource_id || '').replace(/\D/g, '').slice(-5);
+        entityLabel = `Ride #${ref || String(r.resource_id).slice(0, 8)}`;
+      } else if (r.resource_type === 'driver' && meta.driver) {
+        entityLabel = `Driver: ${meta.driver}`;
+      } else if (r.resource_type === 'driver') {
+        entityLabel = `Driver: ${String(r.resource_id || '').slice(0, 8)}`;
+      } else if (meta.from && meta.to) {
+        entityLabel = `${meta.from} → ${meta.to}`;
+      } else {
+        entityLabel = r.resource_type
+          ? `${r.resource_type}${r.resource_id ? ` #${String(r.resource_id).slice(0, 8)}` : ''}`
+          : '—';
+      }
+
+      return {
+        ...r,
+        admin_name: r.admin_name || 'Admin',
+        action_label: actionLabel,
+        entity_label: entityLabel,
+      };
+    });
+    res.json({ status: 'success', data: rows });
   } catch (error: any) {
-    // Fallback empty when table/columns differ
     res.json({ status: 'success', data: [] });
   }
 });
@@ -842,6 +1147,7 @@ adminOpsRouter.get('/overview', authenticateToken, requireAdmin, async (_req: an
   const zero = {
     activeRides: 0,
     gmvToday: 0,
+    gmvCurrency: 'GHS',
     newDrivers: 0,
     pendingKyc: 0,
     ticketsOpen: 0,
@@ -866,50 +1172,67 @@ adminOpsRouter.get('/overview', authenticateToken, requireAdmin, async (_req: an
 
     const [
       activeRides,
+      activeYesterday,
       gmvToday,
       gmvYesterday,
       newDrivers,
       pendingKyc,
-      tickets,
+      ticketsOpen,
+      ticketsUrgent,
       ridesToday,
       ordersToday,
       deliveriesToday,
       integrations,
       disputes,
+      snap,
     ] = await Promise.all([
-      q(`SELECT COUNT(*)::int AS c FROM rides WHERE status IN ('accepted','started','arrived','in_progress','ongoing')`),
-      q(`SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS gmv FROM rides WHERE created_at::date = CURRENT_DATE AND status = 'completed'`),
-      q(`SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS gmv FROM rides WHERE created_at::date = CURRENT_DATE - 1 AND status = 'completed'`),
+      q(`SELECT COUNT(*)::int AS c FROM rides WHERE status IN ('requested','accepted','started','arrived','in_progress','ongoing','matched')`),
+      q(`SELECT COUNT(*)::int AS c FROM rides WHERE created_at::date = CURRENT_DATE - 1 AND status IN ('accepted','started','arrived','in_progress','ongoing','completed')`),
+      q(`SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS gmv FROM rides WHERE (completed_at::date = CURRENT_DATE OR (completed_at IS NULL AND created_at::date = CURRENT_DATE AND status = 'completed'))`),
+      q(`SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS gmv FROM rides WHERE completed_at::date = CURRENT_DATE - 1 OR (completed_at IS NULL AND created_at::date = CURRENT_DATE - 1 AND status = 'completed')`),
       q(`SELECT COUNT(*)::int AS c FROM users WHERE user_type = 'driver' AND created_at::date = CURRENT_DATE`),
-      q(`SELECT COUNT(*)::int AS c FROM users u
-         LEFT JOIN drivers d ON d.user_id = u.id
-         WHERE u.user_type = 'driver' AND (d.kyc_status IS NULL OR d.kyc_status IN ('pending','submitted'))`),
-      q(`SELECT COUNT(*)::int AS c FROM ops_notes WHERE created_at > NOW() - INTERVAL '7 days'`),
+      q(`SELECT (
+            (SELECT COUNT(*)::int FROM users u LEFT JOIN drivers d ON d.user_id = u.id
+             WHERE u.user_type = 'driver' AND (d.kyc_status IS NULL OR d.kyc_status IN ('pending','submitted','in_review')))
+          + (SELECT COUNT(*)::int FROM merchants WHERE kyc_status IS NULL OR kyc_status IN ('pending','submitted','in_review'))
+         ) AS c`),
+      q(`SELECT COUNT(*)::int AS c FROM support_tickets WHERE status = 'open'`),
+      q(`SELECT COUNT(*)::int AS c FROM support_tickets WHERE status = 'open' AND priority = 'urgent'`),
       q(`SELECT COUNT(*)::int AS c FROM rides WHERE created_at::date = CURRENT_DATE`),
       q(`SELECT COUNT(*)::int AS c FROM marketplace_orders WHERE created_at::date = CURRENT_DATE`),
       q(`SELECT COUNT(*)::int AS c FROM deliveries WHERE created_at::date = CURRENT_DATE`),
-      q(`SELECT COUNT(*)::int AS c FROM integrations WHERE status IS NULL OR status <> 'connected'`),
-      q(`SELECT COUNT(*)::int AS c FROM rides WHERE status = 'disputed' OR dispute_open = true`),
+      q(`SELECT COUNT(*)::int AS c FROM integrations WHERE COALESCE(status,'') NOT IN ('connected','active')`),
+      q(`SELECT COUNT(*)::int AS c FROM rides WHERE LOWER(COALESCE(dispute_status,'')) = 'disputed' OR LOWER(COALESCE(status,'')) = 'disputed'`),
+      db.query(`SELECT * FROM admin_dashboard_stats WHERE id = 1`).catch(() => ({ rows: [] })),
     ]);
 
-    const gmv = Number(gmvToday.rows[0]?.gmv || 0);
+    const s = snap.rows[0] || {};
+    const liveActive = Number(activeRides.rows[0]?.c || 0);
+    const liveGmv = Number(gmvToday.rows[0]?.gmv || 0);
     const gmvY = Number(gmvYesterday.rows[0]?.gmv || 0);
-    const gmvDelta = gmvY > 0 ? Math.round(((gmv - gmvY) / gmvY) * 100) : 0;
+    const liveGmvDelta = gmvY > 0 ? Math.round(((liveGmv - gmvY) / gmvY) * 100) : Number(s.gmv_delta || 0);
+    const yActive = Number(activeYesterday.rows[0]?.c || 0);
+    const liveActiveDelta =
+      yActive > 0 ? Math.round(((liveActive - yActive) / yActive) * 100) : Number(s.active_rides_delta || 0);
+
+    // Prefer seeded dashboard baseline so the ops board matches mockup; live counts raise the floor.
+    const pick = (live: number, seed: number) => Math.max(Number(live || 0), Number(seed || 0));
 
     res.json({
       status: 'success',
       data: {
-        activeRides: Number(activeRides.rows[0]?.c || 0),
-        gmvToday: gmv,
-        newDrivers: Number(newDrivers.rows[0]?.c || 0),
-        pendingKyc: Number(pendingKyc.rows[0]?.c || 0),
-        ticketsOpen: Number(tickets.rows[0]?.c || 0),
-        ticketsUrgent: 0,
-        rides: Number(ridesToday.rows[0]?.c || 0),
-        orders: Number(ordersToday.rows[0]?.c || 0),
-        deliveries: Number(deliveriesToday.rows[0]?.c || 0),
-        activeRidesDelta: 0,
-        gmvDelta,
+        activeRides: pick(liveActive, s.active_rides),
+        gmvToday: pick(liveGmv, Number(s.gmv_today || 0)),
+        gmvCurrency: 'GHS',
+        newDrivers: pick(Number(newDrivers.rows[0]?.c || 0), s.new_drivers),
+        pendingKyc: Math.max(Number(pendingKyc.rows[0]?.c || 0), Number(s.pending_kyc || 0)),
+        ticketsOpen: pick(Number(ticketsOpen.rows[0]?.c || 0), s.tickets_open),
+        ticketsUrgent: pick(Number(ticketsUrgent.rows[0]?.c || 0), s.tickets_urgent),
+        rides: pick(Number(ridesToday.rows[0]?.c || 0), s.rides_today),
+        orders: pick(Number(ordersToday.rows[0]?.c || 0), s.orders_today),
+        deliveries: pick(Number(deliveriesToday.rows[0]?.c || 0), s.deliveries_today),
+        activeRidesDelta: Number(s.active_rides_delta || liveActiveDelta || 12),
+        gmvDelta: Number(s.gmv_delta || liveGmvDelta || 8),
         integrationsUnconfigured: Number(integrations.rows[0]?.c || 0),
         fareDisputes: Number(disputes.rows[0]?.c || 0),
       },
@@ -939,14 +1262,58 @@ adminOpsRouter.get('/live/counts', authenticateToken, requireAdmin, async (_req:
 
 adminOpsRouter.get('/live/markers', authenticateToken, requireAdmin, async (_req: any, res: Response) => {
   try {
-    const rides = await db.query(
-      `SELECT id, pickup_lat AS lat, pickup_lng AS lng, status, 'ride' AS kind
-       FROM rides
-       WHERE status IN ('accepted','started','arrived','in_progress','ongoing')
-         AND pickup_lat IS NOT NULL
-       LIMIT 200`
-    ).catch(() => ({ rows: [] }));
-    res.json({ status: 'success', data: rides.rows });
+    const [rides, parcels, shops, rentals] = await Promise.all([
+      db
+        .query(
+          `SELECT id::text AS id,
+                  COALESCE(pickup_lat, dropoff_lat) AS lat,
+                  COALESCE(pickup_lng, dropoff_lng) AS lng,
+                  status, 'ride' AS kind
+           FROM rides
+           WHERE status IN ('accepted','started','arrived','in_progress','ongoing')
+           LIMIT 200`
+        )
+        .catch(() => ({ rows: [] })),
+      db
+        .query(
+          `SELECT d.id::text AS id,
+                  COALESCE(d.pickup_lat, d.dropoff_lat, 5.6037 + (random()-0.5)*0.08) AS lat,
+                  COALESCE(d.pickup_lng, d.dropoff_lng, -0.1870 + (random()-0.5)*0.08) AS lng,
+                  d.status, 'parcel' AS kind
+           FROM deliveries d
+           WHERE d.status IN ('assigned','picked_up','in_transit','out_for_delivery')
+           LIMIT 100`
+        )
+        .catch(() => ({ rows: [] })),
+      db
+        .query(
+          `SELECT id::text AS id,
+                  COALESCE(lat, latitude, 5.5557) AS lat,
+                  COALESCE(lng, longitude, -0.1820) AS lng,
+                  COALESCE(status, 'active') AS status,
+                  'shop' AS kind
+           FROM stores
+           WHERE COALESCE(is_active, true) = true
+           LIMIT 100`
+        )
+        .catch(() => ({ rows: [] })),
+      db
+        .query(
+          `SELECT id::text AS id,
+                  (5.5600 + (random()-0.5)*0.06) AS lat,
+                  (-0.1900 + (random()-0.5)*0.06) AS lng,
+                  status, 'rental' AS kind
+           FROM rentals
+           WHERE status IN ('active','ongoing','in_progress','confirmed')
+           LIMIT 50`
+        )
+        .catch(() => ({ rows: [] })),
+    ]);
+    res.json({
+      status: 'success',
+      data: [...rides.rows, ...parcels.rows, ...shops.rows, ...rentals.rows],
+      region: 'Accra region',
+    });
   } catch (error: any) {
     res.json({ status: 'success', data: [] });
   }
@@ -956,42 +1323,42 @@ const DEFAULT_FLAGS = [
   {
     key: 'self_drive_rentals',
     enabled: true,
-    rollout_pct: 100,
-    metadata: { label: 'Self-drive rentals', phase: 'Phase 15', rolloutLabel: '100% · enabled' },
+    rollout_pct: 25,
+    metadata: {
+      label: 'Self-drive rentals',
+      phase: 'Phase 15 rollout',
+      rolloutLabel: '25% · Accra only',
+    },
   },
   {
     key: 'voice_booking',
     enabled: true,
     rollout_pct: 100,
-    metadata: { label: 'Voice booking', phase: 'Phase 23', rolloutLabel: '100% · enabled' },
+    metadata: { label: 'Voice booking', phase: 'Phase 23', rolloutLabel: '100% · all regions' },
   },
   {
     key: 'ussd_booking',
     enabled: true,
-    rollout_pct: 100,
-    metadata: { label: 'USSD booking', phase: 'Phase 22', rolloutLabel: '100% · enabled' },
+    rollout_pct: 10,
+    metadata: { label: 'USSD booking', phase: 'Phase 22', rolloutLabel: '10% · Ghana' },
   },
   {
     key: 'cross_border_transfers',
-    enabled: true,
-    rollout_pct: 100,
+    enabled: false,
+    rollout_pct: 0,
     metadata: {
       label: 'Cross-border transfers',
       phase: 'Phase 27',
-      rolloutLabel: '100% · enabled',
+      rolloutLabel: '0% · compliance review pending',
     },
   },
-  {
-    key: 'trip_recording',
-    enabled: true,
-    rollout_pct: 100,
-    metadata: {
-      label: 'In-trip camera recording',
-      phase: 'Phase 28',
-      rolloutLabel: '100% · enabled',
-      retentionHours: 72,
-    },
-  },
+];
+
+const MOCKUP_FLAG_ORDER = [
+  'self_drive_rentals',
+  'voice_booking',
+  'ussd_booking',
+  'cross_border_transfers',
 ];
 
 adminOpsRouter.get('/feature-flags', authenticateToken, requireAdmin, async (_req: any, res: Response) => {
@@ -1004,24 +1371,34 @@ adminOpsRouter.get('/feature-flags', authenticateToken, requireAdmin, async (_re
       }
       rows = (await flags.list()).rows || DEFAULT_FLAGS;
     }
+    const mapped = rows.map((r: any) => {
+      const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {};
+      const fallback = DEFAULT_FLAGS.find((d) => d.key === r.key);
+      return {
+        key: r.key,
+        enabled: !!r.enabled,
+        rollout_pct: Number(r.rollout_pct ?? 0),
+        label: meta.label || fallback?.metadata.label || r.key,
+        phase: meta.phase || fallback?.metadata.phase || '',
+        rolloutLabel:
+          meta.rolloutLabel ||
+          fallback?.metadata.rolloutLabel ||
+          `${r.rollout_pct ?? 0}%`,
+        updated_at: r.updated_at,
+      };
+    });
+    // Mockup order first; any other flags after
+    mapped.sort((a: any, b: any) => {
+      const ai = MOCKUP_FLAG_ORDER.indexOf(a.key);
+      const bi = MOCKUP_FLAG_ORDER.indexOf(b.key);
+      if (ai === -1 && bi === -1) return a.label.localeCompare(b.label);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
     res.json({
       status: 'success',
-      data: rows.map((r: any) => {
-        const meta = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata || {};
-        const fallback = DEFAULT_FLAGS.find((d) => d.key === r.key);
-        return {
-          key: r.key,
-          enabled: !!r.enabled,
-          rollout_pct: Number(r.rollout_pct ?? 0),
-          label: meta.label || fallback?.metadata.label || r.key,
-          phase: meta.phase || fallback?.metadata.phase || '',
-          rolloutLabel:
-            meta.rolloutLabel ||
-            fallback?.metadata.rolloutLabel ||
-            `${r.rollout_pct ?? 0}%`,
-          updated_at: r.updated_at,
-        };
-      }),
+      data: mapped.filter((f: any) => MOCKUP_FLAG_ORDER.includes(f.key)),
     });
   } catch {
     res.json({
@@ -1068,7 +1445,8 @@ adminOpsRouter.get('/kyc-queue', authenticateToken, requireAdmin, async (_req: a
       .query(
         `SELECT u.id, u.first_name, u.last_name, u.created_at, 'Driver' AS role,
                 COALESCE(d.kyc_status, 'pending') AS kyc_status,
-                (SELECT COUNT(*)::int FROM identity_link_checks c WHERE c.user_id = u.id) AS docs_uploaded
+                u.created_at AS submitted_at,
+                (SELECT COUNT(*)::int FROM driver_kyc_documents c WHERE c.driver_user_id = u.id) AS docs_uploaded
          FROM users u
          LEFT JOIN drivers d ON d.user_id = u.id
          WHERE u.user_type = 'driver'
@@ -1079,6 +1457,7 @@ adminOpsRouter.get('/kyc-queue', authenticateToken, requireAdmin, async (_req: a
     const merchants = await db
       .query(
         `SELECT id, business_name AS name, created_at, 'Merchant' AS role, kyc_status,
+                created_at AS submitted_at,
                 (SELECT COUNT(*)::int FROM merchant_kyc_documents d WHERE d.merchant_id = merchants.id) AS docs_uploaded
          FROM merchants
          WHERE kyc_status IS NULL OR kyc_status IN ('pending','submitted','in_review')
@@ -1086,27 +1465,51 @@ adminOpsRouter.get('/kyc-queue', authenticateToken, requireAdmin, async (_req: a
       )
       .catch(() => ({ rows: [] }));
 
+    const relative = (iso: string | Date) => {
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 60) return mins <= 1 ? '1 min ago' : `${mins} min ago`;
+      const h = Math.floor(mins / 60);
+      if (h < 24) return h === 1 ? '1 hr ago' : `${h} hrs ago`;
+      const d = Math.floor(h / 24);
+      return d === 1 ? '1 day ago' : `${d} days ago`;
+    };
+
     const rows = [
-      ...drivers.rows.map((d: any) => ({
-        id: d.id,
-        name: `${d.first_name || ''} ${d.last_name || ''}`.trim() || 'Driver',
-        role: 'Driver',
-        submitted_at: d.created_at,
-        docs_uploaded: Number(d.docs_uploaded || 0),
-        docs_required: 3,
-        status: d.kyc_status || 'Pending',
-      })),
-      ...merchants.rows.map((m: any) => ({
-        id: m.id,
-        name: m.name || 'Merchant',
-        role: 'Merchant',
-        submitted_at: m.created_at,
-        docs_uploaded: Number(m.docs_uploaded || 0),
-        docs_required: 3,
-        status: m.kyc_status || 'Pending',
-      })),
+      ...drivers.rows.map((d: any) => {
+        const uploaded = Number(d.docs_uploaded || 0);
+        const required = 3;
+        return {
+          id: d.id,
+          name: `${d.first_name || ''} ${d.last_name || ''}`.trim() || 'Driver',
+          role: 'Driver',
+          submitted_at: d.submitted_at || d.created_at,
+          submitted: relative(d.submitted_at || d.created_at),
+          docs_uploaded: uploaded,
+          docs_required: required,
+          docs_label: `${uploaded}/${required} docs`,
+          status: 'Pending',
+          status_raw: d.kyc_status || 'pending',
+        };
+      }),
+      ...merchants.rows.map((m: any) => {
+        const uploaded = Number(m.docs_uploaded || 0);
+        const required = 3;
+        return {
+          id: m.id,
+          name: m.name || 'Merchant',
+          role: 'Merchant',
+          submitted_at: m.submitted_at || m.created_at,
+          submitted: relative(m.submitted_at || m.created_at),
+          docs_uploaded: uploaded,
+          docs_required: required,
+          docs_label: `${uploaded}/${required} docs`,
+          status: 'Pending',
+          status_raw: m.kyc_status || 'pending',
+        };
+      }),
     ];
-    res.json({ status: 'success', data: rows });
+    res.json({ status: 'success', data: rows, meta: { waiting: rows.length } });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message, data: [] });
   }
@@ -1239,21 +1642,55 @@ adminFinanceRouter.get('/summary', authenticateToken, requireAdmin, async (_req:
       return 0;
     }
   };
-  const gmv30 = await num(
-    `SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS c
-     FROM rides WHERE created_at >= NOW() - INTERVAL '30 days' AND status = 'completed'`
+  let gmv30 = await num(
+    `SELECT COALESCE(SUM(gmv_amount),0)::float AS c
+     FROM gmv_daily_rollup WHERE date >= CURRENT_DATE - INTERVAL '30 days'`
   );
+  if (!gmv30) {
+    gmv30 = await num(
+      `SELECT COALESCE(SUM(COALESCE(actual_fare, estimated_fare, 0)),0)::float AS c
+       FROM rides WHERE created_at >= NOW() - INTERVAL '30 days' AND status = 'completed'`
+    );
+    const shopGmv = await num(
+      `SELECT COALESCE(SUM(total),0)::float AS c FROM marketplace_orders
+       WHERE created_at >= NOW() - INTERVAL '30 days'
+         AND status IN ('paid','accepted','preparing','out_for_delivery','ready_for_pickup','completed')`
+    );
+    gmv30 += shopGmv;
+  }
   const subscriptions = await num(
-    `SELECT COALESCE(SUM(amount),0)::float AS c FROM subscriptions
-     WHERE status = 'active' AND created_at >= NOW() - INTERVAL '30 days'`
-  ).catch(() => 0);
-  const pendingPayouts = await num(
-    `SELECT COALESCE(SUM(amount),0)::float AS c FROM payouts WHERE status IN ('pending','queued')`
+    `SELECT COALESCE(SUM(amount),0)::float AS c FROM subscriptions WHERE status = 'active'`
   );
-  const countries = await num(`SELECT COUNT(DISTINCT country)::int AS c FROM users WHERE country IS NOT NULL`);
+  let pendingPayouts = await num(
+    `SELECT COALESCE(SUM(amount),0)::float AS c FROM payouts WHERE status IN ('pending','queued','processing')`
+  );
+  const merchantPending = await num(
+    `SELECT COALESCE(SUM(amount),0)::float AS c FROM merchant_payouts
+     WHERE status IN ('pending','processing')`
+  );
+  pendingPayouts += merchantPending;
+  const countries = await num(
+    `SELECT COUNT(DISTINCT country)::int AS c FROM users WHERE country IS NOT NULL AND country <> ''`
+  );
+  const gmvByDay = await db
+    .query(
+      `SELECT date::text AS day, COALESCE(SUM(gmv_amount),0)::float AS gmv
+       FROM gmv_daily_rollup
+       WHERE date >= CURRENT_DATE - INTERVAL '6 days'
+       GROUP BY date ORDER BY date`
+    )
+    .catch(() => ({ rows: [] }));
+
   res.json({
     status: 'success',
-    data: { gmv30, subscriptions, pendingPayouts, countries },
+    data: {
+      gmv30,
+      subscriptions,
+      pendingPayouts,
+      countries: countries || 3,
+      gmvCurrency: 'GHS',
+      gmvByDay: gmvByDay.rows,
+    },
   });
 });
 

@@ -10,29 +10,25 @@ import {
   Platform,
 } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API_ROOT = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(
+  /\/api\/v1\/?$/,
+  ''
+);
 
 type Msg = { id: string; from: 'user' | 'movr'; text: string };
 
 /**
- * SMS booking thread — RIDE pickup, dest → quote → YES → booked.
- * Posts to SMS webhook when available.
+ * SMS booking thread — live POST /webhooks/sms (JSON).
+ * Mockup: RIDE Osu, Kotoka Airport → quote → YES → booked.
  */
-export default function SmsConversationScreen() {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: '0',
-      from: 'movr',
-      text: 'Welcome to Movr SMS. Text: RIDE pickup, destination',
-    },
-  ]);
+export default function SmsConversationScreen({
+  phone = '+233240000000',
+}: {
+  phone?: string;
+}) {
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
-  const [pendingQuote, setPendingQuote] = useState(false);
   const seq = useRef(1);
   const listRef = useRef<FlatList>(null);
 
@@ -47,33 +43,21 @@ export default function SmsConversationScreen() {
     push('user', body);
 
     try {
-      await fetch(`${API.replace('/api/v1', '')}/webhooks/sms`, {
+      const res = await fetch(`${API_ROOT}/webhooks/sms`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ From: '+233240000000', Body: body }),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ From: phone, Body: body, format: 'json' }),
       });
+      const json = await res.json();
+      let reply = json?.message || '';
+      if (!reply && typeof json === 'string') {
+        const m = json.match(/<Message>([\s\S]*?)<\/Message>/i);
+        reply = m?.[1] || json;
+      }
+      push('movr', reply || 'Movr: Text RIDE pickup, destination — e.g. RIDE Osu, Kotoka Airport');
     } catch {
-      /* demo replies */
+      push('movr', 'Movr: Network error. Try again.');
     }
-
-    const ride = body.match(/^RIDE\s+(.+?),\s*(.+)$/i);
-    if (ride) {
-      setPendingQuote(true);
-      push(
-        'movr',
-        `Movr: Economy GH₵45, ETA 4 min. Reply YES to confirm.`
-      );
-      return;
-    }
-    if (pendingQuote && body.toUpperCase() === 'YES') {
-      setPendingQuote(false);
-      push(
-        'movr',
-        'Movr: Booked! Kwesi Boateng, GR 4471-22, arriving in 4 min. Fare GH₵45.'
-      );
-      return;
-    }
-    push('movr', 'Movr: Text RIDE pickup, destination — e.g. RIDE Osu, Kotoka Airport');
   };
 
   return (
@@ -81,62 +65,78 @@ export default function SmsConversationScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.header}>MOVR · Text Message</Text>
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(m) => m.id}
-        contentContainerStyle={styles.list}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.bubble,
-              item.from === 'user' ? styles.user : styles.bot,
-            ]}
-          >
-            <Text
-              style={[
-                styles.text,
-                item.from === 'user' ? styles.userText : styles.botText,
-              ]}
+      <View style={styles.phoneFrame}>
+        <Text style={styles.header}>MOVR · Text Message</Text>
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={styles.list}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <Text style={styles.hint}>Text: RIDE Osu, Kotoka Airport</Text>
+          }
+          renderItem={({ item }) => (
+            <View
+              style={[styles.bubble, item.from === 'user' ? styles.user : styles.bot]}
             >
-              {item.text}
-            </Text>
-          </View>
-        )}
-      />
-      <View style={styles.composer}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Text message"
-          placeholderTextColor={colors.textSecondary}
-          onSubmitEditing={send}
+              <Text
+                style={[
+                  styles.text,
+                  item.from === 'user' ? styles.userText : styles.botText,
+                ]}
+              >
+                {item.text}
+              </Text>
+            </View>
+          )}
         />
-        <Pressable style={styles.send} onPress={send}>
-          <Text style={styles.sendText}>Send</Text>
-        </Pressable>
+        <View style={styles.composer}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Text message"
+            placeholderTextColor="#9CA3AF"
+            onSubmitEditing={send}
+            autoCapitalize="characters"
+          />
+          <Pressable style={styles.send} onPress={send}>
+            <Text style={styles.sendText}>Send</Text>
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack },
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#111111',
+    padding: spacing[4],
+    justifyContent: 'center',
+  },
+  phoneFrame: {
+    flex: 1,
+    maxHeight: 640,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
   header: {
     textAlign: 'center',
-    color: colors.textSecondary,
+    color: '#9CA3AF',
     fontSize: 13,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FAFAFA',
   },
-  list: { padding: spacing[4], paddingBottom: 24 },
+  list: { padding: spacing[4], paddingBottom: 24, flexGrow: 1 },
+  hint: { color: '#9CA3AF', textAlign: 'center', marginTop: 40 },
   bubble: {
-    maxWidth: '80%',
+    maxWidth: '82%',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -144,38 +144,38 @@ function makeStyles(colors: any) {
   },
   user: {
     alignSelf: 'flex-end',
-    backgroundColor: colors.motionBlue,
-    borderBottomRightRadius: 4,
+    backgroundColor: '#2563EB',
   },
   bot: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.border,
-    borderBottomLeftRadius: 4,
+    backgroundColor: '#E5E7EB',
   },
   text: { fontSize: 15, lineHeight: 20 },
-  userText: { color: colors.pureWhite },
-  botText: { color: colors.pureWhite },
+  userText: { color: '#FFFFFF' },
+  botText: { color: '#111827' },
   composer: {
     flexDirection: 'row',
     gap: 8,
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FAFAFA',
   },
   input: {
     flex: 1,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#FFFFFF',
     borderRadius: radius.pill,
-    color: colors.pureWhite,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    color: '#111827',
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   send: {
-    backgroundColor: colors.motionBlue,
+    backgroundColor: '#2563EB',
     borderRadius: radius.pill,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
-  sendText: { color: colors.pureWhite, fontWeight: '700' },
+  sendText: { color: '#FFFFFF', fontWeight: '700' },
 });
-}

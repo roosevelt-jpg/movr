@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,15 @@ import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' };
+}
+
 type Msg =
   | { id: string; from: 'user' | 'bot'; kind: 'text'; text: string }
   | { id: string; from: 'user'; kind: 'voice'; duration: string }
@@ -23,26 +32,19 @@ type Msg =
   | { id: string; from: 'bot'; kind: 'prompt'; text: string };
 
 /**
- * WhatsApp-style channel booking chat — uses voice parse/confirm APIs.
- * Mockup conversation: voice note → options → reply 1/2 → booked.
+ * WhatsApp-style channel booking chat — voice parse/confirm APIs.
  */
 export default function WhatsAppConversationScreen() {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: '0',
-      from: 'bot',
-      kind: 'text',
-      text: 'Send a voice note or type where you want to go.',
-    },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<any>(null);
   const [awaitingPick, setAwaitingPick] = useState(false);
   const listRef = useRef<FlatList>(null);
   const seq = useRef(1);
+  const booted = useRef(false);
 
   const push = (m: Omit<Msg, 'id'>) => {
     const id = String(seq.current++);
@@ -52,7 +54,7 @@ export default function WhatsAppConversationScreen() {
   const parse = async (text: string) => {
     const res = await fetch(`${API}/voice/parse-intent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         text,
         currentLat: 5.6037,
@@ -60,7 +62,7 @@ export default function WhatsAppConversationScreen() {
         countryCode: 'GH',
       }),
     });
-    const json = await res.json();
+    const json = await res.json().catch(() => ({}));
     const data = json.data;
     setResult(data);
 
@@ -91,9 +93,15 @@ export default function WhatsAppConversationScreen() {
 
   const sendVoice = async () => {
     push({ from: 'user', kind: 'voice', duration: '0:07' });
-    const sample = "I'm going from Osu to the airport";
-    await parse(sample);
+    await parse("I'm going from Osu to the airport");
   };
+
+  useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    // Auto-play mockup conversation start
+    sendVoice().catch(() => undefined);
+  }, []);
 
   const confirm = async (index: number) => {
     const options =
@@ -106,11 +114,13 @@ export default function WhatsAppConversationScreen() {
     const opt = options[index] || options[0];
     setAwaitingPick(false);
 
+    let confirmation =
+      '✅ Booked! Kwesi is on the way in a Toyota Corolla, GR 4471-22.';
     try {
       if (result?.pickup && result?.destination) {
-        await fetch(`${API}/voice/confirm`, {
+        const res = await fetch(`${API}/voice/confirm`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({
             pickupLat: result.pickup.lat,
             pickupLng: result.pickup.lng,
@@ -120,18 +130,18 @@ export default function WhatsAppConversationScreen() {
             dropoffAddress: result.destination.address,
             rideType: opt.code,
             spoken: String(index + 1),
+            sourceChannel: 'whatsapp',
+            countryCode: 'GH',
           }),
         });
+        const json = await res.json().catch(() => ({}));
+        if (json?.data?.confirmationMessage) confirmation = json.data.confirmationMessage;
       }
     } catch {
-      /* keep UI confirmation even if API offline */
+      /* keep mockup confirmation */
     }
 
-    push({
-      from: 'bot',
-      kind: 'text',
-      text: `✅ Booked! Kwesi is on the way in a Toyota Corolla, GR 4471-22.`,
-    });
+    push({ from: 'bot', kind: 'text', text: confirmation });
   };
 
   const sendText = async () => {
@@ -175,8 +185,7 @@ export default function WhatsAppConversationScreen() {
         <View style={[styles.bubble, styles.botBubble]}>
           {item.options.map((o: any, i: number) => (
             <Text key={o.code || i} style={styles.botText}>
-              <Text style={styles.bold}>{o.name || (i === 0 ? 'Economy' : 'Comfort')}</Text>
-              {': '}
+              {o.name || (i === 0 ? 'Economy' : 'Comfort')} ·{' '}
               {formatCurrency(o.price, item.currency)} · {o.etaMinutes ?? (i === 0 ? 4 : 3)} min
               away
             </Text>
@@ -229,7 +238,7 @@ export default function WhatsAppConversationScreen() {
         <TextInput
           style={styles.input}
           placeholder="Message"
-          placeholderTextColor={colors.textSecondary}
+          placeholderTextColor="#6b7c6b"
           value={input}
           onChangeText={setInput}
           onSubmitEditing={() => sendText().catch(() => undefined)}
@@ -242,86 +251,84 @@ export default function WhatsAppConversationScreen() {
   );
 }
 
-function makeStyles(colors: any) {
+function makeStyles(_colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.surface },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    backgroundColor: colors.surfaceElevated,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.electricViolet,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: colors.pureWhite, fontWeight: '700', fontSize: 18 },
-  title: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-  online: { color: colors.success, fontSize: 12, marginTop: 2 },
-  list: { padding: spacing[4], gap: spacing[2], paddingBottom: spacing[6] },
-  bubble: {
-    maxWidth: '82%',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.movrGreen,
-    borderTopRightRadius: 4,
-  },
-  botBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceElevated,
-    borderTopLeftRadius: 4,
-  },
-  userText: { color: colors.pureWhite, fontSize: 15, lineHeight: 20 },
-  botText: { color: colors.textPrimary, fontSize: 15, lineHeight: 22 },
-  bold: { fontWeight: '700' },
-  hint: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
-  voiceBubble: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 180 },
-  mic: { fontSize: 16 },
-  wave: { flex: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2 },
-  waveBar: { width: '40%', height: 3, backgroundColor: colors.pureWhite, borderRadius: 2 },
-  duration: { color: colors.pureWhite, fontSize: 12 },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    backgroundColor: colors.surfaceElevated,
-  },
-  voiceBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.movrGreen,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: colors.border,
-    borderRadius: radius.pill,
-    color: colors.pureWhite,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  sendBtn: {
-    backgroundColor: colors.movrGreen,
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  sendText: { color: colors.pureWhite, fontWeight: '700' },
-});
+    root: { flex: 1, backgroundColor: '#0b1410' },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[3],
+      backgroundColor: '#1f2c24',
+    },
+    avatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: '#8E2DE2',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarText: { color: '#FFFFFF', fontWeight: '700', fontSize: 18 },
+    title: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+    online: { color: '#25D366', fontSize: 12, marginTop: 2 },
+    list: { padding: spacing[4], gap: spacing[2], paddingBottom: spacing[6] },
+    bubble: {
+      maxWidth: '82%',
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 8,
+    },
+    userBubble: {
+      alignSelf: 'flex-end',
+      backgroundColor: '#005c4b',
+      borderTopRightRadius: 4,
+    },
+    botBubble: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#1f2c24',
+      borderTopLeftRadius: 4,
+    },
+    userText: { color: '#FFFFFF', fontSize: 15, lineHeight: 20 },
+    botText: { color: '#e9edef', fontSize: 15, lineHeight: 22 },
+    bold: { fontWeight: '700' },
+    hint: { color: '#8696a0', fontSize: 12, marginTop: 4 },
+    voiceBubble: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 180 },
+    mic: { fontSize: 16 },
+    wave: { flex: 1, height: 3, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2 },
+    waveBar: { width: '40%', height: 3, backgroundColor: '#FFFFFF', borderRadius: 2 },
+    duration: { color: '#FFFFFF', fontSize: 12 },
+    composer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      padding: 10,
+      backgroundColor: '#1f2c24',
+    },
+    voiceBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: '#00a884',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    input: {
+      flex: 1,
+      backgroundColor: '#2a3942',
+      borderRadius: radius.pill,
+      color: '#FFFFFF',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    sendBtn: {
+      backgroundColor: '#00a884',
+      borderRadius: radius.pill,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    sendText: { color: '#FFFFFF', fontWeight: '700' },
+  });
 }

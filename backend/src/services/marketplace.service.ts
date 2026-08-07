@@ -42,18 +42,27 @@ export class MarketplaceService {
     let query = `
       SELECT s.*,
              COALESCE(s.lat, s.latitude) AS lat,
-             COALESCE(s.lng, s.longitude) AS lng
+             COALESCE(s.lng, s.longitude) AS lng,
+             COALESCE(s.review_count, 0) AS review_count,
+             COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
+             COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes,
+             COALESCE(s.eta_min_minutes, 20)::text || '–' || COALESCE(s.eta_max_minutes, 30)::text || ' min' AS eta_text,
+             COALESCE(s.hours_json->>'label', 'Open until 9:00 PM') AS hours_text
       FROM stores s
       WHERE COALESCE(s.status, 'active') = 'active'
         AND s.is_active = TRUE
     `;
 
     if (filters.category) {
-      values.push(filters.category);
-      query += ` AND (
-        s.category ILIKE $${values.length}
-        OR lower(replace(COALESCE(s.category,''), ' ', '-')) = lower($${values.length})
-      )`;
+      const cat = String(filters.category).toLowerCase();
+      if (cat === 'food') {
+        query += ` AND (
+          s.category ILIKE '%food%' OR s.category ILIKE '%restaurant%' OR s.category ILIKE '%cafe%'
+        )`;
+      } else {
+        values.push(`%${cat}%`);
+        query += ` AND s.category ILIKE $${values.length}`;
+      }
     }
 
     if (filters.search) {
@@ -79,7 +88,7 @@ export class MarketplaceService {
         ) ASC
       `;
     } else {
-      query += ` ORDER BY s.rating DESC NULLS LAST`;
+      query += ` ORDER BY s.rating DESC NULLS LAST, s.name ASC`;
     }
 
     query += ` LIMIT 50`;
@@ -114,7 +123,16 @@ export class MarketplaceService {
   }
 
   async getStore(storeId: string) {
-    const result = await this.db.query(`SELECT * FROM stores WHERE id = $1`, [storeId]);
+    const result = await this.db.query(
+      `SELECT s.*,
+              COALESCE(s.review_count, 0) AS review_count,
+              COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
+              COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes,
+              COALESCE(s.eta_min_minutes, 20)::text || '–' || COALESCE(s.eta_max_minutes, 30)::text || ' min' AS eta_text,
+              COALESCE(s.hours_json->>'label', 'Open until 9:00 PM') AS hours_text
+       FROM stores s WHERE s.id = $1`,
+      [storeId]
+    );
     if (!result.rows[0]) return result;
     const banners = await this.db.query(
       `SELECT id, store_id, title, image_url, link_url, sort_order, is_active
@@ -127,6 +145,13 @@ export class MarketplaceService {
       ...result,
       rows: [{ ...result.rows[0], banners: banners.rows }],
     };
+  }
+
+  async deliveryFee() {
+    const cfg = await this.db
+      .query(`SELECT delivery_fee FROM marketplace_pricing_config WHERE id = 1`)
+      .catch(() => ({ rows: [{ delivery_fee: 15 }] }));
+    return Number(cfg.rows[0]?.delivery_fee ?? 15);
   }
 
   async listCategories(activeOnly = true) {
@@ -264,11 +289,16 @@ export class MarketplaceService {
 
     const lines = items.rows.map((i) => ({
       ...i,
+      name: i.name,
+      product_name: i.name,
+      variant_label: i.variant_name || '',
+      unit_price: Number(i.price) + Number(i.price_delta || 0),
       unitPrice: Number(i.price) + Number(i.price_delta || 0),
       lineTotal: (Number(i.price) + Number(i.price_delta || 0)) * Number(i.quantity),
     }));
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
-    return { ...cart.rows[0], items: lines, subtotal };
+    const deliveryFee = await this.deliveryFee();
+    return { ...cart.rows[0], items: lines, subtotal, delivery_fee: deliveryFee };
   }
 
   async applyCoupon(storeId: string, code: string, subtotal: number) {
@@ -306,7 +336,7 @@ export class MarketplaceService {
     const cart = await this.getOpenCart(userId, data.storeId);
     if (!cart || !cart.items?.length) throw new Error('Cart is empty');
 
-    const deliveryFee = data.fulfillmentType === 'delivery' ? 10 : 0;
+    const deliveryFee = data.fulfillmentType === 'delivery' ? await this.deliveryFee() : 0;
     const { discount, code } = await this.applyCoupon(
       data.storeId,
       data.couponCode || '',
@@ -380,22 +410,69 @@ export class MarketplaceService {
 
   async listOrders(userId: string) {
     return this.db.query(
-      `SELECT * FROM marketplace_orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      `SELECT o.*,
+              s.name AS store_name,
+              s.category AS store_category
+       FROM marketplace_orders o
+       LEFT JOIN stores s ON s.id = o.store_id
+       WHERE o.user_id = $1
+       ORDER BY o.created_at DESC
+       LIMIT 50`,
       [userId]
     );
   }
 
   async getOrder(userId: string, orderId: string) {
     const order = await this.db.query(
-      `SELECT * FROM marketplace_orders WHERE id = $1 AND user_id = $2`,
+      `SELECT o.*,
+              s.name AS store_name,
+              s.category AS store_category,
+              COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
+              COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes
+       FROM marketplace_orders o
+       LEFT JOIN stores s ON s.id = o.store_id
+       WHERE o.id = $1 AND o.user_id = $2`,
       [orderId, userId]
     );
-    if (!order.rows[0]) return null;
+    if (!order.rows[0]) {
+      // Allow lookup by short ref (last 4 of uuid hex) for demo tracking screens
+      const byRef = await this.db.query(
+        `SELECT o.*,
+                s.name AS store_name,
+                COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
+                COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes
+         FROM marketplace_orders o
+         LEFT JOIN stores s ON s.id = o.store_id
+         WHERE o.user_id = $1
+           AND UPPER(REPLACE(o.id::text, '-', '')) LIKE '%' || UPPER($2)
+         ORDER BY o.created_at DESC
+         LIMIT 1`,
+        [userId, String(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(-4)]
+      );
+      if (!byRef.rows[0]) return null;
+      order.rows[0] = byRef.rows[0];
+    }
+    const row = order.rows[0];
     const items = await this.db.query(
       `SELECT * FROM marketplace_order_items WHERE order_id = $1`,
-      [orderId]
+      [row.id]
     );
-    return { ...order.rows[0], items: items.rows };
+    const status = String(row.status || '').toLowerCase();
+    let etaMinutes = Math.round(
+      (Number(row.eta_min_minutes || 20) + Number(row.eta_max_minutes || 30)) / 2
+    );
+    if (status.includes('deliver') || status.includes('complet')) etaMinutes = 0;
+    else if (status.includes('out')) etaMinutes = Math.min(etaMinutes, 12);
+    else if (status.includes('prepar') || status.includes('accept')) etaMinutes = Math.max(etaMinutes, 18);
+
+    return {
+      ...row,
+      items: items.rows,
+      eta_minutes: etaMinutes,
+      eta_text: etaMinutes > 0 ? `${etaMinutes} min away` : 'Arriving',
+      order_ref: String(row.id).replace(/-/g, '').slice(-4).toUpperCase(),
+      tracking_steps: ['confirmed', 'preparing', 'out_for_delivery', 'delivered'],
+    };
   }
 
   async updateOrderStatus(orderId: string, status: string) {

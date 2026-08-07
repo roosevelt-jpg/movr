@@ -31,19 +31,23 @@ export class ChannelSessionService {
 
   async setPending(key: string, payload: any, ttlSeconds = 600) {
     const full = `channel:pending:${key}`;
+    // Always keep an in-memory copy so local simulators work when Redis is down/flaky.
+    this.memory.set(full, { value: payload, expires: Date.now() + ttlSeconds * 1000 });
     if (this.redis?.set) {
       try {
         await this.redis.set(full, payload, ttlSeconds);
-        return;
       } catch {
-        /* fall through */
+        /* memory already set */
       }
     }
-    this.memory.set(full, { value: payload, expires: Date.now() + ttlSeconds * 1000 });
   }
 
   async getPending(key: string) {
     const full = `channel:pending:${key}`;
+    const entry = this.memory.get(full);
+    if (entry && entry.expires >= Date.now()) {
+      return entry.value;
+    }
     if (this.redis?.get) {
       try {
         const v = await this.redis.get(full);
@@ -52,12 +56,8 @@ export class ChannelSessionService {
         /* fall through */
       }
     }
-    const entry = this.memory.get(full);
-    if (!entry || entry.expires < Date.now()) {
-      this.memory.delete(full);
-      return null;
-    }
-    return entry.value;
+    this.memory.delete(full);
+    return null;
   }
 
   async clearPending(key: string) {

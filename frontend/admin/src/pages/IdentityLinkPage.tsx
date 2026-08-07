@@ -2,29 +2,25 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
+import AdminOpsNav from '../components/AdminOpsNav';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Admin identity review — link graph + documents + on-chain attest. */
+/** Admin identity review — applicant, documents, link status, approve / override. */
 export default function IdentityLinkPage() {
   const [searchParams] = useSearchParams();
   const queryUserId = searchParams.get('userId') || searchParams.get('user') || '';
   const [userId, setUserId] = useState(queryUserId);
   const [data, setData] = useState<any>(null);
-  const [profile, setProfile] = useState<{ name: string; role: string; applied: string } | null>(
-    null
-  );
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const [overrideType, setOverrideType] = useState('id_to_vehicle');
+  const [msg, setMsg] = useState('');
   const [overrideReason, setOverrideReason] = useState('Fleet vehicle / manual review');
 
   const load = async (id = userId) => {
     if (!id) {
       setData(null);
-      setProfile(null);
       setLoading(false);
       return;
     }
@@ -33,38 +29,8 @@ export default function IdentityLinkPage() {
     try {
       const res = await axios.get(`${API}/identity/${id}`, { headers: headers() });
       setData(res.data.data);
-      try {
-        const u = await axios.get(`${API}/admin/users`, {
-          headers: headers(),
-          params: { q: id },
-        });
-        const match = (u.data.data || []).find((row: any) => String(row.id) === String(id));
-        if (match) {
-          setProfile({
-            name:
-              match.business_name ||
-              `${match.first_name || ''} ${match.last_name || ''}`.trim() ||
-              match.email ||
-              id,
-            role:
-              match.user_type === 'driver'
-                ? 'Driver'
-                : match.user_type === 'merchant'
-                  ? 'Merchant'
-                  : 'Rider',
-            applied: match.created_at
-              ? `Joined ${new Date(match.created_at).toLocaleDateString()}`
-              : '',
-          });
-        } else {
-          setProfile({ name: id, role: 'User', applied: '' });
-        }
-      } catch {
-        setProfile({ name: id, role: 'User', applied: '' });
-      }
     } catch (e: any) {
       setData(null);
-      setProfile(null);
       setError(e?.response?.data?.message || e.message || 'Failed to load identity');
     } finally {
       setLoading(false);
@@ -77,12 +43,8 @@ export default function IdentityLinkPage() {
       load(queryUserId);
     } else {
       setData(null);
-      setProfile(null);
     }
   }, [queryUserId]);
-
-  const latestByType = (type: string) =>
-    data?.checks?.find((c: any) => c.check_type === type);
 
   const statusBadge = (status?: string) => {
     const s = String(status || 'pending').toLowerCase();
@@ -92,8 +54,23 @@ export default function IdentityLinkPage() {
         : s === 'mismatch'
           ? { background: 'rgba(255,59,92,0.25)', color: 'var(--error)' }
           : { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' };
-    const label = s === 'match' ? 'Match' : s.charAt(0).toUpperCase() + s.slice(1);
+    const label =
+      s === 'match' ? 'Match' : s === 'verified' ? 'verified' : s.charAt(0).toUpperCase() + s.slice(1);
     return <span style={{ ...styles.badge, ...style }}>{label}</span>;
+  };
+
+  const docIcon = (status?: string) => {
+    const s = String(status || 'pending').toLowerCase();
+    if (s === 'verified' || s === 'match') return '✓';
+    return '⏱';
+  };
+
+  const docIconStyle = (status?: string) => {
+    const s = String(status || 'pending').toLowerCase();
+    if (s === 'verified' || s === 'match') {
+      return { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' };
+    }
+    return { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' };
   };
 
   const runLink = async () => {
@@ -102,91 +79,72 @@ export default function IdentityLinkPage() {
   };
 
   const approve = async () => {
-    await axios
-      .post(
-        `${API}/kyc/attestation/publish`,
-        {
-          userId,
-          status: 'Verified',
-          documentType: 'identity_review',
-          verificationMethod: data?.identityLinked
-            ? 'full_identity_link_verified'
-            : 'manual',
-          identityLinked: Boolean(data?.identityLinked),
-        },
-        { headers: headers() }
-      )
-      .catch(() => undefined);
+    setMsg('');
+    await runLink().catch(() => undefined);
+    await axios.post(
+      `${API}/kyc/attestation/publish`,
+      {
+        userId,
+        status: 'Verified',
+        documentType: 'identity_review',
+        verificationMethod: data?.identityLinked
+          ? 'full_identity_link_verified'
+          : 'manual',
+        identityLinked: Boolean(data?.identityLinked),
+      },
+      { headers: headers() }
+    );
+    setMsg('Approved & attested on-chain');
     await load();
   };
 
-  const applyOverride = async (checkType = overrideType) => {
+  const applyOverride = async () => {
+    setMsg('');
     await axios.post(
       `${API}/identity/${userId}/override`,
       {
-        checkType,
+        checkType: 'id_to_phone',
         status: 'match',
         reason: overrideReason || 'manual review',
       },
       { headers: headers() }
     );
+    setMsg('Manual override applied');
     await load();
   };
 
-  const links = [
-    { label: 'National ID ↔ Driving license', type: 'id_to_license' },
-    { label: 'National ID ↔ Vehicle license', type: 'id_to_vehicle' },
-    { label: 'National ID ↔ Phone number', type: 'id_to_phone' },
-  ];
-
-  const attributes = [
-    {
-      key: 'national',
-      label: 'National ID',
-      value:
-        (data?.documents || []).find((d: any) => d.national_id_number)?.national_id_number ||
-        '—',
-      status: data?.identityLinked ? 'match' : latestByType('id_to_license')?.status,
-    },
-    {
-      key: 'license',
-      label: 'Driving License',
-      value:
-        (data?.documents || []).find((d: any) => d.driving_license_number)
-          ?.driving_license_number || '—',
-      status: latestByType('id_to_license')?.status,
-    },
-    {
-      key: 'vehicle',
-      label: 'Vehicle License',
-      value:
-        (data?.documents || []).find((d: any) => d.vehicle_registration_number)
-          ?.vehicle_registration_number || '—',
-      status: latestByType('id_to_vehicle')?.status,
-    },
-    {
-      key: 'phone',
-      label: 'Phone',
-      value:
-        (data?.documents || []).find((d: any) => d.linked_phone_number)?.linked_phone_number ||
-        '—',
-      status: latestByType('id_to_phone')?.status,
-    },
-  ];
-
-  const docsList = data?.documents || [];
+  const profile = data?.profile;
+  const docs =
+    data?.documentsSummary ||
+    [
+      { label: 'Ghana Card', status: 'pending' },
+      { label: 'Driving license', status: 'pending' },
+      { label: 'Vehicle registration', status: 'pending' },
+    ];
+  const links =
+    data?.linkStatus ||
+    [
+      { label: 'National ID ↔ Driving license', status: 'pending' },
+      { label: 'National ID ↔ Vehicle license', status: 'pending' },
+      { label: 'National ID ↔ Phone number', status: 'pending' },
+    ];
 
   return (
-    <AdminShell activeLabel="Identity review">
+    <AdminShell activeLabel="Identity review" hidePageTitle>
+      <AdminOpsNav />
       <div style={styles.profile}>
-        {profile ? <div style={styles.avatar} /> : null}
-        <div>
+        {profile?.avatarUrl ? (
+          <img src={profile.avatarUrl} alt="" style={styles.avatarImg} />
+        ) : (
+          <div style={styles.avatar} />
+        )}
+        <div style={{ flex: 1 }}>
           <h1 style={styles.name}>{profile?.name || 'Identity review'}</h1>
           <p style={styles.meta}>
             {profile ? (
               <>
                 {profile.role}
-                {profile.applied ? ` · ${profile.applied}` : ''}
+                {profile.appliedAgo ? ` · ${profile.appliedAgo}` : ''}
               </>
             ) : (
               'Provide a user id to load identity checks'
@@ -207,102 +165,61 @@ export default function IdentityLinkPage() {
       </div>
 
       {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
+      {msg ? <p style={{ color: 'var(--success)' }}>{msg}</p> : null}
       {loading ? <p style={{ color: 'var(--text-secondary)' }}>Loading…</p> : null}
 
       {!userId && !loading ? (
-        <p style={{ color: 'var(--text-secondary)' }}>No user selected. Open from Users/KYC or enter a user id.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          No user selected. Open from Users/KYC or enter a user id.
+        </p>
       ) : !loading && data ? (
         <>
-          <div style={styles.attrGrid}>
-            {attributes.map((a) => (
-              <div key={a.key} style={styles.attrCard}>
-                <p style={styles.panelLabel}>{a.label}</p>
-                <p style={{ margin: '4px 0 8px', fontWeight: 600 }}>{a.value}</p>
-                {statusBadge(a.status)}
-              </div>
-            ))}
-          </div>
-
           <div style={styles.grid}>
             <div style={styles.panel}>
-              <p style={styles.panelLabel}>
-                Pairwise checks ·{' '}
-                {data.identityLinked ? 'Identity-Linked' : 'Not fully linked'}
-              </p>
+              <p style={styles.panelLabel}>Identity link status</p>
               <ul style={styles.list}>
-                {links.map((l) => (
-                  <li key={l.type} style={styles.listRow}>
+                {links.map((l: any) => (
+                  <li key={l.type || l.label} style={styles.listRow}>
                     <span>{l.label}</span>
-                    <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {statusBadge(latestByType(l.type)?.status)}
-                      <button
-                        style={styles.tinyBtn}
-                        onClick={() => applyOverride(l.type).catch(() => undefined)}
-                      >
-                        Override
-                      </button>
-                    </span>
+                    {statusBadge(l.status)}
                   </li>
                 ))}
               </ul>
             </div>
 
             <div style={styles.docs}>
-              <p style={styles.panelLabel}>Submitted documents</p>
-              {docsList.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', margin: 0 }}>No documents submitted</p>
-              ) : (
-                docsList.map((d: any, i: number) => (
-                  <div key={d.id || d.type || i} style={styles.docCard}>
-                    <span style={{ marginRight: 8 }}>
-                      {d.status === 'verified' ? '📄✅' : '📄⏳'}
-                    </span>
-                    <span>
-                      {d.type || d.document_type || 'Document'} · {d.status || 'pending'}
-                      {d.pending_automated_verification || d.status === 'pending'
-                        ? ' · pending automated verification'
-                        : ''}
-                    </span>
+              {docs.map((d: any) => (
+                <div key={d.type || d.label} style={styles.docCard}>
+                  <div style={{ ...styles.docIcon, ...docIconStyle(d.status) }}>
+                    {docIcon(d.status)}
                   </div>
-                ))
-              )}
+                  <div>
+                    <p style={styles.docLabel}>{d.label}</p>
+                    <p style={styles.docStatus}>{String(d.status || 'pending').toLowerCase()}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
           <div style={styles.actions}>
-            <button
-              style={styles.primaryBtn}
-              onClick={() => {
-                runLink().catch(() => undefined);
-                approve().catch(() => undefined);
-              }}
-            >
-              Re-run link & attest on-chain
+            <button style={styles.primaryBtn} onClick={() => approve().catch((e) => setError(e.message))}>
+              Approve & attest on-chain
             </button>
-            <select
-              style={styles.input}
-              value={overrideType}
-              onChange={(e) => setOverrideType(e.target.value)}
-            >
-              {links.map((l) => (
-                <option key={l.type} value={l.type}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-            <input
-              style={styles.input}
-              value={overrideReason}
-              onChange={(e) => setOverrideReason(e.target.value)}
-              placeholder="Override reason (audit)"
-            />
             <button
               style={styles.secondaryBtnWide}
-              onClick={() => applyOverride().catch(() => undefined)}
+              onClick={() => applyOverride().catch((e) => setError(e.message))}
+              title={overrideReason}
             >
               Manual override
             </button>
           </div>
+          <input
+            style={{ ...styles.input, marginTop: 12, width: '100%', maxWidth: 480 }}
+            value={overrideReason}
+            onChange={(e) => setOverrideReason(e.target.value)}
+            placeholder="Override reason (audit)"
+          />
         </>
       ) : null}
     </AdminShell>
@@ -318,6 +235,13 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
   },
+  avatarImg: {
+    width: 56,
+    height: 56,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '1px solid var(--border)',
+  },
   name: { margin: 0, fontSize: 24, fontWeight: 700 },
   meta: { margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 14 },
   lookup: { marginLeft: 'auto', display: 'flex', gap: 8 },
@@ -328,31 +252,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     padding: '8px 12px',
   },
-  grid: { display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 24 },
-  attrGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-    gap: 12,
-    marginBottom: 16,
-  },
-  attrCard: {
-    background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
-    borderRadius: 14,
-    padding: 14,
-  },
-  tinyBtn: {
-    border: '1px solid var(--border)',
-    background: 'transparent',
-    color: 'var(--motion-blue)',
-    borderRadius: 6,
-    padding: '2px 8px',
-    fontSize: 11,
-    cursor: 'pointer',
-  },
+  grid: { display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 24 },
   panel: {
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 16,
     padding: 20,
   },
@@ -363,8 +265,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 0',
-    borderBottom: '1px solid var(--surface-elevated)',
+    padding: '14px 0',
+    borderBottom: '1px solid var(--border)',
   },
   badge: {
     borderRadius: 999,
@@ -374,15 +276,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   docCard: {
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 12,
     padding: '14px 16px',
     display: 'flex',
     alignItems: 'center',
+    gap: 12,
   },
+  docIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: 14,
+  },
+  docLabel: { margin: 0, fontWeight: 600 },
+  docStatus: { margin: '2px 0 0', color: 'var(--text-secondary)', fontSize: 13 },
   actions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   primaryBtn: {
-    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    background: 'linear-gradient(90deg, #2dd4bf, #0055FF)',
     color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 999,

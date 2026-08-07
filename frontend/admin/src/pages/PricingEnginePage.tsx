@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import AdminOpsNav from '../components/AdminOpsNav';
 import OnOffButton from '../components/OnOffButton';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
@@ -9,6 +10,7 @@ const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_adm
 /** Admin pricing engine — zones, factors, events, live breakdown (Phase 25). */
 export default function PricingEnginePage() {
   const [zones, setZones] = useState<any[]>([]);
+  const [liveZones, setLiveZones] = useState<any[]>([]);
   const [factors, setFactors] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [breakdown, setBreakdown] = useState<any>(null);
@@ -31,16 +33,18 @@ export default function PricingEnginePage() {
   const [message, setMessage] = useState('');
 
   const load = async () => {
-    const [z, f, b, e] = await Promise.all([
+    const [z, f, b, e, live] = await Promise.all([
       axios.get(`${API}/admin/pricing/zones`, { headers: headers() }),
       axios.get(`${API}/admin/pricing/factors`, { headers: headers() }),
       axios.get(`${API}/admin/pricing/breakdown?lat=5.6037&lng=-0.187`, { headers: headers() }),
       axios.get(`${API}/admin/pricing/events`, { headers: headers() }).catch(() => ({ data: { data: [] } })),
+      axios.get(`${API}/admin/pricing/zones/live`, { headers: headers() }).catch(() => ({ data: { data: [] } })),
     ]);
     setZones(z.data.data || []);
     setFactors(f.data.data || []);
     setBreakdown(b.data.data);
     setEvents(e.data.data || []);
+    setLiveZones(live.data.data || []);
     if (z.data.data?.[0]) setEventForm((prev) => ({ ...prev, zoneId: z.data.data[0].id }));
   };
 
@@ -49,20 +53,27 @@ export default function PricingEnginePage() {
   }, []);
 
   const rows = useMemo(() => {
-    return zones.map((z) => {
-      const zoneFactors = factors.filter((f) => f.zone_id === z.id || !f.zone_id);
-      const active = zoneFactors.filter((f) => f.is_active);
-      return {
+    if (liveZones.length) {
+      return liveZones.map((z) => ({
         id: z.id,
         zone: z.name,
-        lat: z.center_lat,
-        lng: z.center_lng,
-        radius: z.radius_km,
-        factors: active.map((f: any) => f.factor_type).join(', ') || '—',
-        cap: Number(z.max_surge_cap || 2),
-      };
-    });
-  }, [zones, factors]);
+        demand: Number(z.demandMultiplier || 1),
+        time: Number(z.timeMultiplier || 1),
+        weather: Number(z.weatherMultiplier || 1),
+        combined: Number(z.combinedMultiplier || 1),
+        cap: Number(z.maxCap || 2),
+      }));
+    }
+    return zones.map((z) => ({
+      id: z.id,
+      zone: z.name,
+      demand: 1,
+      time: 1,
+      weather: 1,
+      combined: 1,
+      cap: Number(z.max_surge_cap || 2),
+    }));
+  }, [zones, liveZones]);
 
   const toggle = async (id: string, isActive: boolean) => {
     await axios.patch(
@@ -112,12 +123,15 @@ export default function PricingEnginePage() {
   };
 
   const combinedTone = (n: number) =>
-    n >= 1.4
+    n >= 1.45
       ? { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' }
       : { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' };
 
+  const fmtMult = (n: number) => `${Math.round(Number(n) * 100) / 100}x`;
+
   return (
-    <AdminShell activeLabel="Pricing engine">
+    <AdminShell activeLabel="Pricing engine" hidePageTitle>
+      <AdminOpsNav />
       <div style={styles.headerRow}>
         <h1 style={styles.h1}>Active pricing zones</h1>
         <div style={styles.headerActions}>
@@ -141,16 +155,11 @@ export default function PricingEnginePage() {
         </p>
       ) : null}
 
-      <div style={styles.mapHint}>
-        Zone map editor — set center lat/lng + radius (km). Matches PostGIS-style circular zones used
-        by the engine.
-      </div>
-
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead>
             <tr>
-              {['Zone', 'Center', 'Radius', 'Active factors', 'Cap', ''].map((h) => (
+              {['Zone', 'Demand', 'Time of day', 'Weather', 'Combined', 'Cap'].map((h) => (
                 <th key={h} style={styles.th}>
                   {h}
                 </th>
@@ -168,14 +177,12 @@ export default function PricingEnginePage() {
               rows.map((r) => (
                 <tr key={r.id}>
                   <td style={styles.td}>{r.zone}</td>
+                  <td style={styles.td}>{fmtMult(r.demand)}</td>
+                  <td style={styles.td}>{fmtMult(r.time)}</td>
+                  <td style={styles.td}>{fmtMult(r.weather)}</td>
                   <td style={styles.td}>
-                    {Number(r.lat).toFixed(3)}, {Number(r.lng).toFixed(3)}
-                  </td>
-                  <td style={styles.td}>{r.radius} km</td>
-                  <td style={styles.td}>{r.factors}</td>
-                  <td style={styles.td}>
-                    <span style={{ ...styles.pill, ...combinedTone(Number(r.cap)) }}>
-                      {Number(r.cap).toFixed(1)}x
+                    <span style={{ ...styles.pill, ...combinedTone(Number(r.combined)) }}>
+                      {fmtMult(r.combined)}
                     </span>
                   </td>
                   <td style={styles.td}>
@@ -186,7 +193,7 @@ export default function PricingEnginePage() {
                         if (next) saveCap(r.id, next);
                       }}
                     >
-                      Edit cap
+                      {fmtMult(r.cap)}
                     </button>
                   </td>
                 </tr>

@@ -3,14 +3,13 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
-import { mediaUrl, uploadCatalogImage } from '../../lib/media';
-import OnOffButton from '../../components/OnOffButton';
+import { uploadCatalogImage } from '../../lib/media';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const token = () => localStorage.getItem('movr_merchant_token') || '';
 const headers = () => ({ Authorization: `Bearer ${token()}` });
 
-/** Products CRUD — category picker, image, stock, edit/delete. */
+/** Products table — Product / Variant / Price / Status (+ Add product). */
 export default function MerchantProductsPage() {
   const { formatMoney } = useLocalCurrency();
   const [products, setProducts] = useState<any[]>([]);
@@ -67,7 +66,7 @@ export default function MerchantProductsPage() {
       storeId: p.store_id,
       name: p.name || '',
       price: String(p.price ?? ''),
-      variant: p.variants?.[0]?.name || '',
+      variant: p.variant_label || p.variants?.[0]?.name || '',
       description: p.description || '',
       categoryId: p.category_id || '',
       imageUrl: p.image_url || '',
@@ -100,6 +99,13 @@ export default function MerchantProductsPage() {
           },
           { headers: headers() }
         );
+        if (form.variant) {
+          await axios.post(
+            `${API}/merchant/products/${editingId}/variants`,
+            { name: form.variant, priceDelta: 0 },
+            { headers: headers() }
+          ).catch(() => undefined);
+        }
         toast.success('Product updated');
       } else {
         const res = await axios.post(
@@ -157,13 +163,14 @@ export default function MerchantProductsPage() {
   return (
     <MerchantShell activePath="/merchant/products">
       <div className="flex items-center justify-between gap-4 mb-6">
-        <h1 className="text-3xl font-bold">Products</h1>
+        <h1 className="text-3xl font-bold text-white">Products</h1>
         <button
+          type="button"
           onClick={() => {
             resetForm();
             setShowAdd(true);
           }}
-          className="rounded-xl px-4 py-2.5 font-semibold bg-movr-gradient"
+          className="rounded-xl px-4 py-2.5 font-semibold bg-movr-gradient text-white"
         >
           + Add product
         </button>
@@ -172,10 +179,10 @@ export default function MerchantProductsPage() {
       {showAdd ? (
         <form
           onSubmit={create}
-          className="grid md:grid-cols-3 gap-3 bg-surface-elevated border border-border rounded-2xl p-4 mb-6"
+          className="grid md:grid-cols-3 gap-3 bg-[#1A1A1A] rounded-2xl p-4 mb-6"
         >
           <select
-            className="rounded-xl bg-surface border border-border px-3 py-2"
+            className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
             value={form.storeId}
             onChange={(e) => setForm({ ...form, storeId: e.target.value })}
             disabled={!!editingId}
@@ -187,7 +194,7 @@ export default function MerchantProductsPage() {
             ))}
           </select>
           <select
-            className="rounded-xl bg-surface border border-border px-3 py-2"
+            className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
             value={form.categoryId}
             onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
           >
@@ -199,30 +206,26 @@ export default function MerchantProductsPage() {
             ))}
           </select>
           <input
-            className="rounded-xl bg-surface border border-border px-3 py-2"
+            className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
             placeholder="Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
           />
           <input
-            className="rounded-xl bg-surface border border-border px-3 py-2"
+            className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
             placeholder="Price"
             value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })}
             required
           />
-          {!editingId ? (
-            <input
-              className="rounded-xl bg-surface border border-border px-3 py-2"
-              placeholder="Variant (optional)"
-              value={form.variant}
-              onChange={(e) => setForm({ ...form, variant: e.target.value })}
-            />
-          ) : (
-            <div />
-          )}
-          <label className="rounded-xl border border-dashed border-border px-3 py-2 text-center cursor-pointer text-sm text-text-secondary">
+          <input
+            className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+            placeholder="Variant (e.g. Size M, Blue)"
+            value={form.variant}
+            onChange={(e) => setForm({ ...form, variant: e.target.value })}
+          />
+          <label className="rounded-xl border border-dashed border-white/20 px-3 py-2 text-center cursor-pointer text-sm text-[#888888]">
             {form.imageUrl ? 'Change image' : 'Upload image'}
             <input
               type="file"
@@ -231,80 +234,73 @@ export default function MerchantProductsPage() {
               onChange={(e) => onImage(e.target.files?.[0])}
             />
           </label>
-          <textarea
-            className="md:col-span-2 rounded-xl bg-surface border border-border px-3 py-2 min-h-[72px]"
-            placeholder="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-          <div className="flex gap-2">
-            <button type="submit" className="flex-1 rounded-xl bg-movr-gradient font-semibold py-2">
+          <div className="md:col-span-3 flex gap-2">
+            <button type="submit" className="rounded-xl bg-movr-gradient font-semibold py-2 px-6 text-white">
               {editingId ? 'Update' : 'Save'}
             </button>
             <button
               type="button"
-              className="rounded-xl border border-border px-4"
+              className="rounded-xl border border-white/15 px-4 text-white/70"
               onClick={resetForm}
             >
               Cancel
             </button>
           </div>
-          {form.imageUrl ? (
-            <img
-              src={mediaUrl(form.imageUrl)}
-              alt=""
-              className="md:col-span-3 h-28 w-full object-cover rounded-xl"
-            />
-          ) : null}
         </form>
       ) : null}
 
-      <div className="rounded-2xl border border-border overflow-hidden bg-surface">
-        <div className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.9fr] gap-2 px-4 py-3 text-sm text-text-secondary">
+      <div className="overflow-hidden">
+        <div className="grid grid-cols-[40px_1.4fr_1.2fr_0.8fr_1fr] gap-2 px-2 py-3 text-sm text-[#888888] border-b border-white/10">
+          <span />
           <span>Product</span>
-          <span>Category</span>
+          <span>Variant</span>
           <span>Price</span>
           <span>Status</span>
-          <span />
         </div>
         {products.length === 0 ? (
-          <p className="px-4 py-8 text-text-secondary text-sm">No products yet. Add your first one.</p>
+          <p className="px-2 py-8 text-[#888888] text-sm">No products yet. Add your first one.</p>
         ) : (
-          products.map((p) => (
-            <div
-              key={p.id}
-              className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.9fr] gap-2 px-4 py-4 border-t border-border items-center text-sm"
-            >
-              <span className="font-medium flex items-center gap-2 min-w-0">
-                {p.image_url ? (
-                  <img
-                    src={mediaUrl(p.image_url)}
-                    alt=""
-                    className="w-10 h-10 rounded-lg object-cover shrink-0"
-                  />
-                ) : (
-                  <span className="w-10 h-10 rounded-lg bg-border shrink-0" />
-                )}
-                <span className="truncate">{p.name}</span>
-              </span>
-              <span className="text-text-secondary">{p.category_name || '—'}</span>
-              <span className="text-text-secondary">{formatMoney(Number(p.price))}</span>
-              <OnOffButton
-                on={p.in_stock !== false}
-                onClick={() => toggleStock(p)}
-                onLabel="In stock"
-                offLabel="Out of stock"
-              />
-              <div className="flex gap-3 justify-end">
-                <button type="button" className="text-motion-blue" onClick={() => startEdit(p)}>
-                  Edit
-                </button>
-                <button type="button" className="text-error" onClick={() => remove(p)}>
-                  Delete
-                </button>
+          products.map((p) => {
+            const inStock = p.in_stock !== false;
+            const variant =
+              p.variant_label ||
+              (Array.isArray(p.variants) && p.variants[0]?.name) ||
+              '—';
+            return (
+              <div
+                key={p.id}
+                className="grid grid-cols-[40px_1.4fr_1.2fr_0.8fr_1fr] gap-2 px-2 py-4 border-b border-white/10 items-center text-sm"
+              >
+                <button
+                  type="button"
+                  aria-label="Select"
+                  className="w-5 h-5 rounded-md bg-[#2A2A2A] border border-white/10"
+                />
+                <span className="font-medium text-white truncate">{p.name}</span>
+                <span className="text-white/80">{variant}</span>
+                <span className="text-white/80">{formatMoney(Number(p.price))}</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleStock(p)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      inStock
+                        ? 'bg-emerald-950 text-emerald-400'
+                        : 'bg-red-950 text-red-400'
+                    }`}
+                  >
+                    {inStock ? 'In stock' : 'Out of stock'}
+                  </button>
+                  <button type="button" className="text-sky-400 text-xs" onClick={() => startEdit(p)}>
+                    Edit
+                  </button>
+                  <button type="button" className="text-red-400 text-xs" onClick={() => remove(p)}>
+                    Del
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </MerchantShell>

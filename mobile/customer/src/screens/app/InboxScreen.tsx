@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import { formatLocalTime } from '@movr/design-system/format';
+import { formatRelativeTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -23,16 +23,7 @@ const TABS = [
   { key: 'security', label: 'Security' },
 ] as const;
 
-const ICON_META: Record<string, { bg: string; glyph: string }> = {
-  ride_update: { bg: colors.motionBlue, glyph: '🚗' },
-  order_update: { bg: colors.warning, glyph: '📦' },
-  rewards: { bg: colors.movrGreen, glyph: '🎁' },
-  security: { bg: colors.error, glyph: '🛡' },
-  promo: { bg: colors.electricViolet, glyph: '✨' },
-  system: { bg: colors.surfaceElevated, glyph: 'ℹ' },
-};
-
-/** Inbox — category tabs, unread rail, typed icon chips (Phase 19). */
+/** Inbox — mockup: title + Mark all read, category tabs, unread blue rail cards. */
 export default function InboxScreen({
   onOpenWhatsApp,
   onOpenBot,
@@ -44,10 +35,17 @@ export default function InboxScreen({
 }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
+  const iconMeta: Record<string, { bg: string; glyph: string }> = {
+    ride_update: { bg: 'rgba(0,85,255,0.25)', glyph: '🚗' },
+    order_update: { bg: 'rgba(255,184,0,0.25)', glyph: '📦' },
+    rewards: { bg: 'rgba(63,112,72,0.35)', glyph: '🎁' },
+    security: { bg: 'rgba(255,59,92,0.25)', glyph: '🛡' },
+    promo: { bg: 'rgba(106,0,255,0.25)', glyph: '✨' },
+    system: { bg: colors.surfaceElevated, glyph: 'ℹ' },
+  };
 
   const [category, setCategory] = useState<string | undefined>();
   const [messages, setMessages] = useState<any[]>([]);
-  const [unread, setUnread] = useState(0);
 
   const load = () => {
     const q = category ? `?category=${category}` : '';
@@ -55,7 +53,6 @@ export default function InboxScreen({
       .then((r) => r.json())
       .then((j) => {
         setMessages(j.data?.messages || j.data || []);
-        setUnread(j.data?.unread || 0);
       })
       .catch(() => undefined);
   };
@@ -83,93 +80,77 @@ export default function InboxScreen({
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Inbox{unread ? ` · ${unread}` : ''}</Text>
+        <Text style={styles.title}>Inbox</Text>
         <Pressable onPress={markAllRead}>
           <Text style={styles.markRead}>Mark all read</Text>
         </Pressable>
       </View>
 
-      {onOpenWhatsApp ? (
-        <Pressable onPress={onOpenWhatsApp} style={styles.waRow}>
-          <View style={styles.waAvatar}>
-            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>M</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.waTitle}>Movr</Text>
-            <Text style={styles.waSub}>Book by voice note · WhatsApp</Text>
-          </View>
-          <Text style={styles.online}>online</Text>
-        </Pressable>
-      ) : null}
-
-      {onOpenBot ? (
-        <Pressable onPress={onOpenBot} style={styles.waRow}>
-          <View style={[styles.waAvatar, { backgroundColor: colors.electricViolet }]}>
-            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>M</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.waTitle}>Movr Bot</Text>
-            <Text style={styles.waSub}>Book by chat · Telegram</Text>
-          </View>
-          <Text style={[styles.online, { color: colors.success }]}>bot</Text>
-        </Pressable>
-      ) : null}
-
-      {onOpenSupport ? (
-        <Pressable onPress={onOpenSupport} style={styles.waRow}>
-          <View style={[styles.waAvatar, { backgroundColor: colors.movrGreen }]}>
-            <Text style={{ color: colors.pureWhite, fontWeight: '700' }}>?</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.waTitle}>Movr Support</Text>
-            <Text style={styles.waSub}>Typically replies in 2 min</Text>
-          </View>
-        </Pressable>
-      ) : null}
-
-      <FlatList
-        horizontal
-        data={TABS as any[]}
-        keyExtractor={(i) => String(i.key || 'all')}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabs}
-        renderItem={({ item }) => {
-          const active = category === item.key;
-          return (
-            <Pressable onPress={() => setCategory(item.key)} style={styles.tab}>
-              <Text style={[styles.tabText, active && styles.tabActive]}>{item.label}</Text>
-              {active ? <View style={styles.underline} /> : null}
-            </Pressable>
-          );
-        }}
-      />
+      <View style={styles.tabsWrap}>
+        <FlatList
+          horizontal
+          data={TABS as any[]}
+          keyExtractor={(i) => String(i.key || 'all')}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabs}
+          renderItem={({ item }) => {
+            const active = category === item.key;
+            return (
+              <Pressable onPress={() => setCategory(item.key)} style={styles.tab}>
+                <Text style={[styles.tabText, active && styles.tabActive]}>{item.label}</Text>
+                {active ? <View style={styles.underline} /> : null}
+              </Pressable>
+            );
+          }}
+        />
+      </View>
 
       <FlatList
         data={messages}
         keyExtractor={(m) => String(m.id)}
-        contentContainerStyle={{ paddingBottom: spacing[8] }}
+        contentContainerStyle={{ paddingHorizontal: spacing[4], paddingBottom: spacing[8] }}
         renderItem={({ item }) => {
-          const meta = ICON_META[item.category] || ICON_META.system;
+          const meta = iconMeta[item.category] || iconMeta.system;
+          const unread = !item.read && !item.is_read;
           return (
-            <Pressable onPress={() => markOne(item.id)} style={styles.row}>
+            <Pressable onPress={() => markOne(item.id)} style={[styles.card, unread && styles.cardUnread]}>
+              {unread ? <View style={styles.unreadRail} /> : null}
               <View style={[styles.icon, { backgroundColor: meta.bg }]}>
                 <Text>{meta.glyph}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.msgTitle}>
-                  {!item.read ? '● ' : ''}
-                  {item.title}
-                </Text>
+                <Text style={styles.msgTitle}>{item.title}</Text>
                 <Text style={styles.msgBody} numberOfLines={2}>
-                  {item.body}
+                  {item.body || item.description}
                 </Text>
-                <Text style={styles.msgWhen}>{formatLocalTime(item.created_at)}</Text>
+                <Text style={styles.msgWhen}>{formatRelativeTime(item.created_at)}</Text>
               </View>
             </Pressable>
           );
         }}
         ListEmptyComponent={
           <Text style={{ color: colors.textSecondary, padding: spacing[4] }}>No messages</Text>
+        }
+        ListFooterComponent={
+          onOpenWhatsApp || onOpenBot || onOpenSupport ? (
+            <View style={{ marginTop: spacing[4], gap: spacing[2] }}>
+              {onOpenWhatsApp ? (
+                <Pressable onPress={onOpenWhatsApp}>
+                  <Text style={styles.channelLink}>WhatsApp booking →</Text>
+                </Pressable>
+              ) : null}
+              {onOpenBot ? (
+                <Pressable onPress={onOpenBot}>
+                  <Text style={styles.channelLink}>Movr Bot →</Text>
+                </Pressable>
+              ) : null}
+              {onOpenSupport ? (
+                <Pressable onPress={onOpenSupport}>
+                  <Text style={styles.channelLink}>Support →</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null
         }
       />
     </View>
@@ -178,59 +159,57 @@ export default function InboxScreen({
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
-  },
-  title: { color: colors.pureWhite, fontSize: 22, fontWeight: '700' },
-  markRead: { color: colors.motionBlue, fontWeight: '600' },
-  waRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    marginHorizontal: spacing[4],
-    marginTop: spacing[3],
-    padding: spacing[3],
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceElevated,
-  },
-  waAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.movrGreen,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waTitle: { color: colors.pureWhite, fontWeight: '700' },
-  waSub: { color: colors.textSecondary, fontSize: 12 },
-  online: { color: colors.success, fontSize: 12, fontWeight: '600' },
-  tabs: { paddingHorizontal: spacing[4], paddingVertical: spacing[3], gap: spacing[4] },
-  tab: { marginRight: spacing[4] },
-  tabText: { color: colors.textSecondary, fontWeight: '600' },
-  tabActive: { color: colors.pureWhite },
-  underline: { height: 2, backgroundColor: colors.electricViolet, marginTop: 4, borderRadius: 1 },
-  row: {
-    flexDirection: 'row',
-    gap: spacing[3],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  msgTitle: { color: colors.pureWhite, fontWeight: '600' },
-  msgBody: { color: colors.textSecondary, marginTop: 2, fontSize: 13 },
-  msgWhen: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[4],
+      paddingBottom: spacing[2],
+    },
+    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
+    markRead: { color: colors.textSecondary, fontWeight: '500', fontSize: 14 },
+    tabsWrap: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      marginBottom: spacing[3],
+    },
+    tabs: { paddingHorizontal: spacing[4], paddingTop: spacing[2], gap: spacing[4] },
+    tab: { marginRight: spacing[4], paddingBottom: spacing[2] },
+    tabText: { color: colors.textSecondary, fontWeight: '600', fontSize: 15 },
+    tabActive: { color: colors.pureWhite },
+    underline: { height: 3, backgroundColor: colors.motionBlue, marginTop: 6, borderRadius: 2 },
+    card: {
+      flexDirection: 'row',
+      gap: spacing[3],
+      padding: spacing[4],
+      borderRadius: radius.lg,
+      backgroundColor: colors.surfaceElevated,
+      marginBottom: spacing[3],
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    cardUnread: {},
+    unreadRail: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 3,
+      backgroundColor: colors.motionBlue,
+    },
+    icon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 4,
+    },
+    msgTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
+    msgBody: { color: colors.textSecondary, marginTop: 4, fontSize: 13, lineHeight: 18 },
+    msgWhen: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
+    channelLink: { color: colors.motionBlue, fontWeight: '600', marginBottom: spacing[2] },
+  });
 }

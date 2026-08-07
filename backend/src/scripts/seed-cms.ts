@@ -37,7 +37,7 @@ export const CMS_SEED: Array<{
             { label: 'Shop', href: '/#shop' },
             { label: 'Deliver', href: '/#deliver' },
             { label: 'Rentals', href: '/#rentals' },
-            { label: 'For drivers', href: '/#drivers' },
+            { label: 'For drivers', href: '/drivers' },
             { label: 'For merchants', href: '/merchants' },
           ],
           cta: { label: 'Get the app', href: '/download' },
@@ -47,7 +47,13 @@ export const CMS_SEED: Array<{
         type: 'footer',
         payload: {
           brand: 'Movr',
-          tagline: 'Move. Shop. Deliver. Across Africa — priced in your local currency.',
+          tagline:
+            'Move. Shop. Deliver.\nGlobal mobility, commerce, and logistics in one platform.',
+          social: [
+            { key: 'share', href: '/download', label: 'Share' },
+            { key: 'mail', href: '/contact', label: 'Email' },
+            { key: 'community', href: '/about', label: 'Community' },
+          ],
           columns: [
             {
               title: 'SERVICES',
@@ -62,7 +68,7 @@ export const CMS_SEED: Array<{
               title: 'COMPANY',
               links: [
                 { label: 'About Movr', href: '/about' },
-                { label: 'For drivers', href: '/#drivers' },
+                { label: 'For drivers', href: '/drivers' },
                 { label: 'For merchants', href: '/merchants' },
                 { label: 'Careers', href: '/about' },
               ],
@@ -71,16 +77,16 @@ export const CMS_SEED: Array<{
               title: 'SUPPORT',
               links: [
                 { label: 'Help centre', href: '/help' },
-                { label: 'Contact us', href: '/help' },
-                { label: 'Safety', href: '/help/ride' },
+                { label: 'Contact us', href: '/contact' },
+                { label: 'Safety', href: '/help' },
                 { label: 'Terms of Service', href: '/terms' },
                 { label: 'Privacy Policy', href: '/privacy' },
               ],
             },
           ],
           appButtons: [
-            { label: '↓ App Store', href: '/download' },
-            { label: '↓ Google Play', href: '/download' },
+            { label: 'App Store', store: 'ios', href: '/download' },
+            { label: 'Google Play', store: 'android', href: '/download' },
           ],
           copyright: '© 2026 Movr Global Technologies. All rights reserved.',
           legalLinks: [
@@ -113,7 +119,7 @@ export const CMS_SEED: Array<{
         payload: {
           heading: 'Four ways to move',
           items: [
-            { iconKey: 'car', title: 'Ride', body: 'Cars, bikes, and trikes on demand.', anchor: 'ride' },
+            { iconKey: 'car', title: 'Ride', body: 'Cars, bikes, and tricycles on demand.', anchor: 'ride' },
             { iconKey: 'heart', title: 'Shop', body: 'Buy from local stores, in one app.', anchor: 'shop' },
             {
               iconKey: 'package',
@@ -187,7 +193,8 @@ export const CMS_SEED: Array<{
       {
         type: 'cta_banner',
         payload: {
-          body: 'Drive and keep 100% of every fare. No per-ride commission. Just one flexible monthly subscription — cancel anytime.',
+          headline: 'Drive and keep 100% of every fare',
+          body: 'No per-ride commission. Just one flexible monthly subscription — cancel any time.',
           button: { label: 'Become a driver', href: '/register' },
           anchor: 'drivers',
         },
@@ -219,6 +226,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Order management, live delivery tracking, and instant payouts — all from one dashboard.',
           primaryCta: { label: 'Create your storefront', href: '/merchant/onboarding' },
+          secondaryCta: { label: 'Start selling', href: '/merchant/onboarding' },
           layout: 'centered',
           showPhoneMock: false,
         },
@@ -241,6 +249,46 @@ export const CMS_SEED: Array<{
               iconKey: 'card',
               title: 'Instant payouts',
               body: 'Withdraw earnings to bank or mobile money.',
+            },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    slug: 'drivers',
+    title: 'For drivers',
+    status: 'published',
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          headline: 'Keep 100% of every fare',
+          subhead:
+            'No commission. One flexible subscription, cancel any time.\nDrive Sedan, SUV, Motorcycle, Tricycle, or Van.',
+          primaryCta: { label: 'Become a driver', href: '/register?role=driver' },
+          layout: 'centered',
+          showPhoneMock: false,
+        },
+      },
+      {
+        type: 'feature_cards',
+        payload: {
+          items: [
+            {
+              iconKey: 'card',
+              title: '100% earnings',
+              body: 'Every fare, yours. No per-ride cut, ever.',
+            },
+            {
+              iconKey: 'award',
+              title: 'Tiered rewards',
+              body: 'Lite, Pro, Premium — unlock priority matching.',
+            },
+            {
+              iconKey: 'shield',
+              title: 'Verified identity',
+              body: 'Ghana Card-linked, on-chain attested trust.',
             },
           ],
         },
@@ -434,16 +482,19 @@ export const CMS_SEED: Array<{
         payload: {
           slides: [
             {
-              title: 'Ride anywhere',
-              body: 'Cars, bikes, and trikes on demand across your city.',
+              title: 'Ride, shop, and deliver — all in one app',
+              body: 'Book a ride, order from local stores, or send a parcel, all from the same place.',
+              iconKey: 'van',
             },
             {
-              title: 'Shop local',
-              body: 'Browse neighbourhood stores and get delivery tracked live.',
+              title: 'Pay with wallet, MoMo, or card',
+              body: 'Top up once and use Movr across rides, orders, and deliveries.',
+              iconKey: 'wallet',
             },
             {
-              title: 'One wallet',
-              body: 'Pay in your local currency — top up with MoMo or card.',
+              title: 'Earn points on every trip',
+              body: 'Redeem rewards or convert points when DVT launches.',
+              iconKey: 'points',
             },
           ],
           cta: { label: 'Get started', href: '/register' },
@@ -504,8 +555,9 @@ export const CMS_SEED: Array<{
       {
         type: 'hero',
         payload: {
-          headline: 'You’re offline',
-          subhead: 'Check your internet connection and try again.',
+          headline: 'No connection',
+          subhead:
+            'Check your internet connection and try again. You can still book by SMS or a call.',
           layout: 'centered',
           primaryCta: { label: 'Retry', href: '/' },
           showPhoneMock: false,

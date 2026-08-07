@@ -146,12 +146,45 @@ export class DatabaseService {
 
   async getRideById(id: string) {
     const query = `
-      SELECT r.*, 
-             c.first_name as customer_name, c.phone as customer_phone,
-             d.first_name as driver_name, d.phone as driver_phone
+      SELECT r.*,
+             c.first_name as customer_first_name, c.last_name as customer_last_name,
+             c.phone as customer_phone,
+             c.avatar_url as customer_avatar_url,
+             COALESCE(cu.rating, 4.7) as customer_rating,
+             (
+               SELECT COUNT(*)::int FROM rides r2
+               WHERE r2.customer_id = r.customer_id
+                 AND r2.status = 'completed'
+                 AND (
+                   r2.completed_at::date = CURRENT_DATE
+                   OR r2.completed_at > NOW() - INTERVAL '24 hours'
+                 )
+             ) as trips_today,
+             du.first_name as driver_first_name,
+             du.last_name as driver_last_name,
+             du.phone as driver_phone,
+             du.avatar_url as driver_avatar_url,
+             COALESCE(dr.rating, 4.9) as driver_rating,
+             COALESCE(
+               NULLIF(dv.make_model, ''),
+               NULLIF(TRIM(CONCAT_WS(' ', dv.make, dv.model)), ''),
+               'Vehicle'
+             ) as vehicle_model,
+             dv.plate_number as vehicle_plate,
+             COALESCE(dv.vehicle_type, dr.vehicle_type) as vehicle_type,
+             dv.photo_url as vehicle_photo_url
       FROM rides r
       LEFT JOIN users c ON r.customer_id = c.id
-      LEFT JOIN users d ON r.driver_id = d.id
+      LEFT JOIN customers cu ON cu.user_id = r.customer_id
+      LEFT JOIN users du ON du.id = r.driver_id
+      LEFT JOIN drivers dr ON dr.user_id = r.driver_id
+      LEFT JOIN LATERAL (
+        SELECT plate_number, make_model, make, model, vehicle_type, photo_url, updated_at
+        FROM driver_vehicles
+        WHERE driver_user_id = r.driver_id
+        ORDER BY is_primary DESC NULLS LAST, updated_at DESC NULLS LAST
+        LIMIT 1
+      ) dv ON TRUE
       WHERE r.id = $1
     `;
     return this.query(query, [id]);

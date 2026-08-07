@@ -28,17 +28,18 @@ export const deliveriesRouter = Router();
 
 async function deliveryFee(speedTier: 'standard' | 'express') {
   const cfg = await db.query(`SELECT * FROM delivery_pricing_config WHERE id = 1`);
-  const base = Number(cfg.rows[0]?.standard_fee || 10);
-  const mult = Number(cfg.rows[0]?.express_multiplier || 1.5);
+  const base = Number(cfg.rows[0]?.standard_fee || 18);
+  const mult = Number(cfg.rows[0]?.express_multiplier || 32 / 18);
+  const express = Math.round(base * mult);
   return {
     standard: base,
-    express: base * mult,
-    fee: speedTier === 'express' ? base * mult : base,
+    express,
+    fee: speedTier === 'express' ? express : base,
     expressMultiplier: mult,
   };
 }
 
-deliveriesRouter.get('/quote', authenticateToken, async (req: AuthRequest, res: Response) => {
+deliveriesRouter.get('/quote', async (req: AuthRequest, res: Response) => {
   try {
     const tier = (String(req.query.tier || 'standard') === 'express' ? 'express' : 'standard') as
       | 'standard'
@@ -77,7 +78,7 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
 
     const speed = (speedTier || tier || 'standard') === 'express' ? 'express' : 'standard';
     const pricing = await deliveryFee(speed);
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otp = String(Math.floor(1000 + Math.random() * 9000));
 
     const row = await db.query(
       `INSERT INTO deliveries (
@@ -122,6 +123,19 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
   }
 });
 
+deliveriesRouter.get('/mine', authenticateToken, requireDriver, async (req: AuthRequest, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT id, pickup_address, dropoff_address, speed_tier, status, delivery_fee, created_at
+       FROM deliveries WHERE courier_id = $1 ORDER BY created_at DESC LIMIT 20`,
+      [req.user!.id]
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 /** Multipart or JSON body — stores proof_of_delivery_url + receiver_signature_url */
 deliveriesRouter.post(
   '/:id/proof',
@@ -144,7 +158,6 @@ deliveriesRouter.post(
       if (proofFile) proofOfDeliveryUrl = assetUrlFromMulterFile(proofFile);
       if (sigFile) receiverSignatureUrl = assetUrlFromMulterFile(sigFile);
 
-      // Accept base64 data URLs written to assets/
       if (typeof req.body.proofBase64 === 'string' && req.body.proofBase64.startsWith('data:')) {
         const buf = Buffer.from(req.body.proofBase64.split(',')[1] || '', 'base64');
         proofOfDeliveryUrl = saveAssetBuffer(buf, {
@@ -216,27 +229,33 @@ deliveriesRouter.post(
   }
 );
 
-deliveriesRouter.get('/mine', authenticateToken, requireDriver, async (req: AuthRequest, res: Response) => {
-  try {
-    const rows = await db.query(
-      `SELECT id, pickup_address, dropoff_address, speed_tier, status, delivery_fee, created_at
-       FROM deliveries WHERE courier_id = $1 ORDER BY created_at DESC LIMIT 20`,
-      [req.user!.id]
-    );
-    res.json({ status: 'success', data: rows.rows });
-  } catch (error: any) {
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
-
 deliveriesRouter.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const result = await db.query(`SELECT * FROM deliveries WHERE id = $1`, [req.params.id]);
-    if (!result.rows[0]) {
-      return res.status(404).json({ status: 'error', message: 'Not found' });
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(404).json({ status: 'error', message: 'Delivery not found' });
     }
-    const { otp_code, ...safe } = result.rows[0];
-    res.json({ status: 'success', data: safe });
+    const uid = req.user!.id;
+    const allowed =
+      row.courier_id === uid ||
+      row.sender_id === uid ||
+      req.user?.user_type === 'admin' ||
+      !row.courier_id;
+    if (!allowed) {
+      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+    }
+    const { otp_code, ...safe } = row;
+    const ref = String(row.id).replace(/-/g, '').slice(-4).toUpperCase();
+    const customer = row.receiver_name || 'Customer';
+    res.json({
+      status: 'success',
+      data: {
+        ...safe,
+        orderLabel: `Order #${ref} · ${customer}`,
+        otpLength: 4,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }

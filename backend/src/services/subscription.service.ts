@@ -39,12 +39,22 @@ export class SubscriptionService {
     if (perfDiscount) reasons.push(`performance_tier:${perfDiscount}%`);
     if (stakingDiscount) reasons.push(`staking_tier:${stakingDiscount}%`);
 
+    const discounts = [
+      ...(perfDiscount
+        ? [{ key: 'pro_tier', label: 'Pro tier discount', pct: perfDiscount }]
+        : []),
+      ...(stakingDiscount
+        ? [{ key: 'staking', label: 'Staking discount', pct: stakingDiscount }]
+        : []),
+    ];
+
     return {
       plan: plan.rows[0],
       paymentMethod,
       listPrice,
       discountAppliedPct: discountPct,
       discountReason: reasons.join('+') || null,
+      discounts,
       finalPrice,
       note:
         paymentMethod === 'dvt' && !this.tokens.isEnabled()
@@ -57,16 +67,17 @@ export class SubscriptionService {
     userId: string,
     data: {
       planId: string;
-      paymentMethod?: 'fiat' | 'dvt';
+      paymentMethod?: 'fiat' | 'dvt' | 'wallet';
       email: string;
       fullName: string;
       countryCode?: string;
     }
   ) {
-    const quote = await this.quote(userId, data.planId, data.paymentMethod || 'fiat');
+    const method = data.paymentMethod === 'dvt' ? 'dvt' : 'fiat';
+    const quote = await this.quote(userId, data.planId, method);
 
     let payment: any = null;
-    if (data.paymentMethod === 'dvt') {
+    if (method === 'dvt') {
       if (!this.tokens.isEnabled()) {
         throw new Error('DVT payments disabled (TOKEN_SYSTEM_ENABLED)');
       }
@@ -75,32 +86,48 @@ export class SubscriptionService {
       await this.tokens.redeem(userId, dvtNeeded);
       payment = { method: 'dvt', dvtSpent: dvtNeeded, fiatEquivalent: quote.finalPrice };
     } else {
-      payment = await this.payments.initializePayment({
-        userId,
-        amount: quote.finalPrice,
-        currency: quote.plan.currency || 'GHS',
-        paymentType: 'subscription',
-        email: data.email,
-        fullName: data.fullName,
-        countryCode: data.countryCode || 'GH',
-        metadata: {
-          planId: data.planId,
-          discountAppliedPct: quote.discountAppliedPct,
-          discountReason: quote.discountReason,
-        },
-      });
+      // Wallet (fiat) — debit driver wallet balance immediately
+      const wallet = await this.db.query(
+        `SELECT id, balance_fiat FROM wallets WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      );
+      let walletId = wallet.rows[0]?.id;
+      if (!walletId) {
+        const created = await this.db.query(
+          `INSERT INTO wallets (user_id, balance_fiat, currency) VALUES ($1, 0, 'GHS') RETURNING id, balance_fiat`,
+          [userId]
+        );
+        walletId = created.rows[0].id;
+      }
+      const bal = Number(wallet.rows[0]?.balance_fiat ?? 0);
+      if (bal < quote.finalPrice) {
+        throw new Error(`Insufficient wallet balance (need GH₵${quote.finalPrice.toFixed(2)})`);
+      }
+      await this.db.query(
+        `UPDATE wallets SET balance_fiat = balance_fiat - $1, last_updated = NOW() WHERE id = $2`,
+        [quote.finalPrice, walletId]
+      );
+      payment = { method: 'wallet', amount: quote.finalPrice, currency: quote.plan.currency || 'GHS' };
     }
 
     const nextBilling = new Date();
-    nextBilling.setMonth(nextBilling.getMonth() + 1);
+    // Weekly plan renews in 7 days; others monthly
+    const planId = String(data.planId || '');
+    if (planId.includes('weekly')) {
+      nextBilling.setDate(nextBilling.getDate() + 7);
+    } else {
+      nextBilling.setMonth(nextBilling.getMonth() + 1);
+    }
 
+    const status = 'active';
     const sub = await this.db.query(
       `INSERT INTO subscriptions (
          user_id, plan_id, status, amount, currency, next_billing_date, auto_renew,
          payment_method, discount_applied_pct, discount_reason, list_price, final_price
-       ) VALUES ($1,$2,'pending',$3,$4,$5,TRUE,$10,$6,$7,$8,$9)
+       ) VALUES ($1,$2,$11,$3,$4,$5,TRUE,$10,$6,$7,$8,$9)
        ON CONFLICT (user_id) DO UPDATE SET
          plan_id = EXCLUDED.plan_id,
+         status = EXCLUDED.status,
          amount = EXCLUDED.amount,
          payment_method = EXCLUDED.payment_method,
          discount_applied_pct = EXCLUDED.discount_applied_pct,
@@ -120,7 +147,8 @@ export class SubscriptionService {
         quote.discountReason,
         quote.listPrice,
         quote.finalPrice,
-        data.paymentMethod || 'fiat',
+        method,
+        status,
       ]
     );
 

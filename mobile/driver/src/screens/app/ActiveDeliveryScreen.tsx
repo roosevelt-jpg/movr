@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TextInput,
   PanResponder,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
@@ -24,7 +25,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Confirm delivery — photo capture stub, signature pad, OTP, then verify. */
+/** Confirm delivery — POD photo, signature, 4-digit OTP. */
 export default function ActiveDeliveryScreen({
   deliveryId,
   orderLabel,
@@ -37,14 +38,28 @@ export default function ActiveDeliveryScreen({
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [focusIdx, setFocusIdx] = useState(0);
   const [photoTaken, setPhotoTaken] = useState(false);
   const [proofUrl, setProofUrl] = useState('');
   const [signed, setSigned] = useState(false);
   const [strokes, setStrokes] = useState<{ x: number; y: number }[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const label = orderLabel || (deliveryId ? `Delivery #${deliveryId.slice(0, 8)}` : 'Delivery');
+  const [label, setLabel] = useState(
+    orderLabel || (deliveryId ? `Order #${String(deliveryId).replace(/-/g, '').slice(-4).toUpperCase()}` : 'Delivery')
+  );
+  const inputs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    if (!deliveryId) return;
+    fetch(`${API}/deliveries/${deliveryId}`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data?.orderLabel) setLabel(j.data.orderLabel);
+      })
+      .catch(() => undefined);
+  }, [deliveryId]);
 
   const pan = useRef(
     PanResponder.create({
@@ -64,6 +79,10 @@ export default function ActiveDeliveryScreen({
     const next = [...otp];
     next[index] = v;
     setOtp(next);
+    if (v && index < 3) {
+      inputs.current[index + 1]?.focus();
+      setFocusIdx(index + 1);
+    }
   };
 
   const signatureDataUrl = () => {
@@ -86,7 +105,7 @@ export default function ActiveDeliveryScreen({
       setMsg('Missing delivery id');
       return;
     }
-    if (!photoTaken) {
+    if (!photoTaken || !proofUrl) {
       setMsg('Capture proof of delivery photo first');
       return;
     }
@@ -95,19 +114,13 @@ export default function ActiveDeliveryScreen({
       return;
     }
     if (code.length < 4) {
-      setMsg('Enter the full OTP');
+      setMsg('Enter the 4-digit OTP');
       return;
     }
 
     setBusy(true);
     setMsg('');
     try {
-      if (!proofUrl) {
-        setMsg('Upload a proof photo first');
-        setBusy(false);
-        return;
-      }
-
       await fetch(`${API}/deliveries/${deliveryId}/proof`, {
         method: 'POST',
         headers: authHeaders(),
@@ -137,12 +150,15 @@ export default function ActiveDeliveryScreen({
   };
 
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
       <Text style={styles.title}>Confirm delivery</Text>
       <Text style={styles.sub}>{label}</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Proof of delivery photo</Text>
+        <View style={styles.cardHead}>
+          <Text style={styles.cardIcon}>📷</Text>
+          <Text style={styles.cardTitle}>Proof of delivery photo</Text>
+        </View>
         <Pressable
           style={[styles.photoBox, photoTaken && styles.doneBox]}
           onPress={async () => {
@@ -158,22 +174,19 @@ export default function ActiveDeliveryScreen({
           }}
         >
           <Text style={styles.photoIcon}>{photoTaken ? '✓' : '📷'}</Text>
-          <Text style={styles.hint}>
-            {photoTaken ? 'Photo uploaded · tap to replace' : 'Tap to upload proof photo'}
-          </Text>
         </Pressable>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Receiver signature</Text>
+        <View style={styles.cardHead}>
+          <Text style={styles.cardIcon}>〰️</Text>
+          <Text style={styles.cardTitle}>Receiver signature</Text>
+        </View>
         <View style={styles.signBox} {...pan.panHandlers}>
-          {strokes.slice(0, 40).map((p, i) => (
-            <View
-              key={i}
-              style={[styles.ink, { left: p.x, top: p.y }]}
-            />
+          {strokes.slice(0, 80).map((p, i) => (
+            <View key={i} style={[styles.ink, { left: p.x, top: p.y }]} />
           ))}
-          {!signed ? <Text style={styles.signHint}>Sign here</Text> : null}
+          {!signed ? <Text style={styles.signHint}>〰️</Text> : null}
         </View>
         <Pressable
           onPress={() => {
@@ -186,16 +199,29 @@ export default function ActiveDeliveryScreen({
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Enter OTP from customer</Text>
+        <View style={styles.cardHead}>
+          <Text style={styles.cardIcon}>✓</Text>
+          <Text style={styles.cardTitle}>Enter OTP from customer</Text>
+        </View>
         <View style={styles.otpRow}>
           {otp.map((d, i) => (
             <TextInput
               key={i}
-              style={styles.otpBox}
+              ref={(el) => {
+                inputs.current[i] = el;
+              }}
+              style={[styles.otpBox, focusIdx === i && styles.otpFocus]}
               keyboardType="number-pad"
               maxLength={1}
               value={d}
+              onFocus={() => setFocusIdx(i)}
               onChangeText={(t) => setDigit(i, t)}
+              onKeyPress={({ nativeEvent }) => {
+                if (nativeEvent.key === 'Backspace' && !otp[i] && i > 0) {
+                  inputs.current[i - 1]?.focus();
+                  setFocusIdx(i - 1);
+                }
+              }}
               placeholder="·"
               placeholderTextColor={colors.textSecondary}
             />
@@ -209,93 +235,93 @@ export default function ActiveDeliveryScreen({
         <View style={styles.ctaGlow} />
         <Text style={styles.ctaText}>{busy ? 'Confirming…' : 'Confirm delivery'}</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-  sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[5] },
-  card: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[3],
-  },
-  cardTitle: { color: colors.pureWhite, fontWeight: '600', marginBottom: spacing[3] },
-  photoBox: {
-    height: 120,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  doneBox: { borderColor: colors.success, borderStyle: 'solid' },
-  photoIcon: { fontSize: 28, opacity: 0.7 },
-  hint: { color: colors.textSecondary, marginTop: 6, fontSize: 12 },
-  signBox: {
-    height: 100,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  ink: {
-    position: 'absolute',
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.pureWhite,
-    marginLeft: -2,
-    marginTop: -2,
-  },
-  signHint: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: 38,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: colors.border,
-    fontSize: 16,
-  },
-  clear: { color: colors.motionBlue, marginTop: 8, fontSize: 13 },
-  otpRow: { flexDirection: 'row', gap: spacing[2], flexWrap: 'wrap' },
-  otpBox: {
-    width: 44,
-    height: 52,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    color: colors.pureWhite,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  msg: { color: colors.textSecondary, marginBottom: spacing[2] },
-  cta: {
-    marginTop: 'auto' as any,
-    marginBottom: spacing[4],
-    borderRadius: radius.pill,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.electricViolet,
-    overflow: 'hidden',
-  },
-  ctaGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.45,
-  },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
+    sub: { color: colors.textSecondary, marginTop: 4, marginBottom: spacing[5] },
+    card: {
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.lg,
+      padding: spacing[4],
+      marginBottom: spacing[3],
+    },
+    cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing[3] },
+    cardIcon: { fontSize: 14 },
+    cardTitle: { color: colors.pureWhite, fontWeight: '600' },
+    photoBox: {
+      height: 140,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+    },
+    doneBox: { borderColor: colors.success, borderStyle: 'solid' },
+    photoIcon: { fontSize: 36, opacity: 0.55 },
+    signBox: {
+      height: 120,
+      borderRadius: radius.md,
+      backgroundColor: colors.surface,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    ink: {
+      position: 'absolute',
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.pureWhite,
+      marginLeft: -2,
+      marginTop: -2,
+    },
+    signHint: {
+      position: 'absolute',
+      alignSelf: 'center',
+      top: 42,
+      left: 0,
+      right: 0,
+      textAlign: 'center',
+      color: colors.border,
+      fontSize: 28,
+      opacity: 0.5,
+    },
+    clear: { color: colors.motionBlue, marginTop: 8, fontSize: 13 },
+    otpRow: { flexDirection: 'row', gap: spacing[3] },
+    otpBox: {
+      width: 52,
+      height: 56,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      color: colors.pureWhite,
+      textAlign: 'center',
+      fontSize: 22,
+      fontWeight: '700',
+    },
+    otpFocus: { borderColor: colors.motionBlue, borderWidth: 2 },
+    msg: { color: colors.textSecondary, marginBottom: spacing[2] },
+    cta: {
+      marginTop: spacing[4],
+      borderRadius: radius.pill,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.electricViolet,
+      overflow: 'hidden',
+    },
+    ctaGlow: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.motionBlue,
+      opacity: 0.45,
+    },
+    ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
+  });
 }

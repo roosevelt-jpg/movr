@@ -50,6 +50,27 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 | 038_driver_vehicle_photo.sql | Driver vehicle photo_url + profile columns for direct upload |
 | 039_enable_claims_trip_recording.sql | Enable trip_recording feature flag (Phase 28 live); claims via CLAIM_CUSTODIAL_ENABLED |
 | 040_enable_all_feature_flags.sql | Enable all feature_flags (cross-border, rentals, voice, ussd, trip recording) at 100% |
+| 041_rentals_pricing_zones_seed.sql | Luxury rental rates + Accra pricing zones (Osu, Airport, Tema) |
+| 042_driver_ui_tiers_subscription.sql | Pro/Premium thresholds, staking discount seed, Weekly plan |
+| 043_stake_integrations_mockup_align.sql | Staking pool APYs/names + integration labels/statuses |
+| 044_shop_mockup_seed.sql | Store meta + Boutique 22 / Fresh Mart seed + delivery fee |
+| 045_points_referral_transfer_align.sql | Points DVT rate, referral 250 pts, transfer fee/FX |
+| 046_merchant_portal_mockup.sql | Merchant earnings/products/analytics seed + payout_account |
+| 047_admin_ops_mockup_align.sql | Live map/finance/vehicle GH pricing + merchants CTA |
+| 048_payments_product_whatsapp_align.sql | Payment providers seed, product sizes/colors, wishlist |
+| 049_parcel_merchant_onboard_align.sql | Parcel fees GH₵18/32 + merchant cert column |
+| 050_parcel_express_fee_precision.sql | Express multiplier precision for exact GH₵32 |
+| 051_auth_driver_pickup_align.sql | Customer rating + Ama Konadu demo active ride |
+| 052_driver_pickup_trips_today.sql | Seed 2 completed rides today for pickup meta |
+| 053_fix_trips_today_dates.sql | Align completed_at dates for trips_today |
+| 054_profile_otp_history_align.sql | user_settings, auth_otps, trip history seed |
+| 055_withdraw_rating_users_kyc.sql | Driver payout MoMo, ride ratings, KYC docs, admin users |
+| 056_download_ops_rewards_audit.sql | App store links, ride #88213 dispute, rewards + audit seed |
+| 057_help_terms_status_copy.sql | Help categories/articles, legal docs, offline/empty copy |
+| 058_ussd_sms_overview_kyc.sql | USSD sessions, support tickets, dashboard stats, KYC queue seed |
+| 059_onboarding_claim_topup_order4821.sql | Onboarding slides, claim KWESI357, payment methods, order #4821 |
+| 060_redeem_demand_flags_merchant_settings.sql | Redeem catalog, demand heatmap, feature flags, merchant settings |
+| 061_public_footer_mockup.sql | Site footer CMS copy, locales (Ghana - English), app links |
 
 ## Notes
 

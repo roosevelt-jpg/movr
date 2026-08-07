@@ -18,12 +18,15 @@ const COUNTRY_NAME: Record<string, string> = {
   GH: 'Ghana',
   NG: 'Nigeria',
   KE: 'Kenya',
+  SN: 'Senegal (Paystack unsupported)',
+  STBY: 'Standby provider',
   ZA: 'South Africa',
   CI: "Côte d'Ivoire",
-  SN: 'Senegal (Paystack unsupported)',
 };
 
-/** Payment providers — global + country overrides (Change keeps PATCH API). */
+const MOCKUP_ORDER = ['global', 'GH', 'NG', 'KE', 'SN', 'STBY'];
+
+/** Payment providers — global + country overrides. */
 export default function PaymentProvidersPage() {
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [error, setError] = useState('');
@@ -38,18 +41,36 @@ export default function PaymentProvidersPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data: ProviderRow[] = res.data.data || [];
-      setRows(
-        data.map((r) => ({
-          ...r,
-          label:
-            r.scope === 'global'
-              ? 'Global default'
-              : r.scope === 'standby' || (!r.is_active && !r.country_code)
-                ? 'Standby provider'
-                : COUNTRY_NAME[r.country_code || ''] || r.country_code || 'Country',
-          status: r.is_active ? 'Active' : 'Standby',
-        }))
-      );
+      const mapped = data.map((r) => ({
+        ...r,
+        label:
+          r.scope === 'global'
+            ? 'Global default'
+            : r.country_code === 'STBY' || r.scope === 'standby'
+              ? 'Standby provider'
+              : COUNTRY_NAME[r.country_code || ''] || r.country_code || 'Country',
+        status:
+          r.country_code === 'STBY' || r.scope === 'standby' || !r.is_active
+            ? ('Standby' as const)
+            : ('Active' as const),
+      }));
+
+      // Prefer mockup order: Global, GH, NG, KE, SN, Standby
+      mapped.sort((a, b) => {
+        const keyA =
+          a.scope === 'global' ? 'global' : a.country_code === 'STBY' ? 'STBY' : a.country_code || '';
+        const keyB =
+          b.scope === 'global' ? 'global' : b.country_code === 'STBY' ? 'STBY' : b.country_code || '';
+        const ia = MOCKUP_ORDER.indexOf(keyA);
+        const ib = MOCKUP_ORDER.indexOf(keyB);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return 1;
+        return ia - ib;
+      });
+
+      // Show mockup scopes first; keep extras at end
+      setRows(mapped);
       setError('');
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message);
@@ -91,7 +112,7 @@ export default function PaymentProvidersPage() {
           <span>Scope</span>
           <span>Provider</span>
           <span>Status</span>
-          <span>Action</span>
+          <span />
         </div>
         {rows.length === 0 ? (
           <div style={styles.empty}>No payment providers configured</div>
@@ -100,8 +121,8 @@ export default function PaymentProvidersPage() {
             const status = row.status || (row.is_active ? 'Active' : 'Standby');
             return (
               <div key={row.id} style={styles.row}>
-                <span>{row.label || row.scope}</span>
-                <span style={{ textTransform: 'capitalize' }}>{row.provider}</span>
+                <span style={{ color: '#fff' }}>{row.label || row.scope}</span>
+                <span style={{ textTransform: 'capitalize', color: '#fff' }}>{row.provider}</span>
                 <span>
                   <span
                     style={{
@@ -126,7 +147,7 @@ export default function PaymentProvidersPage() {
                       <option value="flutterwave">Flutterwave</option>
                     </select>
                   ) : (
-                    <button style={styles.change} onClick={() => setEditing(row.id)}>
+                    <button type="button" style={styles.change} onClick={() => setEditing(row.id)}>
                       Change
                     </button>
                   )}
@@ -141,16 +162,16 @@ export default function PaymentProvidersPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  h1: { fontSize: 28, fontWeight: 700, marginBottom: 8 },
-  sub: { color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 },
-  error: { color: 'var(--error)', marginBottom: 16 },
-  table: { borderTop: '1px solid var(--surface-elevated)' },
+  h1: { fontSize: 28, fontWeight: 700, marginBottom: 8, color: '#fff' },
+  sub: { color: '#888', marginBottom: 24, fontSize: 14 },
+  error: { color: '#f87171', marginBottom: 16 },
+  table: { borderTop: '1px solid #222' },
   headerRow: {
     display: 'grid',
     gridTemplateColumns: '1.6fr 1fr 0.9fr 0.7fr',
     gap: 12,
     padding: '12px 4px',
-    color: 'var(--text-secondary)',
+    color: '#888',
     fontSize: 13,
   },
   row: {
@@ -158,11 +179,11 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: '1.6fr 1fr 0.9fr 0.7fr',
     gap: 12,
     padding: '16px 4px',
-    borderTop: '1px solid var(--surface-elevated)',
+    borderTop: '1px solid #222',
     alignItems: 'center',
     fontSize: 15,
   },
-  empty: { padding: '24px 4px', color: 'var(--text-secondary)' },
+  empty: { padding: '24px 4px', color: '#888' },
   badge: {
     display: 'inline-block',
     borderRadius: 999,
@@ -170,20 +191,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 700,
   },
-  active: { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' },
-  standby: { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)' },
+  active: { background: 'rgba(34,197,94,0.18)', color: '#4ade80' },
+  standby: { background: 'rgba(234,179,8,0.18)', color: '#fbbf24' },
   change: {
     background: 'transparent',
     border: 'none',
-    color: 'var(--motion-blue)',
+    color: '#3B82F6',
     cursor: 'pointer',
     fontWeight: 600,
     padding: 0,
   },
   select: {
-    background: 'var(--surface)',
-    color: 'var(--pure-white)',
-    border: '1px solid var(--electric-violet)',
+    background: '#111',
+    color: '#fff',
+    border: '1px solid #8E2DE2',
     borderRadius: 8,
     padding: '6px 10px',
   },

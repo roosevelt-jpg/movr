@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import AdminOpsNav from '../components/AdminOpsNav';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -15,14 +16,35 @@ interface Integration {
   last_error?: string;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  payments: 'PAYMENTS',
-  messaging: 'MESSAGING',
-  maps_location: 'MAPS',
-  ai_voice: 'AI & VOICE',
-  identity_verification: 'IDENTITY',
-  infrastructure: 'INFRASTRUCTURE',
-  pricing_signals: 'PRICING SIGNALS',
+/** Mockup section order + category subtitle overrides. */
+const SECTIONS: { title: string; keys: string[] }[] = [
+  {
+    title: 'PAYMENTS',
+    keys: ['paystack', 'flutterwave', 'twilio'],
+  },
+  {
+    title: 'AI & VOICE / MAPS / IDENTITY',
+    keys: [
+      'openai',
+      'google_maps',
+      'nia_ghana_card',
+      'dvla_ghana',
+      'openweathermap',
+      'africastalking_ussd',
+    ],
+  },
+];
+
+const SUBTITLE: Record<string, string> = {
+  paystack: 'Payments',
+  flutterwave: 'Payments',
+  twilio: 'Messaging',
+  openai: 'AI & voice',
+  google_maps: 'Maps & location',
+  nia_ghana_card: 'Identity verification',
+  dvla_ghana: 'Identity verification',
+  openweathermap: 'Pricing signals',
+  africastalking_ussd: 'Messaging (USSD)',
 };
 
 function statusBadge(status: string) {
@@ -61,13 +83,15 @@ export default function IntegrationsHubPage() {
       });
   }, []);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, Integration[]> = {};
-    for (const item of items) {
-      if (!map[item.category]) map[item.category] = [];
-      map[item.category].push(item);
-    }
+  const byKey = useMemo(() => {
+    const map: Record<string, Integration> = {};
+    for (const item of items) map[item.key] = item;
     return map;
+  }, [items]);
+
+  const other = useMemo(() => {
+    const shown = new Set(SECTIONS.flatMap((s) => s.keys));
+    return items.filter((i) => !shown.has(i.key));
   }, [items]);
 
   const open = async (key: string) => {
@@ -100,9 +124,29 @@ export default function IntegrationsHubPage() {
     await load();
   };
 
+  const renderCard = (item: Integration) => {
+    const badge = statusBadge(item.status);
+    return (
+      <div key={item.key} style={styles.card}>
+        <div style={styles.cardTop}>
+          <div>
+            <strong style={styles.cardTitle}>{item.display_name}</strong>
+            <p style={styles.cardCat}>{SUBTITLE[item.key] || item.category}</p>
+          </div>
+          <span style={{ ...styles.badge, background: badge.background, color: badge.color }}>
+            {badge.label}
+          </span>
+        </div>
+        <button style={styles.link} onClick={() => open(item.key)}>
+          Configure →
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <AdminShell activeLabel="Integrations">
-      <h1 style={styles.h1}>Integrations</h1>
+    <AdminShell activeLabel="Integrations" hidePageTitle>
+      <AdminOpsNav />
       {message ? <p style={styles.msg}>{message}</p> : null}
       {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
@@ -110,46 +154,37 @@ export default function IntegrationsHubPage() {
         <p style={{ color: 'var(--text-secondary)' }}>No integrations configured</p>
       ) : null}
 
-      {Object.keys(grouped).map((cat) => (
-        <section key={cat} style={styles.section}>
-          <p style={styles.cat}>{CATEGORY_LABEL[cat] || cat.toUpperCase()}</p>
-          <div style={styles.grid}>
-            {grouped[cat].map((item) => {
-              const badge = statusBadge(item.status);
-              return (
-                <div key={item.key} style={styles.card}>
-                  <div style={styles.cardTop}>
-                    <div>
-                      <strong style={styles.cardTitle}>{item.display_name}</strong>
-                      <p style={styles.cardCat}>
-                        {CATEGORY_LABEL[item.category]?.replace(/_/g, ' ') || item.category}
-                      </p>
-                    </div>
-                    <span style={{ ...styles.badge, background: badge.background, color: badge.color }}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <button style={styles.link} onClick={() => open(item.key)}>
-                    Configure →
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+      {SECTIONS.map((section) => {
+        const cards = section.keys.map((k) => byKey[k]).filter(Boolean);
+        if (!cards.length) return null;
+        return (
+          <section key={section.title} style={styles.section}>
+            <p style={styles.cat}>{section.title}</p>
+            <div style={styles.grid}>{cards.map(renderCard)}</div>
+          </section>
+        );
+      })}
+
+      {other.length ? (
+        <section style={styles.section}>
+          <p style={styles.cat}>OTHER</p>
+          <div style={styles.grid}>{other.map(renderCard)}</div>
         </section>
-      ))}
+      ) : null}
 
       {selected && detail ? (
         <div style={styles.panel}>
           <h3 style={{ marginTop: 0 }}>{detail.display_name}</h3>
           <p style={styles.cardCat}>Secrets are masked after save. Re-enter to rotate.</p>
           <label style={styles.label}>
-            secret_key
+            secret_key / api_key
             <input
               style={styles.input}
               type="password"
-              value={creds.secret_key || ''}
-              onChange={(e) => setCreds({ ...creds, secret_key: e.target.value })}
+              value={creds.secret_key || creds.api_key || ''}
+              onChange={(e) =>
+                setCreds({ ...creds, secret_key: e.target.value, api_key: e.target.value })
+              }
             />
           </label>
           <label style={styles.label}>
@@ -162,9 +197,15 @@ export default function IntegrationsHubPage() {
             />
           </label>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button style={styles.primary} onClick={save}>Save</button>
-            <button style={styles.primary} onClick={test}>Test connection</button>
-            <button style={styles.ghost} onClick={() => setSelected(null)}>Close</button>
+            <button style={styles.primary} onClick={save}>
+              Save
+            </button>
+            <button style={styles.primary} onClick={test}>
+              Test connection
+            </button>
+            <button style={styles.ghost} onClick={() => setSelected(null)}>
+              Close
+            </button>
           </div>
         </div>
       ) : null}
@@ -173,18 +214,22 @@ export default function IntegrationsHubPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  h1: { fontSize: 28, fontWeight: 700, marginBottom: 8 },
   msg: { color: 'var(--electric-violet)' },
   section: { marginTop: 28 },
-  cat: { color: 'var(--text-secondary)', fontSize: 12, letterSpacing: 1.2, marginBottom: 12, fontWeight: 600 },
+  cat: {
+    color: 'var(--text-secondary)',
+    fontSize: 12,
+    letterSpacing: 1.2,
+    marginBottom: 12,
+    fontWeight: 600,
+  },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
     gap: 12,
   },
   card: {
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 16,
     minHeight: 120,
@@ -215,7 +260,6 @@ const styles: Record<string, React.CSSProperties> = {
   panel: {
     marginTop: 24,
     background: 'var(--surface-elevated)',
-    border: '1px solid var(--border)',
     borderRadius: 14,
     padding: 20,
   },

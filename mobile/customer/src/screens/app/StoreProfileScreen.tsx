@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Image } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
@@ -17,7 +17,6 @@ const FALLBACK_PRODUCTS = [
 export default function StoreProfileScreen({
   storeId,
   onOpenProduct,
-  onAddToCart,
 }: {
   storeId?: string;
   onOpenProduct?: (productId: string) => void;
@@ -33,6 +32,7 @@ export default function StoreProfileScreen({
     reviewCount: 320,
     hours: 'Open until 9:00 PM',
     eta: '20–30 min',
+    bannerUrl: null,
   });
   const [products, setProducts] = useState<any[]>(FALLBACK_PRODUCTS);
 
@@ -47,9 +47,10 @@ export default function StoreProfileScreen({
             name: s.name,
             category: s.category || 'Store',
             rating: Number(s.rating || 4.8),
-            reviewCount: Number(s.review_count || 320),
-            hours: s.hours_text || 'Open until 9:00 PM',
+            reviewCount: Number(s.review_count || 0),
+            hours: s.hours_text || s.hours_json?.label || 'Open until 9:00 PM',
             eta: s.eta_text || '20–30 min',
+            bannerUrl: s.banner_url || s.image_url || s.banners?.[0]?.image_url || null,
           });
         }
       })
@@ -65,6 +66,7 @@ export default function StoreProfileScreen({
               id: p.id,
               name: p.name,
               price: Number(p.price || p.base_price || 0),
+              imageUrl: p.image_url || null,
             }))
           );
         }
@@ -74,7 +76,11 @@ export default function StoreProfileScreen({
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
-      <View style={styles.banner} />
+      {store.bannerUrl ? (
+        <Image source={{ uri: store.bannerUrl }} style={styles.banner} />
+      ) : (
+        <View style={styles.banner} />
+      )}
       <Text style={styles.title}>{store.name}</Text>
       <Text style={styles.gold}>
         ★ {Number(store.rating).toFixed(1)} ({store.reviewCount}) · {store.category}
@@ -91,23 +97,16 @@ export default function StoreProfileScreen({
         columnWrapperStyle={{ gap: spacing[3] }}
         contentContainerStyle={{ gap: spacing[3], marginTop: spacing[5] }}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => onOpenProduct?.(String(item.id))}
-          >
-            <View style={styles.thumb} />
+          <Pressable style={styles.card} onPress={() => onOpenProduct?.(String(item.id))}>
+            {item.imageUrl ? (
+              <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+            ) : (
+              <View style={styles.thumb} />
+            )}
             <Text style={styles.cardTitle} numberOfLines={2}>
               {item.name}
             </Text>
             <Text style={styles.price}>{formatCurrency(item.price, 'GHS')}</Text>
-            {onAddToCart ? (
-              <Pressable
-                style={styles.addBtn}
-                onPress={() => onAddToCart(item)}
-              >
-                <Text style={styles.addText}>Add</Text>
-              </Pressable>
-            ) : null}
           </Pressable>
         )}
       />
@@ -117,40 +116,31 @@ export default function StoreProfileScreen({
 
 function makeStyles(colors: any) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-  banner: {
-    height: 140,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceElevated,
-    marginBottom: spacing[4],
-  },
-  title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700' },
-  gold: { color: colors.warning, marginTop: 6, fontWeight: '600' },
-  meta: { color: colors.textSecondary, marginTop: 4 },
-  card: {
-    flex: 1,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[3],
-  },
-  thumb: {
-    height: 90,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    marginBottom: spacing[3],
-  },
-  cardTitle: { color: colors.pureWhite, fontWeight: '600', minHeight: 40 },
-  price: { color: colors.pureWhite, fontWeight: '700', marginTop: 6 },
-  addBtn: {
-    marginTop: spacing[2],
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing[3],
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.electricViolet,
-  },
-  addText: { color: colors.pureWhite, fontWeight: '700', fontSize: 12 },
-});
+    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
+    banner: {
+      height: 140,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surfaceElevated,
+      marginBottom: spacing[4],
+      width: '100%',
+    },
+    title: { color: colors.pureWhite, fontSize: 24, fontWeight: '700' },
+    gold: { color: colors.warning, marginTop: 6, fontWeight: '600' },
+    meta: { color: colors.textSecondary, marginTop: 4 },
+    card: {
+      flex: 1,
+      backgroundColor: colors.surfaceElevated,
+      borderRadius: radius.lg,
+      padding: spacing[3],
+    },
+    thumb: {
+      height: 90,
+      borderRadius: radius.sm,
+      backgroundColor: colors.surface,
+      marginBottom: spacing[3],
+      width: '100%',
+    },
+    cardTitle: { color: colors.pureWhite, fontWeight: '500', minHeight: 40 },
+    price: { color: colors.pureWhite, fontWeight: '700', marginTop: 6 },
+  });
 }

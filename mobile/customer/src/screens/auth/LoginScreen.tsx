@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -15,10 +14,7 @@ export default function LoginScreen({
   onForgot?: () => void;
   onCreate?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState('+233 24 000 0000');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,18 +24,26 @@ export default function LoginScreen({
     setLoading(true);
     setError('');
     try {
+      const cleanPhone = phone.trim();
       const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: phone.includes('@') ? phone : `${phone.replace(/\s/g, '')}@phone.movr`,
-          phone,
+          phone: cleanPhone,
+          identifier: cleanPhone,
           password,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Login failed');
-      onSuccess?.(json.data?.token || '');
+      const token = json.data?.token || '';
+      if (token) {
+        (globalThis as any).__MOVR_TOKEN__ = token;
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('movr_token', token);
+        }
+      }
+      onSuccess?.(token);
     } catch (e: any) {
       setError(e.message || 'Login failed');
     } finally {
@@ -58,8 +62,9 @@ export default function LoginScreen({
         <TextInput
           style={styles.input}
           placeholder="+233 24 000 0000"
-          placeholderTextColor={colors.textSecondary}
+          placeholderTextColor="#71717A"
           keyboardType="phone-pad"
+          autoComplete="tel"
           value={phone}
           onChangeText={setPhone}
         />
@@ -70,14 +75,15 @@ export default function LoginScreen({
         <Text style={styles.fieldIcon}>🔒</Text>
         <TextInput
           style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.textSecondary}
+          placeholder="••••••••"
+          placeholderTextColor="#71717A"
           secureTextEntry={!show}
+          autoComplete="password"
           value={password}
           onChangeText={setPassword}
         />
-        <Pressable onPress={() => setShow((s) => !s)}>
-          <Text style={styles.eye}>{show ? '🙈' : '👁'}</Text>
+        <Pressable onPress={() => setShow((s) => !s)} hitSlop={8}>
+          <Text style={styles.eye}>{show ? '○' : '◉'}</Text>
         </Pressable>
       </View>
 
@@ -88,7 +94,8 @@ export default function LoginScreen({
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable style={styles.cta} onPress={submit} disabled={loading}>
-        <View style={styles.ctaGlow} />
+        <View style={styles.ctaLeft} />
+        <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>{loading ? 'Signing in…' : 'Sign in'}</Text>
       </Pressable>
 
@@ -102,42 +109,60 @@ export default function LoginScreen({
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[5], paddingTop: 72 },
-  brand: { color: colors.pureWhite, fontSize: 32, fontWeight: '800', textAlign: 'center' },
-  sub: { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 36 },
-  label: { color: colors.textSecondary, fontSize: 13, marginBottom: 8 },
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#000000',
+    paddingHorizontal: spacing[5],
+    paddingTop: 72,
+  },
+  brand: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  sub: {
+    color: '#A1A1AA',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 40,
+    fontSize: 15,
+  },
+  label: { color: '#A1A1AA', fontSize: 13, marginBottom: 8 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: '#1A1A1A',
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#2A2A2A',
     paddingHorizontal: 14,
     marginBottom: spacing[4],
   },
-  fieldIcon: { marginRight: 10, fontSize: 14 },
-  input: { flex: 1, color: colors.pureWhite, paddingVertical: 14, fontSize: 15 },
-  eye: { fontSize: 16, padding: 4 },
+  fieldIcon: { marginRight: 10, fontSize: 14, color: '#A1A1AA' },
+  input: { flex: 1, color: '#FFFFFF', paddingVertical: 14, fontSize: 15 },
+  eye: { fontSize: 14, padding: 4, color: '#A1A1AA' },
   forgotWrap: { alignSelf: 'flex-end', marginBottom: spacing[5] },
-  link: { color: colors.motionBlue, fontWeight: '600' },
-  error: { color: colors.error, marginBottom: 12 },
+  link: { color: '#5B8AFF', fontWeight: '600' },
+  error: { color: '#F87171', marginBottom: 12 },
   cta: {
     borderRadius: radius.pill,
     minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: colors.movrGreen,
+    backgroundColor: '#0F766E',
   },
-  ctaGlow: {
+  ctaLeft: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.motionBlue,
-    opacity: 0.55,
+    backgroundColor: '#0F766E',
   },
-  ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
-  footer: { color: colors.textSecondary, textAlign: 'center', marginTop: spacing[5] },
+  ctaRight: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.72,
+  },
+  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  footer: { color: '#A1A1AA', textAlign: 'center', marginTop: spacing[5] },
 });
-}

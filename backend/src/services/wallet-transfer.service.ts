@@ -29,17 +29,44 @@ export class WalletTransferService {
 
   private async resolveRecipient(identifier: string) {
     const id = identifier.trim();
+    // Allow "phone · Name · Country" paste from UI
+    const phonePart = id.split('·')[0].trim();
     const byHandle = await this.db.query(
-      `SELECT id, phone, handle, country FROM users WHERE LOWER(handle) = LOWER($1) LIMIT 1`,
-      [id.replace(/^@/, '')]
+      `SELECT id, phone, handle, country, first_name, last_name
+       FROM users WHERE LOWER(handle) = LOWER($1) LIMIT 1`,
+      [id.replace(/^@/, '').split('·')[0].trim()]
     );
     if (byHandle.rows[0]) return byHandle.rows[0];
 
     const byPhone = await this.db.query(
-      `SELECT id, phone, handle, country FROM users WHERE phone = $1 LIMIT 1`,
-      [id]
+      `SELECT id, phone, handle, country, first_name, last_name
+       FROM users WHERE phone = $1 OR phone = $2 LIMIT 1`,
+      [id, phonePart]
     );
     return byPhone.rows[0] || null;
+  }
+
+  private formatRecipientDisplay(recipient: any, identifier: string) {
+    if (recipient) {
+      const first = String(recipient.first_name || '').trim();
+      const last = String(recipient.last_name || '').trim();
+      const short =
+        first && last
+          ? `${first} ${last.charAt(0).toUpperCase()}.`
+          : first || recipient.handle || 'Recipient';
+      const phone = recipient.phone || identifier.split('·')[0].trim();
+      const countryName =
+        recipient.country === 'NG'
+          ? 'Nigeria'
+          : recipient.country === 'GH'
+            ? 'Ghana'
+            : recipient.country || '';
+      return [phone, short, countryName].filter(Boolean).join(' · ');
+    }
+    // Phone-only / freeform
+    const parts = identifier.split('·').map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) return parts.join(' · ');
+    return identifier;
   }
 
   private async ensureWallet(userId: string, currency: string) {
@@ -104,6 +131,12 @@ export class WalletTransferService {
     const needsLink = amount > Number(limits.requires_identity_linked_above);
     const linked = await this.isIdentityLinked(senderUserId);
 
+    const recipientDisplay = this.formatRecipientDisplay(recipient, recipientIdentifier);
+    const recipientFirst =
+      recipient?.first_name ||
+      recipientIdentifier.split('·')[1]?.trim()?.split(/\s+/)[0] ||
+      'Recipient';
+
     return {
       amount,
       currency,
@@ -111,10 +144,12 @@ export class WalletTransferService {
       sendTotal: Math.round(sendTotal * 100) / 100,
       receivedAmount: Math.round(receivedAmount * 100) / 100,
       receivedCurrency,
-      fxRateUsed: Math.round(fxRate * 1e8) / 1e8,
+      fxRateUsed: Math.round(fxRate * 1e4) / 1e4,
       recipientFound: Boolean(recipient),
       recipientUserId: recipient?.id || null,
       recipientHandle: recipient?.handle || null,
+      recipientDisplay,
+      recipientFirstName: recipientFirst,
       requiresIdentityLink: needsLink,
       identityLinked: linked,
       canSend: !needsLink || linked,
