@@ -78,6 +78,21 @@ export default function AdminShell({
   }, [location.pathname]);
 
   useEffect(() => {
+    const token = localStorage.getItem('movr_admin_token') || '';
+    if (!token) return;
+    fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((json) => {
+        const url = json?.data?.avatarUrl;
+        if (url) {
+          localStorage.setItem(AVATAR_KEY, url);
+          setAvatarUrl(url);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (!dropdownRef.current?.contains(e.target as Node)) {
         setProfileOpen(false);

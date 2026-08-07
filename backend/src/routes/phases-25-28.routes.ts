@@ -555,21 +555,26 @@ identityLinkRouter.get(
   requireAdmin,
   async (req: AuthRequest, res: Response) => {
     try {
+      const userId = String(req.params.userId || '').trim();
+      if (!/^[0-9a-fA-F-]{36}$/.test(userId)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid user id' });
+      }
+
       const checks = await db.query(
-        `SELECT * FROM identity_link_checks WHERE user_id = $1 ORDER BY checked_at DESC`,
-        [req.params.userId]
+        `SELECT * FROM identity_link_checks WHERE user_id = $1::uuid ORDER BY checked_at DESC`,
+        [userId]
       );
       const docs = await db.query(
         `SELECT iv.* FROM identity_verifications iv
          LEFT JOIN drivers d ON d.id = iv.driver_id
-         WHERE d.user_id = $1 OR iv.driver_id::text = $1
+         WHERE d.user_id = $1::uuid OR iv.driver_id = $1::uuid
          ORDER BY iv.created_at DESC`,
-        [req.params.userId]
+        [userId]
       );
       const user = await db.query(
         `SELECT id, first_name, last_name, email, phone, avatar_url, user_type, created_at
-         FROM users WHERE id = $1`,
-        [req.params.userId]
+         FROM users WHERE id = $1::uuid`,
+        [userId]
       );
       const u = user.rows[0];
       const latest = docs.rows[0] || {};

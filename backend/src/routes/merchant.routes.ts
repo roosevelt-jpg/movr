@@ -183,7 +183,12 @@ merchantRouter.get('/me', authenticateToken, requireMerchant, async (req: AuthRe
     if (!merchant) {
       return res.status(404).json({ status: 'error', message: 'Merchant not found' });
     }
-    const user = await db.query(`SELECT email, phone FROM users WHERE id = $1`, [req.user!.id]);
+    const user = await db.query(
+      `SELECT id, email, phone, first_name, last_name, avatar_url, country, city, gender, date_of_birth
+       FROM users WHERE id = $1`,
+      [req.user!.id]
+    );
+    const u = user.rows[0] || {};
     const prefs = await db
       .query(
         `SELECT new_order_alerts, daily_sales_summary
@@ -206,10 +211,19 @@ merchantRouter.get('/me', authenticateToken, requireMerchant, async (req: AuthRe
       status: 'success',
       data: {
         ...merchant,
-        email: merchant.business_email || user.rows[0]?.email || merchant.email,
-        business_email: merchant.business_email || user.rows[0]?.email,
+        user_id: u.id || req.user!.id,
+        email: merchant.business_email || u.email || merchant.email,
+        business_email: merchant.business_email || u.email,
         registration_number: merchant.business_registration_number || 'BN-2024-88213',
         payout_account: payoutLabel,
+        first_name: u.first_name || '',
+        last_name: u.last_name || '',
+        phone: u.phone || '',
+        avatar_url: u.avatar_url || null,
+        country: u.country || 'GH',
+        city: u.city || '',
+        gender: u.gender || null,
+        date_of_birth: u.date_of_birth ? String(u.date_of_birth).slice(0, 10) : null,
         notifications: {
           new_order_alerts: prefs.rows[0]?.new_order_alerts ?? true,
           daily_sales_summary: prefs.rows[0]?.daily_sales_summary ?? true,

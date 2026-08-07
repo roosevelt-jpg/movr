@@ -46,18 +46,11 @@ export default function HelpArticlePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="px-6 pt-6 pb-5 border-b border-white/15">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          <button type="button" onClick={() => navigate('/help')} className="text-sm text-white/55">
-            ← Help
-          </button>
-          <button type="button" onClick={() => navigate('/')} className="text-xl font-bold">
-            Movr
-          </button>
-        </div>
-      </header>
-      <main className="max-w-3xl mx-auto px-6 py-12">
+    <div className="bg-black text-white flex-1">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
+        <button type="button" onClick={() => navigate('/help')} className="text-sm text-white/55 mb-6">
+          ← Help
+        </button>
         <h1 className="text-3xl font-bold mb-8">{cat.title}</h1>
         <div className="space-y-8">
           {(cat.articles || []).map((a: any) => (

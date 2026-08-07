@@ -22,18 +22,20 @@ export type CmsPage = {
   meta?: Record<string, any>;
 };
 
-const cache = new Map<string, CmsPage | null>();
+const cache = new Map<string, { page: CmsPage | null; at: number }>();
+const CACHE_MS = 12_000;
 
 export async function fetchCmsPage(slug: string): Promise<CmsPage | null> {
-  if (cache.has(slug)) return cache.get(slug) || null;
+  const hit = cache.get(slug);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.page;
   try {
     const res = await fetch(`${API}/public/cms/pages/${encodeURIComponent(slug)}`);
     const json = await res.json();
     const page = res.ok ? (json.data as CmsPage) : null;
-    cache.set(slug, page);
+    cache.set(slug, { page, at: Date.now() });
     return page;
   } catch {
-    cache.set(slug, null);
+    cache.set(slug, { page: null, at: Date.now() });
     return null;
   }
 }

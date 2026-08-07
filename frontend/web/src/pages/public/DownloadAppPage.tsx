@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import { useCmsPage } from '../../services/cms';
+import { CmsSections } from '../../cms/sections';
+import { StoreBadgeButton } from '../../components/StoreBadges';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -8,8 +10,9 @@ const DEFAULT_LINKS = {
   android_url: 'https://play.google.com/store/apps/details?id=io.movr.app',
 };
 
-/** Public download page — matches “Get the Movr app” mockup. */
+/** Download page — prefers CMS `download` slug; falls back to badges + app-links API. */
 export default function DownloadAppPage() {
+  const { page, loading } = useCmsPage('download');
   const [links, setLinks] = useState(DEFAULT_LINKS);
 
   useEffect(() => {
@@ -26,36 +29,33 @@ export default function DownloadAppPage() {
       .catch(() => undefined);
   }, []);
 
+  if (loading) {
+    return (
+      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+        Loading…
+      </div>
+    );
+  }
+
+  if (page?.sections?.length) {
+    return (
+      <div className="bg-black text-white" data-force-dark>
+        <CmsSections sections={page.sections} pageSlug="download" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif] flex flex-col">
-      <header className="px-6 pt-6 pb-5">
-        <span className="text-xl font-bold tracking-tight">Movr</span>
-      </header>
-      <div className="h-px w-full bg-white/15" />
-
-      <main className="flex-1 flex flex-col items-center justify-center px-6 pb-24 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Get the Movr app</h1>
-        <p className="mt-4 text-white/55 text-base md:text-lg">Available on iOS and Android</p>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <a
-            href={links.ios_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 rounded-xl bg-[#2a2a2a] hover:bg-[#333] px-6 py-3.5 font-semibold text-white min-w-[150px] justify-center"
-          >
-            <Download size={18} strokeWidth={2.25} />
-            App Store
-          </a>
-          <a
-            href={links.android_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 rounded-xl bg-[#2a2a2a] hover:bg-[#333] px-6 py-3.5 font-semibold text-white min-w-[150px] justify-center"
-          >
-            <Download size={18} strokeWidth={2.25} />
-            Google Play
-          </a>
+    <div className="bg-black text-white flex flex-col flex-1 mkt-hero" data-force-dark>
+      <main className="mkt-shell flex-1 flex flex-col items-center justify-center py-20 sm:py-28 text-center">
+        <p className="mkt-eyebrow">Get the app</p>
+        <h1 className="mkt-display mt-5 max-w-3xl">Take Movr with you.</h1>
+        <p className="mt-5 text-lg text-white/55 max-w-xl">
+          Book rides, shop local stores, send parcels, and manage your wallet — on iOS and Android.
+        </p>
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
+          <StoreBadgeButton store="ios" href={links.ios_url} label="App Store" />
+          <StoreBadgeButton store="android" href={links.android_url} label="Google Play" />
         </div>
       </main>
     </div>

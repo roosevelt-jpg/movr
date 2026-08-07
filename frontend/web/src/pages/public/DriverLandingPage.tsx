@@ -1,10 +1,8 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { CreditCard, Award, ShieldCheck } from 'lucide-react';
-import MovrWordmark from '../../components/MovrWordmark';
-import SiteFooter from '../../components/SiteFooter';
 import { useCmsPage } from '../../services/cms';
-import { CmsNav, CmsSections } from '../../cms/sections';
+import { CmsSections } from '../../cms/sections';
 
 const FALLBACK = {
   headline: 'Keep 100% of every fare',
@@ -32,35 +30,23 @@ const FALLBACK = {
   ],
 };
 
-const NAV_FALLBACK = [
-  { label: 'Ride', href: '/#ride' },
-  { label: 'Shop', href: '/#shop' },
-  { label: 'Deliver', href: '/#deliver' },
-  { label: 'For drivers', href: '/drivers', active: true },
-];
-
-/** Public driver landing — mockup-aligned; CMS slug `drivers` when published. */
+/** Public driver landing — content only; SiteChrome supplies header/footer. */
 export default function DriverLandingPage() {
   const navigate = useNavigate();
   const { page, loading } = useCmsPage('drivers');
-  const global = useCmsPage('global');
-  const nav = global.section('nav');
 
-  if (loading || global.loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-jet-black text-pure-white flex items-center justify-center">
+      <div className="flex-1 bg-jet-black text-pure-white flex items-center justify-center py-24">
         Loading…
       </div>
     );
   }
 
-  // Prefer CMS when published with sections
   if (page?.sections?.length) {
     return (
-      <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
-        {nav ? <CmsNav payload={nav.payload} /> : null}
-        <CmsSections sections={page.sections} />
-        <SiteFooter />
+      <div className="bg-jet-black text-pure-white">
+        <CmsSections sections={page.sections} pageSlug="drivers" />
       </div>
     );
   }
@@ -68,10 +54,6 @@ export default function DriverLandingPage() {
   const go = (href: string) => {
     if (href.startsWith('http')) {
       window.open(href, '_blank', 'noreferrer');
-      return;
-    }
-    if (href.startsWith('/#')) {
-      window.location.href = href;
       return;
     }
     navigate(href);
@@ -84,39 +66,8 @@ export default function DriverLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="sticky top-0 z-40 bg-jet-black/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2" aria-label="Movr">
-            <MovrWordmark height={28} />
-          </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm">
-            {NAV_FALLBACK.map((l) => (
-              <button
-                key={l.label}
-                type="button"
-                onClick={() => go(l.href)}
-                className={
-                  l.active
-                    ? 'text-pure-white font-semibold'
-                    : 'text-text-secondary hover:text-pure-white'
-                }
-              >
-                {l.label}
-              </button>
-            ))}
-          </nav>
-          <button
-            type="button"
-            onClick={() => go('/download')}
-            className="rounded-full px-5 py-2.5 text-sm font-semibold bg-movr-gradient"
-          >
-            Get the app
-          </button>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-6 pt-20 pb-16 text-center">
+    <div className="bg-jet-black text-pure-white">
+      <main className="max-w-4xl mx-auto px-6 pt-16 sm:pt-20 pb-16 text-center">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-tight">
           {FALLBACK.headline}
         </h1>
@@ -146,8 +97,6 @@ export default function DriverLandingPage() {
           ))}
         </div>
       </main>
-
-      <SiteFooter />
     </div>
   );
 }

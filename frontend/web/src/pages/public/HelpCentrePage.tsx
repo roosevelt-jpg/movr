@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Car, Package, CreditCard, Search } from 'lucide-react';
+import { useCmsPage } from '../../services/cms';
+import { CmsSections } from '../../cms/sections';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -38,9 +40,10 @@ const FALLBACK: Category[] = [
   },
 ];
 
-/** Help centre — matches “How can we help?” mockup; live from help_categories. */
+/** Help centre — prefer CMS `help`, else help_categories API. */
 export default function HelpCentrePage() {
   const navigate = useNavigate();
+  const { page, loading: cmsLoading } = useCmsPage('help');
   const [q, setQ] = useState('');
   const [categories, setCategories] = useState<Category[]>(FALLBACK);
   const [loading, setLoading] = useState(true);
@@ -49,74 +52,79 @@ export default function HelpCentrePage() {
     const url = q.trim()
       ? `${API}/public/help/categories?q=${encodeURIComponent(q.trim())}`
       : `${API}/public/help/categories`;
-    const t = setTimeout(() => {
-      fetch(url)
-        .then((r) => r.json())
-        .then((body) => {
-          if (Array.isArray(body?.data) && body.data.length) {
-            setCategories(body.data);
-          } else if (!q.trim()) {
-            setCategories(FALLBACK);
-          } else {
-            setCategories([]);
-          }
-        })
-        .catch(() => {
-          if (!q.trim()) setCategories(FALLBACK);
-        })
-        .finally(() => setLoading(false));
-    }, q.trim() ? 200 : 0);
-    return () => clearTimeout(t);
+    setLoading(true);
+    fetch(url)
+      .then((r) => r.json())
+      .then((body) => {
+        if (Array.isArray(body?.data) && body.data.length) {
+          setCategories(body.data);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
   }, [q]);
 
-  const cards = useMemo(() => categories, [categories]);
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return categories;
+    return categories.filter(
+      (c) =>
+        c.title.toLowerCase().includes(s) ||
+        (c.description || '').toLowerCase().includes(s) ||
+        c.slug.includes(s)
+    );
+  }, [categories, q]);
+
+  if (cmsLoading) {
+    return (
+      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+        Loading…
+      </div>
+    );
+  }
+
+  if (page?.sections?.length) {
+    return (
+      <div className="bg-black text-white" data-force-dark>
+        <CmsSections sections={page.sections} pageSlug="help" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="flex items-center justify-between gap-4 px-6 pt-6 pb-5">
-        <button type="button" onClick={() => navigate('/')} className="text-xl font-bold tracking-tight">
-          Movr
-        </button>
-        <label className="relative w-full max-w-xs">
-          <Search
-            size={16}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/45 pointer-events-none"
-          />
+    <div className="bg-black text-white">
+      <main className="max-w-5xl mx-auto px-6 py-16">
+        <h1 className="text-4xl font-bold text-center mb-8">How can we help?</h1>
+        <div className="max-w-md mx-auto mb-10 relative">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search help articles"
-            className="w-full rounded-full bg-transparent border border-white/20 pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-white/45 outline-none focus:border-white/40"
+            className="w-full rounded-full bg-[#1A1A1A] border border-white/10 pl-11 pr-4 py-3 text-sm"
           />
-        </label>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-6 pt-16 pb-24">
-        <h1 className="text-4xl md:text-5xl font-bold text-center tracking-tight">How can we help?</h1>
-
-        <div className="mt-12 grid md:grid-cols-3 gap-4">
-          {loading && !cards.length ? (
-            <p className="text-white/50 col-span-3 text-center">Loading…</p>
-          ) : cards.length === 0 ? (
-            <p className="text-white/50 col-span-3 text-center">No matching articles</p>
-          ) : (
-            cards.map((c) => {
-              const Icon = ICONS[c.icon_key] || Car;
+        </div>
+        {loading ? (
+          <p className="text-center text-white/50">Loading…</p>
+        ) : (
+          <div className="grid sm:grid-cols-3 gap-4">
+            {filtered.map((c) => {
+              const Icon = ICONS[c.icon_key] || Package;
               return (
                 <button
                   key={c.slug}
                   type="button"
                   onClick={() => navigate(`/help/${c.slug}`)}
-                  className="text-left rounded-2xl bg-[#1a1a1a] p-6 hover:bg-[#222] transition-colors"
+                  className="rounded-2xl bg-[#1A1A1A] border border-white/10 p-6 text-left hover:border-white/25"
                 >
-                  <Icon size={22} className="mb-4 text-white" strokeWidth={1.75} />
-                  <h2 className="font-bold text-lg text-white">{c.title}</h2>
-                  <p className="text-white/55 text-sm mt-2 leading-relaxed">{c.description}</p>
+                  <Icon size={22} className="mb-4" />
+                  <h3 className="font-bold text-lg">{c.title}</h3>
+                  <p className="text-sm text-white/50 mt-2">{c.description}</p>
                 </button>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </main>
     </div>
   );

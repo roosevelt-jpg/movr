@@ -77,7 +77,16 @@ export default function MerchantStoreEditorPage() {
     try {
       const url = await uploadCatalogImage(file, token());
       setForm((f) => ({ ...f, bannerUrl: url }));
-      toast.success('Banner uploaded');
+      if (selectedId) {
+        await axios.patch(
+          `${API}/merchant/stores/${selectedId}`,
+          { bannerUrl: url },
+          { headers: headers() }
+        );
+        toast.success('Banner saved to store');
+      } else {
+        toast.success('Banner uploaded — click Save to create the store');
+      }
     } catch (e: any) {
       toast.error(e.message);
     }

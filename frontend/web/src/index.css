@@ -47,11 +47,28 @@ select {
 }
 
 .input-base {
-  @apply w-full px-4 py-3 border border-border rounded-md bg-surface-elevated text-text-primary placeholder:text-text-secondary focus:outline-none focus:shadow-focus-glow;
+  @apply w-full px-4 py-3 border border-border rounded-xl bg-surface-elevated text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-motion-blue/40 focus:border-motion-blue;
+  min-height: 48px;
+}
+
+select.input-base,
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%99A1B3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.5rem;
+}
+
+input[type='date'].input-base {
+  min-height: 48px;
+}
+
+.page-shell {
+  @apply w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8;
 }
 
 .card {
-  @apply bg-surface-elevated rounded-lg border border-border;
+  @apply bg-surface-elevated rounded-2xl border border-border;
 }
 
 .badge {
@@ -72,6 +89,72 @@ select {
 
 .gradient-text {
   @apply bg-movr-gradient bg-clip-text text-transparent;
+}
+
+/* PerfectRide-inspired marketing layout — Movr brand colours */
+.mkt-shell {
+  @apply w-full max-w-6xl mx-auto px-5 sm:px-6 lg:px-8;
+}
+
+.mkt-hero {
+  @apply relative overflow-hidden bg-brand-jet text-brand-white;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(63, 112, 72, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 0%, rgba(0, 85, 255, 0.22), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(106, 0, 255, 0.12), transparent 60%);
+}
+
+.mkt-section {
+  @apply py-20 sm:py-24;
+}
+
+.mkt-eyebrow {
+  @apply text-xs sm:text-sm font-semibold tracking-[0.16em] uppercase text-white/45;
+}
+
+.mkt-display {
+  font-size: clamp(2.4rem, 6vw, 4.25rem);
+  @apply font-bold tracking-tight leading-[1.05] text-brand-white;
+}
+
+.mkt-h2 {
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  @apply font-bold tracking-tight leading-[1.12] text-brand-white;
+}
+
+.mkt-choice {
+  @apply rounded-2xl border border-white/12 bg-white/[0.03] p-6 sm:p-7 transition-all duration-300;
+}
+.mkt-choice:hover {
+  @apply border-white/25 bg-white/[0.06];
+  box-shadow: 0 0 0 1px rgba(0, 85, 255, 0.15), 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.mkt-product {
+  @apply rounded-2xl border border-white/10 bg-[#0d0d0d] p-6 transition-all duration-300 h-full;
+}
+.mkt-product:hover {
+  @apply border-white/22;
+  transform: translateY(-2px);
+}
+
+.mkt-quote {
+  @apply rounded-2xl border border-white/10 bg-[#0d0d0d] p-6 sm:p-7;
+}
+
+.mkt-final {
+  @apply rounded-[1.75rem] border border-white/10 p-8 sm:p-12;
+  background:
+    linear-gradient(135deg, rgba(63, 112, 72, 0.18), rgba(106, 0, 255, 0.14) 50%, rgba(0, 85, 255, 0.18)),
+    #0a0a0a;
+}
+
+.mkt-btn-primary {
+  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-brand-white bg-movr-gradient shadow-active-glow transition-opacity hover:opacity-95;
+}
+
+.mkt-btn-ghost {
+  @apply inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-brand-white border border-white/25 hover:bg-white/5 transition-colors;
 }
 
 /* Marketing hero only (Phase 0B) — always dark brand canvas */

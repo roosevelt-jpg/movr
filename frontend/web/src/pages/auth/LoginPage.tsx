@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { TextField } from '../../components/forms';
 
 /** Sign in — email or phone + password. */
 const LoginPage: React.FC = () => {
@@ -29,49 +30,45 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="w-full">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold">Movr</h1>
-        <p className="text-text-secondary mt-2">Welcome back</p>
+      <div className="text-center mb-8 sm:mb-10">
+        <h1 className="text-2xl sm:text-3xl font-bold">Welcome back</h1>
+        <p className="text-text-secondary mt-2 text-sm sm:text-base">Sign in to continue</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {error ? <p className="text-sm text-error">{error}</p> : null}
 
-        <div>
-          <label className="block text-sm text-text-secondary mb-2">Email or phone</label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-3.5 text-text-secondary" size={18} />
-            <input
-              type="text"
-              autoComplete="username"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="you@email.com or +233…"
-              className="w-full rounded-xl bg-surface-elevated border border-border pl-10 pr-4 py-3 text-pure-white placeholder:text-text-secondary"
-              required
-            />
-          </div>
-        </div>
+        <TextField
+          label="Email or phone"
+          type="text"
+          autoComplete="username"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          placeholder="you@email.com or +233…"
+          leading={<Mail size={18} />}
+          required
+        />
 
         <div>
-          <label className="block text-sm text-text-secondary mb-2">Password</label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-3.5 text-text-secondary" size={18} />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-surface-elevated border border-border pl-10 pr-10 py-3 text-pure-white"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3.5 text-text-secondary"
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
+          <TextField
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            leading={<Lock size={18} />}
+            trailing={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-text-secondary"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            }
+            required
+          />
           <div className="text-right mt-2">
             <Link to="/forgot-password" className="text-sm text-motion-blue">
               Forgot password?
@@ -79,11 +76,7 @@ const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
-        >
+        <button type="submit" disabled={isLoading} className="btn-primary w-full rounded-full py-3.5">
           {isLoading ? 'Signing in...' : 'Sign in'}
         </button>
 

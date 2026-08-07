@@ -71,6 +71,7 @@ Old playbook names map to these filenames — use the **new** name everywhere.
 | 059_onboarding_claim_topup_order4821.sql | Onboarding slides, claim KWESI357, payment methods, order #4821 |
 | 060_redeem_demand_flags_merchant_settings.sql | Redeem catalog, demand heatmap, feature flags, merchant settings |
 | 061_public_footer_mockup.sql | Site footer CMS copy, locales (Ghana - English), app links |
+| 062_user_gender_dob.sql | users.gender + date_of_birth for global profile selectors |
 
 ## Notes
 

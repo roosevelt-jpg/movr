@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Share2, Mail, Users, Download, Globe } from 'lucide-react';
+import { Share2, Mail, Users, Globe } from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { getStoredCountry, setStoredCountry } from '../hooks/useLocalCurrency';
 import { useCmsPage } from '../services/cms';
+import { StoreBadgeButton } from './StoreBadges';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -207,15 +208,15 @@ export default function SiteFooter() {
           <p className="text-[11px] tracking-[0.12em] uppercase text-white/45 mb-4">GET THE APP</p>
           <div className="space-y-3">
             {(footer.appButtons || []).map((b: any) => (
-              <button
+              <StoreBadgeButton
                 key={b.label}
-                type="button"
+                label={b.label}
+                store={b.store}
+                href={b.href}
                 onClick={() => openApp(b)}
-                className="w-full rounded-xl border border-white/20 bg-transparent px-4 py-3 text-sm font-semibold text-left text-white flex items-center gap-3 hover:border-white/40 transition-colors"
-              >
-                <Download size={16} className="text-white/70 shrink-0" />
-                {b.label}
-              </button>
+                variant="full"
+                className="w-full [&_svg]:w-full [&_svg]:h-auto [&_svg]:max-h-12"
+              />
             ))}
           </div>
         </div>

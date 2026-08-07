@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useCmsPage } from '../../services/cms';
+import { CmsSections } from '../../cms/sections';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -33,12 +35,14 @@ const TERMS_FALLBACK: Doc = {
   ],
 };
 
-/** Terms / Privacy — live from legal_documents; matches Terms mockup. */
+/** Terms / Privacy — prefer CMS page, then legal_documents API. */
 export default function TermsPage() {
-  const navigate = useNavigate();
   const location = useLocation();
   const slug = location.pathname.includes('privacy') ? 'privacy' : 'terms';
-  const [doc, setDoc] = useState<Doc>(slug === 'terms' ? TERMS_FALLBACK : { ...TERMS_FALLBACK, title: 'Privacy Policy', sections: [] });
+  const { page, loading: cmsLoading } = useCmsPage(slug);
+  const [doc, setDoc] = useState<Doc>(
+    slug === 'terms' ? TERMS_FALLBACK : { ...TERMS_FALLBACK, title: 'Privacy Policy', sections: [] }
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,38 +62,41 @@ export default function TermsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  return (
-    <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="px-6 pt-6 pb-5">
-        <button type="button" onClick={() => navigate('/')} className="text-xl font-bold tracking-tight">
-          Movr
-        </button>
-      </header>
-      <div className="h-px w-full bg-white/15" />
+  if (cmsLoading || loading) {
+    return (
+      <div className="flex-1 bg-black text-white flex items-center justify-center py-24">
+        Loading…
+      </div>
+    );
+  }
 
-      <main className="max-w-3xl mx-auto px-6 pt-10 pb-24">
-        {loading && !doc.sections.length ? (
-          <p className="text-white/50">Loading…</p>
+  if (page?.sections?.length) {
+    return (
+      <div className="bg-black text-white" data-force-dark>
+        <CmsSections sections={page.sections} pageSlug={slug} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-black text-white">
+      <main className="max-w-3xl mx-auto px-6 py-16">
+        <h1 className="text-4xl font-bold">{doc.title}</h1>
+        {doc.updated_label ? (
+          <p className="text-white/50 mt-3 mb-10">{doc.updated_label}</p>
         ) : (
-          <>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{doc.title}</h1>
-            {doc.updated_label ? (
-              <p className="text-white/50 mt-3 mb-10">{doc.updated_label}</p>
-            ) : (
-              <div className="mb-10" />
-            )}
-            <ol className="space-y-6 list-none">
-              {doc.sections.map((s) => (
-                <li key={s.section_number} className="text-white leading-relaxed">
-                  <span className="font-bold">
-                    {s.section_number}. {s.title}
-                  </span>
-                  <span className="font-normal"> — {s.body}</span>
-                </li>
-              ))}
-            </ol>
-          </>
+          <div className="mb-10" />
         )}
+        <ol className="space-y-6 text-white/70 leading-relaxed list-none">
+          {doc.sections.map((c) => (
+            <li key={c.section_number}>
+              <span className="text-white font-medium">
+                {c.section_number}. {c.title}
+              </span>{' '}
+              — {c.body}
+            </li>
+          ))}
+        </ol>
       </main>
     </div>
   );

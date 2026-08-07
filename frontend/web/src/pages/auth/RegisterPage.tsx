@@ -3,16 +3,42 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
 import axios from 'axios';
+import {
+  TextField,
+  GenderSelect,
+  CountrySelect,
+  DateSelect,
+  GenderValue,
+} from '../../components/forms';
+import { setStoredCountry } from '../../hooks/useLocalCurrency';
 
-/** Create account — email and/or phone + password. */
+const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
+
+/** Create account — global gender / country / DOB selectors. */
 const RegisterPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [gender, setGender] = useState<GenderValue>('');
+  const [country, setCountry] = useState('GH');
+  const [city, setCity] = useState('Accra');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { register, error } = useAuthStore();
   const navigate = useNavigate();
+
+  const onCountry = async (code: string) => {
+    setCountry(code);
+    setStoredCountry(code);
+    try {
+      const res = await fetch(`${API}/public/resolve?country=${encodeURIComponent(code)}`);
+      const j = await res.json();
+      if (j?.data?.city) setCity(j.data.city);
+    } catch {
+      /* keep city */
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,8 +55,10 @@ const RegisterPage: React.FC = () => {
         email: email.trim() || null,
         phone: phone.trim() || null,
         password,
-        country: 'GH',
-        city: 'Accra',
+        country,
+        city,
+        gender: gender || undefined,
+        dateOfBirth: dateOfBirth || undefined,
         userType: 'customer',
       });
       const identifier = phone.trim() || email.trim();
@@ -38,10 +66,7 @@ const RegisterPage: React.FC = () => {
         const otpBody = identifier.includes('@')
           ? { email: identifier, purpose: 'signup' }
           : { phone: identifier, purpose: 'signup' };
-        const otpRes = await axios.post(
-          `${process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1'}/auth/resend-otp`,
-          otpBody
-        );
+        const otpRes = await axios.post(`${API}/auth/resend-otp`, otpBody);
         toast.success(
           otpRes.data?.data?.devCode
             ? `Account created · code ${otpRes.data.data.devCode}`
@@ -68,62 +93,72 @@ const RegisterPage: React.FC = () => {
 
   return (
     <div className="w-full">
-      <h1 className="text-3xl font-bold">Create account</h1>
-      <p className="text-text-secondary mt-2 mb-8">Ride, shop, and deliver in one app</p>
+      <h1 className="text-2xl sm:text-3xl font-bold">Create account</h1>
+      <p className="text-text-secondary mt-2 mb-6 sm:mb-8 text-sm sm:text-base">
+        Ride, shop, and deliver in one app
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error ? <p className="text-sm text-error">{error}</p> : null}
 
-        <div>
-          <label className="block text-sm text-text-secondary mb-2">Full name</label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Ama Konadu"
-            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
-            required
-          />
-        </div>
+        <TextField
+          label="Full name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="Ama Konadu"
+          autoComplete="name"
+          required
+        />
 
-        <div>
-          <label className="block text-sm text-text-secondary mb-2">Email</label>
-          <input
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <TextField
+            label="Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@email.com"
-            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
+            autoComplete="email"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm text-text-secondary mb-2">Phone number</label>
-          <input
+          <TextField
+            label="Phone number"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+233 24 000 0000"
-            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
+            autoComplete="tel"
           />
         </div>
 
-        <div>
-          <label className="block text-sm text-text-secondary mb-2">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Create a password"
-            className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3 placeholder:text-text-secondary"
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <GenderSelect value={gender} onChange={setGender} required />
+          <DateSelect value={dateOfBirth} onChange={setDateOfBirth} required />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CountrySelect value={country} onChange={onCountry} required />
+          <TextField
+            label="City"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="City"
             required
           />
         </div>
 
+        <TextField
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Create a password"
+          autoComplete="new-password"
+          required
+        />
+
         <p className="text-xs text-text-secondary">Provide at least an email or a phone number.</p>
 
         <p className="text-xs text-text-secondary leading-relaxed">
-          By continuing, you agree to Movr's{' '}
+          By continuing, you agree to Movr&apos;s{' '}
           <a className="text-motion-blue" href="/terms">
             Terms of Service
           </a>{' '}
@@ -137,7 +172,7 @@ const RegisterPage: React.FC = () => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
+          className="btn-primary w-full rounded-full py-3.5 text-base"
         >
           {isLoading ? 'Creating...' : 'Create account'}
         </button>

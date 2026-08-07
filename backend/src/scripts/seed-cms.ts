@@ -36,11 +36,12 @@ export const CMS_SEED: Array<{
             { label: 'Ride', href: '/#ride' },
             { label: 'Shop', href: '/#shop' },
             { label: 'Deliver', href: '/#deliver' },
-            { label: 'Rentals', href: '/#rentals' },
-            { label: 'For drivers', href: '/drivers' },
-            { label: 'For merchants', href: '/merchants' },
+            { label: 'Drivers', href: '/drivers' },
+            { label: 'Merchants', href: '/merchants' },
+            { label: 'About', href: '/about' },
           ],
-          cta: { label: 'Get the app', href: '/download' },
+          secondaryCta: { label: 'Log in', href: '/login' },
+          cta: { label: 'Get started', href: '/register' },
         },
       },
       {
@@ -104,88 +105,165 @@ export const CMS_SEED: Array<{
     status: 'published',
     sections: [
       {
-        type: 'hero',
+        type: 'choice_hero',
         payload: {
-          headline: 'Move. Shop. Deliver.',
+          eyebrow: 'The mobility & commerce platform',
+          headline: 'Move. Shop. Deliver.\nOne app for Africa.',
           subhead:
-            'One platform for rides, local shopping, and delivery — built for Ghana and expanding across Africa.',
-          primaryCta: { label: 'Book a ride', href: '/login' },
-          secondaryCta: { label: 'Drive with Movr', href: '/register' },
-          showPhoneMock: true,
-        },
-      },
-      {
-        type: 'four_ways',
-        payload: {
-          heading: 'Four ways to move',
-          items: [
-            { iconKey: 'car', title: 'Ride', body: 'Cars, bikes, and tricycles on demand.', anchor: 'ride' },
-            { iconKey: 'heart', title: 'Shop', body: 'Buy from local stores, in one app.', anchor: 'shop' },
+            'Book rides, shop local stores, send parcels, and rent vehicles — built for Ghana and expanding across Africa.',
+          choices: [
             {
-              iconKey: 'package',
-              title: 'Deliver',
-              body: 'Parcels and orders, tracked live.',
-              anchor: 'deliver',
+              emoji: '🚗',
+              title: 'I need a ride',
+              body: 'Cars, bikes, and tricycles on demand — tracked live.',
+              cta: 'Book a ride',
+              href: '/login',
             },
             {
-              iconKey: 'key',
-              title: 'Rentals',
-              body: 'Self-drive or with a chauffeur.',
-              anchor: 'rentals',
+              emoji: '🏪',
+              title: 'I run a business',
+              body: 'Sell in-app, deliver with Movr, get paid fast.',
+              cta: 'Open a storefront',
+              href: '/merchants',
             },
           ],
         },
       },
       {
-        type: 'stories',
+        type: 'trust_strip',
         payload: {
-          heading: 'Built for everyone who moves',
-          cards: [
+          label: 'Trusted by riders, drivers, and merchants across Ghana',
+          items: ['Riders', 'Drivers', 'Merchants', 'Couriers', 'Fleet partners'],
+        },
+      },
+      {
+        type: 'how_it_works',
+        payload: {
+          eyebrow: 'How Movr works',
+          heading: 'Transportation and commerce, exactly when you need it.',
+          steps: [
             {
-              eyebrow: 'DRIVERS',
-              title: 'Drive on your own terms',
-              quote:
-                '“I keep everything I earn. The subscription pays for itself in two days.” — Enoch, Accra',
-              imageUrl: DRIVER_IMG,
-              mediaSide: 'left',
-              stats: [
-                { value: '100%', label: 'of every fare' },
-                { value: '1,340+', label: 'active drivers' },
-              ],
+              number: '01',
+              title: 'Choose how you move',
+              body: 'Ride, shop, deliver, or rent — pick a service and set your pickup or order in seconds.',
             },
             {
-              eyebrow: 'RIDERS',
-              title: 'Move freely, every day',
-              quote:
-                '“The app for my commute, my groceries, and sending things to my mom.” — Ama, Kumasi',
-              imageUrl: RIDER_IMG,
-              mediaSide: 'right',
-              stats: [
-                { value: '10,900+', label: 'riders onboard' },
-                { value: '4.8', label: 'avg rating' },
-              ],
+              number: '02',
+              title: 'Match with verified partners',
+              body: 'Drivers and merchants are identity-checked. See ratings, vehicle details, and live tracking.',
             },
             {
-              eyebrow: 'MERCHANTS',
-              title: 'Grow your business with Movr',
+              number: '03',
+              title: 'Pay securely and go',
+              body: 'Wallet, card, or mobile money. Ratings and support keep every trip accountable.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'product_grid',
+        payload: {
+          eyebrow: 'One platform. Four ways to move.',
+          heading: 'Everything you need to move people and goods.',
+          anchor: 'ride',
+          items: [
+            {
+              iconKey: 'car',
+              eyebrow: 'Consumer',
+              title: 'Ride',
+              body: 'On-demand cars, bikes, and tricycles across the city.',
+              cta: 'Book a ride',
+              href: '/login',
+            },
+            {
+              iconKey: 'heart',
+              eyebrow: 'Commerce',
+              title: 'Shop',
+              body: 'Buy from local stores with delivery to your door.',
+              cta: 'Browse stores',
+              href: '/marketplace',
+            },
+            {
+              iconKey: 'package',
+              eyebrow: 'Logistics',
+              title: 'Deliver',
+              body: 'Parcels and orders tracked from pickup to drop-off.',
+              cta: 'Send a parcel',
+              href: '/login',
+            },
+            {
+              iconKey: 'key',
+              eyebrow: 'Mobility',
+              title: 'Rentals',
+              body: 'Self-drive or chauffeured vehicles when you need them.',
+              cta: 'Explore rentals',
+              href: '/#rentals',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why Movr',
+          heading: 'Built to be trusted.',
+          items: [
+            {
+              iconKey: 'shield',
+              title: 'Verified identity',
+              body: 'National ID–linked profiles and on-chain attestation for safer trips.',
+            },
+            {
+              iconKey: 'wallet',
+              title: 'Drivers keep 100%',
+              body: 'No per-ride commission — one flexible subscription for drivers.',
+            },
+            {
+              iconKey: 'store',
+              title: 'Merchant-ready',
+              body: 'Storefronts, orders, couriers, and payouts in one dashboard.',
+            },
+            {
+              iconKey: 'map',
+              title: 'Live tracking',
+              body: 'Follow rides and deliveries in real time from pickup to arrival.',
+            },
+            {
+              iconKey: 'sparkles',
+              title: 'Wallet & rewards',
+              body: 'Top up, earn points, and redeem across the Movr ecosystem.',
+            },
+            {
+              iconKey: 'building',
+              title: 'Built for Africa',
+              body: 'Local payments, multi-country ready, designed for real city mobility.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'testimonials',
+        payload: {
+          eyebrow: 'What people say',
+          heading: 'The platform that keeps cities moving.',
+          items: [
+            {
               quote:
-                '“Orders come straight to my phone. Delivery is handled — I just focus on the shop.” — Boutique 22, Osu',
-              imageUrl: MERCHANT_IMG,
-              mediaSide: 'left',
-              stats: [
-                { value: '220+', label: 'storefronts' },
-                {
-                  valueKey: 'avgMonthlySales',
-                  label: 'avg. monthly sales',
-                  amountsByCurrency: {
-                    GHS: 18000,
-                    NGN: 4500000,
-                    KES: 250000,
-                    ZAR: 45000,
-                    XOF: 2500000,
-                  },
-                },
-              ],
+                'The app for my commute, my groceries, and sending things to my mom — all in one place.',
+              name: 'Ama',
+              role: 'Rider · Kumasi',
+            },
+            {
+              quote:
+                'I keep everything I earn. The subscription pays for itself in two days.',
+              name: 'Enoch',
+              role: 'Driver · Accra',
+            },
+            {
+              quote:
+                'Orders come straight to my phone. Delivery is handled — I just focus on the shop.',
+              name: 'Boutique 22',
+              role: 'Merchant · Osu',
             },
           ],
         },
@@ -195,21 +273,22 @@ export const CMS_SEED: Array<{
         payload: {
           headline: 'Drive and keep 100% of every fare',
           body: 'No per-ride commission. Just one flexible monthly subscription — cancel any time.',
-          button: { label: 'Become a driver', href: '/register' },
+          button: { label: 'Become a driver', href: '/drivers' },
           anchor: 'drivers',
         },
       },
       {
-        type: 'download',
+        type: 'final_cta',
         payload: {
-          heading: 'Take Movr with you, everywhere you go',
-          body: 'Book rides, shop local stores, send parcels, and manage your wallet — all from your pocket.',
+          heading: 'Ready to move smarter?',
+          body: 'Join riders, drivers, and merchants already building on Movr.',
+          primaryCta: { label: 'Get started', href: '/register' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
+          note: 'Available on iOS and Android.',
           storeButtons: [
-            { label: '↓ App Store', href: '/download' },
-            { label: '↓ Google Play', href: '/download' },
+            { label: 'App Store', store: 'ios', href: '/download' },
+            { label: 'Google Play', store: 'android', href: '/download' },
           ],
-          qrHint: 'Scan to download the Movr app instantly',
-          showPhoneMock: true,
         },
       },
     ],
@@ -220,37 +299,85 @@ export const CMS_SEED: Array<{
     status: 'published',
     sections: [
       {
-        type: 'hero',
+        type: 'choice_hero',
         payload: {
-          headline: 'Sell faster with an in-app storefront',
+          eyebrow: 'Movr for merchants',
+          headline: 'Sell faster with an\nin-app storefront.',
           subhead:
             'Order management, live delivery tracking, and instant payouts — all from one dashboard.',
-          primaryCta: { label: 'Create your storefront', href: '/merchant/onboarding' },
-          secondaryCta: { label: 'Start selling', href: '/merchant/onboarding' },
-          layout: 'centered',
-          showPhoneMock: false,
+          choices: [
+            {
+              emoji: '🛍️',
+              title: 'Create your storefront',
+              body: 'List products, set hours, and go live in minutes.',
+              cta: 'Start onboarding',
+              href: '/merchant/onboarding',
+            },
+            {
+              emoji: '📦',
+              title: 'I already sell',
+              body: 'Connect delivery and get paid to bank or mobile money.',
+              cta: 'Merchant login',
+              href: '/merchant/login',
+            },
+          ],
         },
       },
       {
-        type: 'feature_cards',
+        type: 'how_it_works',
         payload: {
+          eyebrow: 'How selling works',
+          heading: 'From listing to payout, without the chaos.',
+          steps: [
+            {
+              number: '01',
+              title: 'Set up your store',
+              body: 'Add products, photos, and hours. Movr hosts your storefront in the app.',
+            },
+            {
+              number: '02',
+              title: 'Fulfil with your courier',
+              body: 'Use Movr couriers or your own delivery team — you choose.',
+            },
+            {
+              number: '03',
+              title: 'Get paid',
+              body: 'Track sales and withdraw earnings to bank or mobile money.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Built for local commerce',
+          heading: 'Everything a growing shop needs.',
           items: [
             {
-              iconKey: 'truck',
+              iconKey: 'package',
               title: 'Your choice of courier',
               body: 'Use Movr couriers or your own delivery team.',
             },
             {
-              iconKey: 'chart',
+              iconKey: 'sparkles',
               title: 'Real sales analytics',
-              body: 'Top products, repeat customers, sales trends.',
+              body: 'Top products, repeat customers, and sales trends.',
             },
             {
-              iconKey: 'card',
+              iconKey: 'wallet',
               title: 'Instant payouts',
               body: 'Withdraw earnings to bank or mobile money.',
             },
           ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Ready to sell on Movr?',
+          body: 'Create your storefront and start taking orders today.',
+          primaryCta: { label: 'Create your storefront', href: '/merchant/onboarding' },
+          secondaryCta: { label: 'Merchant login', href: '/merchant/login' },
         },
       },
     ],
@@ -261,27 +388,67 @@ export const CMS_SEED: Array<{
     status: 'published',
     sections: [
       {
-        type: 'hero',
+        type: 'choice_hero',
         payload: {
-          headline: 'Keep 100% of every fare',
+          eyebrow: 'Movr for drivers',
+          headline: 'Keep 100% of\nevery fare.',
           subhead:
-            'No commission. One flexible subscription, cancel any time.\nDrive Sedan, SUV, Motorcycle, Tricycle, or Van.',
-          primaryCta: { label: 'Become a driver', href: '/register?role=driver' },
-          layout: 'centered',
-          showPhoneMock: false,
+            'No commission. One flexible subscription, cancel any time. Drive Sedan, SUV, Motorcycle, Tricycle, or Van.',
+          choices: [
+            {
+              emoji: '🔑',
+              title: 'Become a driver',
+              body: 'Verify your identity and start earning on your schedule.',
+              cta: 'Apply now',
+              href: '/register?role=driver',
+            },
+            {
+              emoji: '📱',
+              title: 'I already drive',
+              body: 'Log in to accept trips and track your earnings.',
+              cta: 'Driver login',
+              href: '/login',
+            },
+          ],
         },
       },
       {
-        type: 'feature_cards',
+        type: 'how_it_works',
         payload: {
+          eyebrow: 'How driving works',
+          heading: 'Pickups sorted. You just drive.',
+          steps: [
+            {
+              number: '01',
+              title: 'Verify once',
+              body: 'National ID–linked onboarding with on-chain attestation.',
+            },
+            {
+              number: '02',
+              title: 'Choose your tier',
+              body: 'Lite, Pro, or Premium — unlock priority matching as you grow.',
+            },
+            {
+              number: '03',
+              title: 'Earn every fare',
+              body: '100% of the fare is yours. No per-ride cut, ever.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why drivers switch',
+          heading: 'Built to be fair.',
           items: [
             {
-              iconKey: 'card',
+              iconKey: 'wallet',
               title: '100% earnings',
               body: 'Every fare, yours. No per-ride cut, ever.',
             },
             {
-              iconKey: 'award',
+              iconKey: 'sparkles',
               title: 'Tiered rewards',
               body: 'Lite, Pro, Premium — unlock priority matching.',
             },
@@ -291,6 +458,15 @@ export const CMS_SEED: Array<{
               body: 'Ghana Card-linked, on-chain attested trust.',
             },
           ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Ready to drive with Movr?',
+          body: 'Join drivers keeping 100% of every fare.',
+          primaryCta: { label: 'Become a driver', href: '/register?role=driver' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
         },
       },
     ],

@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Check, Upload } from 'lucide-react';
 import { uploadCatalogImage } from '../../lib/media';
+import { CountrySelect } from '../../components/forms';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 
@@ -116,18 +117,18 @@ export default function MerchantOnboardingPage() {
   );
 
   const fieldClass =
-    'w-full rounded-xl bg-[#1A1A1A] border border-[#2A2A2A] px-4 py-3 text-white placeholder:text-zinc-500 outline-none focus:border-[#6345ED]';
+    'input-base rounded-xl min-h-[48px]';
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-4 py-10 font-[Poppins,Montserrat,sans-serif]">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <StepDots />
 
         {step === 1 ? (
           <div className="space-y-4">
             <div className="text-center">
-              <h1 className="text-3xl font-bold">Create your account</h1>
-              <p className="text-zinc-400 mt-2">Step 1 of 3 · Account details</p>
+              <h1 className="text-2xl sm:text-3xl font-bold">Create your account</h1>
+              <p className="text-text-secondary mt-2">Step 1 of 3 · Account details</p>
             </div>
             {(
               [
@@ -138,7 +139,7 @@ export default function MerchantOnboardingPage() {
               ] as const
             ).map(([key, label, type, placeholder]) => (
               <div key={key}>
-                <label className="block text-sm text-zinc-400 mb-2">{label}</label>
+                <label className="block text-sm text-text-secondary mb-2">{label}</label>
                 <input
                   type={type}
                   className={fieldClass}
@@ -149,7 +150,12 @@ export default function MerchantOnboardingPage() {
                 />
               </div>
             ))}
-            <p className="text-xs text-zinc-500">Provide at least an email or a phone number.</p>
+            <CountrySelect
+              value={form.country}
+              onChange={(code) => set('country', code)}
+              required
+            />
+            <p className="text-xs text-text-secondary">Provide at least an email or a phone number.</p>
             <button
               type="button"
               onClick={() => {
@@ -161,9 +167,13 @@ export default function MerchantOnboardingPage() {
                   toast.error('Name and password are required');
                   return;
                 }
+                if (!form.country) {
+                  toast.error('Select a country');
+                  return;
+                }
                 setStep(2);
               }}
-              className="w-full rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF]"
+              className="btn-primary w-full rounded-full py-3.5"
             >
               Continue
             </button>
@@ -225,7 +235,7 @@ export default function MerchantOnboardingPage() {
                 }
                 setStep(3);
               }}
-              className="w-full rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF]"
+              className="btn-primary w-full rounded-full py-3.5"
             >
               Continue
             </button>
@@ -235,8 +245,8 @@ export default function MerchantOnboardingPage() {
         {step === 3 ? (
           <div className="space-y-4">
             <div className="text-center">
-              <h1 className="text-3xl font-bold">Store category</h1>
-              <p className="text-zinc-400 mt-2">Step 3 of 3 · Almost done</p>
+              <h1 className="text-2xl sm:text-3xl font-bold">Store category</h1>
+              <p className="text-text-secondary mt-2">Step 3 of 3 · Almost done</p>
             </div>
             <select
               className={fieldClass}
@@ -251,7 +261,7 @@ export default function MerchantOnboardingPage() {
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="rounded-xl px-5 py-3 border border-[#2A2A2A]"
+                className="btn-secondary rounded-full px-5 py-3"
               >
                 Back
               </button>
@@ -259,7 +269,7 @@ export default function MerchantOnboardingPage() {
                 type="button"
                 disabled={loading}
                 onClick={finish}
-                className="flex-1 rounded-xl py-3.5 font-semibold text-white bg-gradient-to-r from-teal-700 via-[#6345ED] to-[#3B5CFF] disabled:opacity-50"
+                className="btn-primary flex-1 rounded-full py-3.5"
               >
                 {loading ? 'Creating...' : 'Create storefront'}
               </button>
@@ -267,9 +277,9 @@ export default function MerchantOnboardingPage() {
           </div>
         ) : null}
 
-        <p className="text-sm text-zinc-400 text-center mt-8">
+        <p className="text-sm text-text-secondary text-center mt-8">
           Already registered?{' '}
-          <Link className="text-[#5B8AFF]" to="/merchant/login">
+          <Link className="text-motion-blue" to="/merchant/login">
             Sign in
           </Link>
         </p>

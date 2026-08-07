@@ -9,14 +9,24 @@ import {
   Truck,
   BarChart3,
   CreditCard,
-  Download,
   Award,
   ShieldCheck,
 } from 'lucide-react';
 import { formatCurrency } from '../lib/currency';
 import { useLocalCurrency } from '../hooks/useLocalCurrency';
 import MovrWordmark from '../components/MovrWordmark';
+import { StoreBadgeButton } from '../components/StoreBadges';
 import type { CmsSection } from '../services/cms';
+import {
+  CmsChoiceHero,
+  CmsTrustStrip,
+  CmsHowItWorks,
+  CmsProductGrid,
+  CmsWhyGrid,
+  CmsTestimonials,
+  CmsFinalCta,
+} from './marketing-sections';
+import { CmsMediaBackdrop } from './CmsMediaBackdrop';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -153,66 +163,69 @@ export function CmsNav({ payload }: { payload: any }) {
 
 export function CmsHero({ payload }: { payload: any }) {
   const navigate = useNavigate();
+
+  /* New choice-card heroes use dedicated renderer via type, but support inline choices too */
+  if (payload.choices?.length) {
+    return <CmsChoiceHero payload={payload} />;
+  }
+
   const centered = payload.layout === 'centered';
 
   if (centered) {
     return (
-      <section className="movr-hero max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
-        <div className="movr-hero-glow movr-hero-glow-a" />
-        <div className="movr-hero-glow movr-hero-glow-b" />
-        <div className="movr-hero-shimmer mb-8 rounded-pill" />
-        <h1 className="relative text-4xl md:text-6xl font-bold tracking-tight leading-tight">
-          {payload.headline}
-        </h1>
-        {payload.subhead ? (
-          <p className="relative mt-5 text-text-secondary text-lg max-w-2xl mx-auto">{payload.subhead}</p>
-        ) : null}
-        {payload.primaryCta ? (
-          <button
-            type="button"
-            onClick={() => go(navigate, payload.primaryCta.href)}
-            className="relative mt-8 rounded-pill px-8 py-3.5 font-semibold bg-movr-gradient"
-          >
-            {payload.primaryCta.label}
-          </button>
-        ) : null}
-        {payload.storeButtons?.length ? (
-          <div className="relative mt-10 flex flex-wrap justify-center gap-4">
-            {payload.storeButtons.map((b: any) => (
-              <button
-                key={b.label}
-                type="button"
-                onClick={() => go(navigate, b.href)}
-                className="inline-flex items-center gap-3 rounded-2xl bg-surface-elevated border border-border px-6 py-4 font-semibold"
-              >
-                <Download size={18} /> {b.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
+      <section className="mkt-hero relative">
+        <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
+        <div className="mkt-shell relative pt-20 sm:pt-28 pb-16 text-center">
+          {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
+          <h1 className="mkt-display mt-5 mx-auto max-w-4xl">{payload.headline}</h1>
+          {payload.subhead ? (
+            <p className="mt-6 text-lg text-white/60 max-w-2xl mx-auto leading-relaxed whitespace-pre-line">
+              {payload.subhead}
+            </p>
+          ) : null}
+          {payload.primaryCta ? (
+            <button
+              type="button"
+              onClick={() => go(navigate, payload.primaryCta.href)}
+              className="mkt-btn-primary mt-10"
+            >
+              {payload.primaryCta.label}
+            </button>
+          ) : null}
+          {payload.storeButtons?.length ? (
+            <div className="relative mt-10 flex flex-wrap justify-center gap-4">
+              {payload.storeButtons.map((b: any) => (
+                <StoreBadgeButton
+                  key={b.label}
+                  label={b.label}
+                  store={b.store}
+                  href={b.href}
+                  onClick={() => go(navigate, b.href)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
       </section>
     );
   }
 
   return (
-    <section className="movr-hero">
-      <div className="movr-hero-glow movr-hero-glow-a" />
-      <div className="movr-hero-glow movr-hero-glow-b" />
-      <div className="movr-hero-shimmer" />
-      <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-20 grid lg:grid-cols-2 gap-12 items-center">
+    <section className="mkt-hero relative">
+      <CmsMediaBackdrop imageUrl={payload.backgroundImage} videoUrl={payload.backgroundVideo} />
+      <div className="mkt-shell relative pt-16 sm:pt-24 pb-20 grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.05]">
-            {payload.headline}
-          </h1>
+          {payload.eyebrow ? <p className="mkt-eyebrow mb-5">{payload.eyebrow}</p> : null}
+          <h1 className="mkt-display">{payload.headline}</h1>
           {payload.subhead ? (
-            <p className="mt-5 text-text-secondary text-lg max-w-md leading-relaxed">{payload.subhead}</p>
+            <p className="mt-6 text-lg text-white/60 max-w-md leading-relaxed">{payload.subhead}</p>
           ) : null}
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-10 flex flex-wrap gap-3">
             {payload.primaryCta ? (
               <button
                 type="button"
                 onClick={() => go(navigate, payload.primaryCta.href)}
-                className="rounded-pill px-7 py-3.5 font-semibold bg-movr-gradient shadow-active-glow"
+                className="mkt-btn-primary"
               >
                 {payload.primaryCta.label}
               </button>
@@ -221,7 +234,7 @@ export function CmsHero({ payload }: { payload: any }) {
               <button
                 type="button"
                 onClick={() => go(navigate, payload.secondaryCta.href)}
-                className="rounded-pill px-7 py-3.5 font-semibold border border-pure-white/70 hover:bg-pure-white/5"
+                className="mkt-btn-ghost"
               >
                 {payload.secondaryCta.label}
               </button>
@@ -276,7 +289,16 @@ export function CmsStories({ payload }: { payload: any }) {
       {(payload.cards || []).map((card: any) => {
         const media = (
           <div className="relative min-h-[260px] md:min-h-full overflow-hidden bg-surface">
-            {card.imageUrl ? (
+            {card.videoUrl ? (
+              <video
+                className="absolute inset-0 w-full h-full object-cover"
+                src={card.videoUrl}
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : card.imageUrl ? (
               <img
                 src={card.imageUrl}
                 alt={card.title}
@@ -284,13 +306,15 @@ export function CmsStories({ payload }: { payload: any }) {
               />
             ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-            <button
-              type="button"
-              className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-jet-black/45 border border-pure-white/35 flex items-center justify-center"
-              aria-label="Play"
-            >
-              <Play size={22} fill="var(--pure-white)" />
-            </button>
+            {!card.videoUrl ? (
+              <button
+                type="button"
+                className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-jet-black/45 border border-pure-white/35 flex items-center justify-center"
+                aria-label="Play"
+              >
+                <Play size={22} fill="var(--pure-white)" />
+              </button>
+            ) : null}
           </div>
         );
         const text = (
@@ -335,29 +359,36 @@ export function CmsStories({ payload }: { payload: any }) {
 export function CmsCtaBanner({ payload }: { payload: any }) {
   const navigate = useNavigate();
   return (
-    <section id={payload.anchor || 'drivers'} className="max-w-6xl mx-auto px-6 pb-16">
-      <div className="rounded-2xl bg-movr-gradient p-8 md:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-active-glow">
-        <div className="max-w-2xl">
-          {payload.headline ? (
-            <p className="text-xl md:text-2xl font-bold leading-snug text-pure-white">
-              {payload.headline}
+    <section id={payload.anchor || 'drivers'} className="mkt-section py-8 sm:py-10">
+      <div className="mkt-shell">
+        <div className="relative overflow-hidden rounded-[1.5rem] bg-movr-gradient p-8 md:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-active-glow">
+          <CmsMediaBackdrop
+            imageUrl={payload.backgroundImage}
+            videoUrl={payload.backgroundVideo}
+            className="rounded-[1.5rem] opacity-80"
+          />
+          <div className="relative max-w-2xl">
+            {payload.headline ? (
+              <p className="text-xl md:text-2xl font-bold leading-snug text-brand-white">
+                {payload.headline}
+              </p>
+            ) : null}
+            <p
+              className={`${payload.headline ? 'mt-2 text-brand-white/85 text-sm md:text-base' : 'text-xl md:text-2xl font-bold'} leading-snug`}
+            >
+              {payload.body}
             </p>
+          </div>
+          {payload.button ? (
+            <button
+              type="button"
+              onClick={() => go(navigate, payload.button.href)}
+              className="relative shrink-0 rounded-full px-7 py-3.5 bg-brand-jet font-semibold text-brand-white"
+            >
+              {payload.button.label}
+            </button>
           ) : null}
-          <p
-            className={`${payload.headline ? 'mt-2 text-pure-white/85 text-sm md:text-base' : 'text-xl md:text-2xl font-bold'} leading-snug`}
-          >
-            {payload.body}
-          </p>
         </div>
-        {payload.button ? (
-          <button
-            type="button"
-            onClick={() => go(navigate, payload.button.href)}
-            className="shrink-0 rounded-full px-7 py-3.5 bg-jet-black font-semibold text-pure-white"
-          >
-            {payload.button.label}
-          </button>
-        ) : null}
       </div>
     </section>
   );
@@ -374,14 +405,13 @@ export function CmsDownload({ payload }: { payload: any }) {
         ) : null}
         <div className="mt-8 flex flex-wrap gap-3">
           {(payload.storeButtons || []).map((b: any) => (
-            <button
+            <StoreBadgeButton
               key={b.label}
-              type="button"
+              label={b.label}
+              store={b.store}
+              href={b.href}
               onClick={() => go(navigate, b.href)}
-              className="rounded-xl bg-surface-elevated border border-border px-5 py-3 text-sm font-semibold"
-            >
-              {b.label}
-            </button>
+            />
           ))}
         </div>
         {payload.qrHint ? (
@@ -429,21 +459,20 @@ export function CmsDownload({ payload }: { payload: any }) {
 
 export function CmsFeatureCards({ payload }: { payload: any }) {
   return (
-    <section className="max-w-6xl mx-auto px-6 pb-24">
-      <div className="grid md:grid-cols-3 gap-4">
-        {(payload.items || []).map((c: any) => {
-          const Icon = ICONS[c.iconKey] || Package;
-          return (
-            <div
-              key={c.title}
-              className="rounded-2xl bg-surface border border-border p-6 text-left"
-            >
-              <Icon size={22} className="mb-4" />
-              <h3 className="text-lg font-bold">{c.title}</h3>
-              <p className="text-text-secondary mt-2 text-sm leading-relaxed">{c.body}</p>
-            </div>
-          );
-        })}
+    <section className="mkt-section pt-0">
+      <div className="mkt-shell">
+        <div className="grid md:grid-cols-3 gap-4">
+          {(payload.items || []).map((c: any) => {
+            const Icon = ICONS[c.iconKey] || Package;
+            return (
+              <div key={c.title} className="mkt-product">
+                <Icon size={22} className="mb-4 text-white" />
+                <h3 className="text-lg font-semibold text-white">{c.title}</h3>
+                <p className="text-white/55 mt-2 text-sm leading-relaxed">{c.body}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -495,15 +524,130 @@ export function CmsHelpHub({ payload }: { payload: any }) {
 }
 
 export function CmsRichText({ payload }: { payload: any }) {
+  const html = sanitizeCmsHtml(
+    payload?.html ||
+      (Array.isArray(payload?.paragraphs)
+        ? payload.paragraphs.map((p: string) => `<p>${escapeText(p)}</p>`).join('')
+        : '')
+  );
+
   return (
     <main className="max-w-3xl mx-auto px-6 py-12">
-      <h1 className="text-3xl md:text-4xl font-bold mb-8">{payload.heading}</h1>
-      <div className="space-y-4 text-text-secondary leading-relaxed">
-        {(payload.paragraphs || []).map((p: string, i: number) => (
-          <p key={i}>{p}</p>
-        ))}
-      </div>
+      {payload?.heading ? (
+        <h1 className="text-3xl md:text-4xl font-bold mb-8">{payload.heading}</h1>
+      ) : null}
+      {html ? (
+        <div
+          className="cms-rich-text space-y-4 text-text-secondary leading-relaxed prose prose-invert max-w-none [&_a]:text-motion-blue [&_a]:underline [&_strong]:text-pure-white [&_em]:italic"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function escapeText(s: string) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Allowlist-style sanitize for CMS rich text (no scripts/handlers). */
+function sanitizeCmsHtml(raw: string) {
+  if (!raw) return '';
+  let html = String(raw);
+  html = html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/on\w+\s*=\s*(['"]).*?\1/gi, '');
+  html = html.replace(/on\w+\s*=\s*[^\s>]+/gi, '');
+  html = html.replace(/javascript:/gi, '');
+  html = html.replace(/<\/?(iframe|object|embed|link|meta|form)[^>]*>/gi, '');
+  return html;
+}
+
+export function CmsForm({ payload, pageSlug }: { payload: any; pageSlug?: string }) {
+  const [values, setValues] = React.useState<Record<string, string>>({});
+  const [status, setStatus] = React.useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const [error, setError] = React.useState('');
+  const fields = Array.isArray(payload?.fields) ? payload.fields : [];
+  const API =
+    (import.meta as any).env?.VITE_API_URL ||
+    process.env.REACT_APP_API_URL ||
+    'http://localhost:3000/api/v1';
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pageSlug) return;
+    setStatus('saving');
+    setError('');
+    try {
+      const res = await fetch(`${API}/public/cms/forms/${encodeURIComponent(pageSlug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formKey: payload?.formKey || 'default',
+          payload: values,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Submit failed');
+      setStatus('done');
+      setValues({});
+    } catch (err: any) {
+      setStatus('error');
+      setError(err.message || 'Submit failed');
+    }
+  };
+
+  if (status === 'done') {
+    return (
+      <section className="max-w-xl mx-auto px-6 py-10">
+        <p className="text-lg text-pure-white">
+          {payload?.successMessage || 'Thanks — we received your message.'}
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="max-w-xl mx-auto px-6 py-10">
+      {payload?.heading ? <h2 className="text-2xl font-bold mb-6">{payload.heading}</h2> : null}
+      <form onSubmit={submit} className="space-y-4">
+        {fields.map((f: any) => (
+          <label key={f.name} className="block">
+            <span className="text-sm text-text-secondary">
+              {f.label || f.name}
+              {f.required ? ' *' : ''}
+            </span>
+            {f.type === 'textarea' ? (
+              <textarea
+                className="mt-2 w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
+                rows={4}
+                required={!!f.required}
+                value={values[f.name] || ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+              />
+            ) : (
+              <input
+                type={f.type || 'text'}
+                className="mt-2 w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
+                required={!!f.required}
+                value={values[f.name] || ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+              />
+            )}
+          </label>
+        ))}
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        <button
+          type="submit"
+          disabled={status === 'saving'}
+          className="rounded-full px-6 py-3 font-semibold bg-movr-gradient"
+        >
+          {status === 'saving' ? 'Sending…' : payload?.submitLabel || 'Submit'}
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -579,8 +723,15 @@ export function CmsOnboarding({ payload }: { payload: any }) {
   );
 }
 
-const RENDERERS: Record<string, React.FC<{ payload: any }>> = {
+const RENDERERS: Record<string, React.FC<{ payload: any; pageSlug?: string }>> = {
   hero: CmsHero,
+  choice_hero: CmsChoiceHero,
+  trust_strip: CmsTrustStrip,
+  how_it_works: CmsHowItWorks,
+  product_grid: CmsProductGrid,
+  why_grid: CmsWhyGrid,
+  testimonials: CmsTestimonials,
+  final_cta: CmsFinalCta,
   four_ways: CmsFourWays,
   stories: CmsStories,
   cta_banner: CmsCtaBanner,
@@ -588,24 +739,41 @@ const RENDERERS: Record<string, React.FC<{ payload: any }>> = {
   feature_cards: CmsFeatureCards,
   help_hub: CmsHelpHub,
   rich_text: CmsRichText,
+  form: CmsForm,
   legal: CmsLegal,
   onboarding_slides: CmsOnboarding,
 };
 
-export function CmsSectionView({ section }: { section: CmsSection }) {
+export function CmsSectionView({
+  section,
+  pageSlug,
+}: {
+  section: CmsSection;
+  pageSlug?: string;
+}) {
   const Comp = RENDERERS[section.type];
   if (!Comp || section.enabled === false) return null;
-  return <Comp payload={section.payload || {}} />;
+  return <Comp payload={section.payload || {}} pageSlug={pageSlug} />;
 }
 
-export function CmsSections({ sections }: { sections?: CmsSection[] }) {
+export function CmsSections({
+  sections,
+  pageSlug,
+}: {
+  sections?: CmsSection[];
+  pageSlug?: string;
+}) {
   if (!sections?.length) return null;
   return (
     <>
       {sections
         .filter((s) => s.type !== 'nav' && s.type !== 'footer')
         .map((s) => (
-          <CmsSectionView key={s.id || `${s.type}-${s.sortOrder}`} section={s} />
+          <CmsSectionView
+            key={s.id || `${s.type}-${s.sortOrder}`}
+            section={s}
+            pageSlug={pageSlug}
+          />
         ))}
     </>
   );

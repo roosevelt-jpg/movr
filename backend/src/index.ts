@@ -501,6 +501,9 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
       userType = 'customer',
       country: countryHint,
       city = 'Accra',
+      gender,
+      dateOfBirth,
+      date_of_birth,
     } = req.body;
 
     const cleanEmail = email ? String(email).trim().toLowerCase() : null;
@@ -514,6 +517,11 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
         .slice(1)
         .join(' ') ||
       null;
+    const allowedGender = new Set(['female', 'male', 'non_binary', 'prefer_not_to_say']);
+    const cleanGender = gender && allowedGender.has(String(gender)) ? String(gender) : null;
+    const dobRaw = dateOfBirth || date_of_birth || null;
+    const cleanDob =
+      dobRaw && /^\d{4}-\d{2}-\d{2}$/.test(String(dobRaw)) ? String(dobRaw) : null;
 
     if (!password) {
       return res.status(400).json({ status: 'error', message: 'Password is required' });
@@ -541,9 +549,9 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
 
     const hash = await bcrypt.hash(password, 10);
     const inserted = await authDb.query(
-      `INSERT INTO users (email, phone, first_name, last_name, password, user_type, country, city, is_active, is_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, false)
-       RETURNING id, email, phone, first_name, last_name, user_type, country, city`,
+      `INSERT INTO users (email, phone, first_name, last_name, password, user_type, country, city, gender, date_of_birth, is_active, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, false)
+       RETURNING id, email, phone, first_name, last_name, user_type, country, city, gender, date_of_birth`,
       [
         cleanEmail,
         cleanPhone,
@@ -553,6 +561,8 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
         userType === 'driver' ? 'driver' : 'customer',
         country,
         city,
+        cleanGender,
+        cleanDob,
       ]
     );
     const dbUser = inserted.rows[0];
@@ -590,6 +600,10 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
           userType: dbUser.user_type,
           country: dbUser.country || 'GH',
           city: dbUser.city || 'Accra',
+          gender: dbUser.gender || null,
+          dateOfBirth: dbUser.date_of_birth
+            ? String(dbUser.date_of_birth).slice(0, 10)
+            : null,
           isVerified: false,
         },
       },
@@ -1431,7 +1445,7 @@ app.get('/api/v1/users/me', authenticateToken, async (req: AuthRequest, res: Exp
     const uid = req.user?.id;
     const result = await authDb.query(
       `SELECT u.id, u.email, u.phone, u.first_name, u.last_name, u.avatar_url,
-              u.country, u.language, u.city,
+              u.country, u.language, u.city, u.gender, u.date_of_birth,
               s.notifications_enabled, s.language AS settings_language, s.region
        FROM users u
        LEFT JOIN user_settings s ON s.user_id = u.id
@@ -1465,6 +1479,8 @@ app.get('/api/v1/users/me', authenticateToken, async (req: AuthRequest, res: Exp
         avatarUrl: u.avatar_url,
         country: u.country || 'GH',
         city: u.city || 'Accra',
+        gender: u.gender || null,
+        dateOfBirth: u.date_of_birth ? String(u.date_of_birth).slice(0, 10) : null,
         notificationsEnabled: u.notifications_enabled !== false,
         language,
         region,
@@ -1473,6 +1489,71 @@ app.get('/api/v1/users/me', authenticateToken, async (req: AuthRequest, res: Exp
     });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message || 'Failed to load profile' });
+  }
+});
+
+app.put('/api/v1/users/profile', authenticateToken, async (req: AuthRequest, res: ExpressResponse) => {
+  try {
+    const uid = req.user!.id;
+    const allowedGender = new Set(['female', 'male', 'non_binary', 'prefer_not_to_say', '']);
+    const firstName = req.body.firstName != null ? String(req.body.firstName).trim() : undefined;
+    const lastName = req.body.lastName != null ? String(req.body.lastName).trim() : undefined;
+    const phone = req.body.phone != null ? String(req.body.phone).replace(/[\s\-()]/g, '') : undefined;
+    const country =
+      req.body.country != null ? String(req.body.country).trim().toUpperCase() : undefined;
+    const city = req.body.city != null ? String(req.body.city).trim() : undefined;
+    const genderRaw = req.body.gender != null ? String(req.body.gender) : undefined;
+    const gender =
+      genderRaw == null
+        ? undefined
+        : allowedGender.has(genderRaw)
+          ? genderRaw || null
+          : undefined;
+    const dobRaw = req.body.dateOfBirth || req.body.date_of_birth;
+    const dateOfBirth =
+      dobRaw == null
+        ? undefined
+        : /^\d{4}-\d{2}-\d{2}$/.test(String(dobRaw))
+          ? String(dobRaw)
+          : null;
+
+    const result = await authDb.query(
+      `UPDATE users SET
+         first_name = COALESCE($2, first_name),
+         last_name = COALESCE($3, last_name),
+         phone = COALESCE(NULLIF($4, ''), phone),
+         country = COALESCE($5, country),
+         city = COALESCE($6, city),
+         gender = COALESCE($7, gender),
+         date_of_birth = COALESCE($8::date, date_of_birth),
+         updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, email, phone, first_name, last_name, user_type, country, city, gender, date_of_birth, avatar_url, is_verified`,
+      [uid, firstName ?? null, lastName ?? null, phone ?? null, country ?? null, city ?? null, gender ?? null, dateOfBirth ?? null]
+    );
+    const u = result.rows[0];
+    if (!u) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+    res.json({
+      status: 'success',
+      data: {
+        id: u.id,
+        email: u.email,
+        phone: u.phone || '',
+        firstName: u.first_name || '',
+        lastName: u.last_name || '',
+        userType: u.user_type,
+        country: u.country || 'GH',
+        city: u.city || 'Accra',
+        gender: u.gender || null,
+        dateOfBirth: u.date_of_birth ? String(u.date_of_birth).slice(0, 10) : null,
+        avatarUrl: u.avatar_url,
+        isVerified: !!u.is_verified,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Profile update failed' });
   }
 });
 

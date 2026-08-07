@@ -47,7 +47,7 @@ const ProfilePage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-6 md:p-8 max-w-xl">
+    <div className="min-h-[70vh] bg-jet-black text-pure-white font-[Poppins,Montserrat,sans-serif] p-4 sm:p-6 md:p-8 max-w-xl mx-auto w-full">
       <div className="flex items-center gap-4 mb-8">
         {user?.avatarUrl ? (
           <img
@@ -68,14 +68,23 @@ const ProfilePage: React.FC = () => {
 
       <p className="text-xs tracking-wider text-text-secondary mb-2">ACCOUNT</p>
       <div className="mb-8">
-        <Row icon={Pencil} label="Edit profile" onClick={() => navigate('/settings')} />
+        <Row icon={Pencil} label="Edit profile" onClick={() => navigate('/profile/edit')} />
         <Row
           icon={Bell}
           label="Notifications"
           value={notifications}
           onClick={() => navigate('/settings/notifications')}
         />
-        <Row icon={Globe} label="Language & region" value="English, Ghana" />
+        <Row
+          icon={Globe}
+          label="Language & region"
+          value={
+            user?.country
+              ? `English, ${user.country === 'GH' ? 'Ghana' : user.country}`
+              : 'English, Ghana'
+          }
+          onClick={() => navigate('/profile/edit')}
+        />
       </div>
 
       <p className="text-xs tracking-wider text-text-secondary mb-2">SUPPORT</p>

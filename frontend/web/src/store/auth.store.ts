@@ -14,6 +14,8 @@ export interface User {
   avatarUrl?: string;
   country: string;
   city: string;
+  gender?: string | null;
+  dateOfBirth?: string | null;
   isVerified: boolean;
 }
 
