@@ -213,7 +213,7 @@ input[type='date'].input-base {
 }
 
 .mkt-product {
-  @apply rounded-2xl border p-6 transition-all duration-300 h-full;
+  @apply rounded-2xl border p-6 transition-all duration-300 h-full overflow-hidden;
   border-color: rgba(255, 255, 255, 0.1);
   background-color: #0d0d0d;
 }

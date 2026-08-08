@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
+import IdentityOnboardingScreen from './IdentityOnboardingScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -28,6 +29,7 @@ export default function VerificationStatusScreen({
   onReupload?: (docKey: string) => void;
   userId?: string;
 }) {
+  const [showIdentity, setShowIdentity] = useState(false);
   const [docs, setDocs] = useState<Doc[]>([
     { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
     { key: 'driving_license', label: 'Driving license', status: 'in_review' },
@@ -72,6 +74,8 @@ export default function VerificationStatusScreen({
   const reupload = async () => {
     if (!rejected) return;
     onReupload?.(rejected.key);
+    // Open Step 3 identity verification UI (mockup) for re-upload
+    setShowIdentity(true);
     setBusy(true);
     setMsg('');
     try {
@@ -83,15 +87,25 @@ export default function VerificationStatusScreen({
       if (res.ok) {
         setMsg('Document re-submitted for review');
         load();
-      } else {
-        setMsg('Could not re-upload — try again');
       }
     } catch {
-      setMsg('Network error');
+      /* identity UI still available */
     } finally {
       setBusy(false);
     }
   };
+
+  if (showIdentity) {
+    return (
+      <IdentityOnboardingScreen
+        onDone={() => {
+          setShowIdentity(false);
+          setMsg('Identity verification submitted for review');
+          load();
+        }}
+      />
+    );
+  }
 
   const badge = (s: Doc['status']) => {
     if (s === 'verified') {
@@ -134,6 +148,13 @@ export default function VerificationStatusScreen({
       ) : null}
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+
+      <Pressable
+        style={[styles.cta, { marginBottom: spacing[3], backgroundColor: '#1A1A1A' }]}
+        onPress={() => setShowIdentity(true)}
+      >
+        <Text style={styles.ctaText}>Continue identity verification</Text>
+      </Pressable>
 
       {rejected ? (
         <Pressable style={styles.cta} onPress={reupload} disabled={busy}>

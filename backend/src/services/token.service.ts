@@ -160,15 +160,108 @@ export class TokenService {
     return row.rows[0] || { dvt_per_fiat_unit: 10, currency_code: 'GHS' };
   }
 
-  async redeem(userId: string, dvtAmount: number) {
-    if (!this.isEnabled()) throw new Error('Token system disabled');
+  async getRedeemOptions() {
+    const rows = await this.db
+      .query(`SELECT * FROM dvt_redeem_options WHERE is_active = TRUE ORDER BY sort_order ASC`)
+      .catch(() => ({ rows: [] as any[] }));
+    if (rows.rows.length) {
+      return rows.rows.map((o: any) => ({
+        id: o.id,
+        label: o.label,
+        icon: o.icon,
+        dvtCost: Number(o.dvt_cost),
+        rewardValue: Number(o.reward_value),
+        currency: o.currency_code || 'NGN',
+        rewardType: o.reward_type,
+        rewardUnit: o.reward_unit,
+        tags: o.tags || [],
+        tagTone: o.tag_tone || 'violet',
+        rateLabel: `${Number(o.dvt_cost).toLocaleString()} DVT → ₦${Number(
+          o.reward_value
+        ).toLocaleString()} ${o.reward_unit}`,
+      }));
+    }
+    return [
+      {
+        id: 'ride_credits',
+        label: 'Ride Credits',
+        icon: 'car',
+        dvtCost: 500,
+        rewardValue: 1000,
+        currency: 'NGN',
+        rewardType: 'ride_credit',
+        rewardUnit: 'ride credit',
+        tags: ['Best value', 'Most popular'],
+        tagTone: 'violet',
+        rateLabel: '500 DVT → ₦1,000 ride credit',
+      },
+      {
+        id: 'order_discount',
+        label: 'Order Discount',
+        icon: 'bag',
+        dvtCost: 300,
+        rewardValue: 500,
+        currency: 'NGN',
+        rewardType: 'order_discount',
+        rewardUnit: 'off any order',
+        tags: [],
+        tagTone: 'muted',
+        rateLabel: '300 DVT → ₦500 off any order',
+      },
+      {
+        id: 'cash_withdrawal',
+        label: 'Cash Withdrawal',
+        icon: 'cash',
+        dvtCost: 1000,
+        rewardValue: 1800,
+        currency: 'NGN',
+        rewardType: 'wallet_cash',
+        rewardUnit: 'to wallet',
+        tags: ['Lower rate', 'Instant'],
+        tagTone: 'amber',
+        rateLabel: '1,000 DVT → ₦1,800 to wallet',
+      },
+    ];
+  }
+
+  /**
+   * Redeem DVT for ride credit / order discount / wallet cash.
+   * Ledger burn always works; on-chain burn remains gated by TOKEN_SYSTEM_ENABLED.
+   */
+  async redeem(userId: string, dvtAmount: number, opts?: { optionId?: string }) {
     if (dvtAmount <= 0) throw new Error('Amount must be positive');
 
     const bal = await this.getBalance(userId);
     if (bal.total < dvtAmount) throw new Error('Insufficient DVT balance');
+    await this.ensureCustodialWallet(userId);
 
-    const rate = await this.getRedeemRate();
-    const fiatCredit = dvtAmount / Number(rate.dvt_per_fiat_unit);
+    const options = await this.getRedeemOptions();
+    const option =
+      options.find((o) => o.id === opts?.optionId) ||
+      options.find((o) => o.id === 'ride_credits') ||
+      options[0];
+
+    let fiatCredit: number;
+    let currency = 'NGN';
+    let rewardType = 'wallet_cash';
+    let rewardLabel = 'wallet credit';
+
+    if (option) {
+      const units = dvtAmount / Number(option.dvtCost);
+      fiatCredit = Math.round(units * Number(option.rewardValue) * 100) / 100;
+      currency = option.currency || 'NGN';
+      rewardType = option.rewardType;
+      rewardLabel =
+        option.rewardType === 'ride_credit'
+          ? 'ride credit'
+          : option.rewardType === 'order_discount'
+            ? 'order discount'
+            : 'to wallet';
+    } else {
+      const rate = await this.getRedeemRate();
+      fiatCredit = dvtAmount / Number(rate.dvt_per_fiat_unit || 0.5);
+      currency = rate.currency_code || 'NGN';
+    }
 
     return this.db.transaction(async (client) => {
       const tb = (
@@ -197,29 +290,56 @@ export class TokenService {
         [
           userId,
           -dvtAmount,
-          JSON.stringify({ fiatCredit, currency: rate.currency_code }),
+          JSON.stringify({
+            fiatCredit,
+            currency,
+            optionId: option?.id,
+            rewardType,
+          }),
         ]
       );
 
-      const wallet = (
-        await client.query(`SELECT id FROM wallets WHERE user_id = $1 FOR UPDATE`, [userId])
-      ).rows[0];
-      if (wallet) {
-        await client.query(
-          `UPDATE wallets SET balance_fiat = balance_fiat + $1, last_updated = NOW() WHERE id = $2`,
-          [fiatCredit, wallet.id]
-        );
-        await client.query(
-          `INSERT INTO wallet_transactions_v2 (wallet_id, type, amount, reference)
-           VALUES ($1, 'dvt_redeem', $2, $3)`,
-          [wallet.id, fiatCredit, `dvt-redeem`]
-        );
+      await client
+        .query(
+          `INSERT INTO dvt_redemptions (user_id, option_id, dvt_spent, reward_value, currency_code, reward_type, status, metadata)
+           VALUES ($1,$2,$3,$4,$5,$6,'issued',$7::jsonb)`,
+          [
+            userId,
+            option?.id || null,
+            dvtAmount,
+            fiatCredit,
+            currency,
+            rewardType,
+            JSON.stringify({ rewardLabel }),
+          ]
+        )
+        .catch(() => undefined);
+
+      if (rewardType === 'wallet_cash' || rewardType === 'ride_credit') {
+        const wallet = (
+          await client.query(`SELECT id FROM wallets WHERE user_id = $1 FOR UPDATE`, [userId])
+        ).rows[0];
+        if (wallet) {
+          await client.query(
+            `UPDATE wallets SET balance_fiat = balance_fiat + $1, last_updated = NOW() WHERE id = $2`,
+            [fiatCredit, wallet.id]
+          );
+          await client.query(
+            `INSERT INTO wallet_transactions_v2 (wallet_id, type, amount, reference)
+             VALUES ($1, 'dvt_redeem', $2, $3)`,
+            [wallet.id, fiatCredit, `dvt-redeem-${option?.id || 'cash'}`]
+          );
+        }
       }
 
       return {
         dvtBurned: dvtAmount,
         fiatCredit,
-        currency: rate.currency_code,
+        currency,
+        optionId: option?.id,
+        rewardType,
+        rewardLabel,
+        youReceive: `₦${fiatCredit.toLocaleString()} ${rewardLabel}`,
       };
     });
   }

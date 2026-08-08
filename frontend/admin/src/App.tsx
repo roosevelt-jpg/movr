@@ -13,6 +13,7 @@ import PaymentProvidersPage from './pages/PaymentProvidersPage';
 import ChannelFunnelPage from './pages/ChannelFunnelPage';
 import UsersListPage from './pages/UsersListPage';
 import RideOpsPage from './pages/RideOpsPage';
+import RideManagementPage from './pages/RideManagementPage';
 import OrderOpsPage from './pages/OrderOpsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import AdminOverviewPage from './pages/AdminOverviewPage';
@@ -25,6 +26,17 @@ import AdminSettingsPage from './pages/AdminSettingsPage';
 import CmsPagesPage from './pages/CmsPagesPage';
 import MarketplaceCatalogPage from './pages/MarketplaceCatalogPage';
 import MerchantsOversightPage from './pages/MerchantsOversightPage';
+import DriversManagementPage from './pages/DriversManagementPage';
+import DriverProfilePage from './pages/DriverProfilePage';
+import CustomersManagementPage from './pages/CustomersManagementPage';
+import CustomerProfilePage from './pages/CustomerProfilePage';
+import TokensManagementPage from './pages/TokensManagementPage';
+import MarketplaceManagementPage from './pages/MarketplaceManagementPage';
+import DispatcherPanelPage from './pages/DispatcherPanelPage';
+import PromotionsPage from './pages/PromotionsPage';
+import BroadcastCenterPage from './pages/BroadcastCenterPage';
+import PlatformAnalyticsPage from './pages/PlatformAnalyticsPage';
+import SubscriptionFeesPage from './pages/SubscriptionFeesPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -83,7 +95,79 @@ const App: React.FC = () => {
           }
         />
         <Route
+          path="/marketplace-mgmt"
+          element={
+            <RequireAdmin>
+              <MarketplaceManagementPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/customers/:id"
+          element={
+            <RequireAdmin>
+              <CustomerProfilePage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/customers"
+          element={
+            <RequireAdmin>
+              <CustomersManagementPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/promotions"
+          element={
+            <RequireAdmin>
+              <PromotionsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/tokens"
+          element={
+            <RequireAdmin>
+              <TokensManagementPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/dispatch"
+          element={
+            <RequireAdmin>
+              <DispatcherPanelPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <RequireAdmin>
+              <PlatformAnalyticsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/broadcasts"
+          element={
+            <RequireAdmin>
+              <BroadcastCenterPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
           path="/live-map"
+          element={
+            <RequireAdmin>
+              <AdminLiveMapPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/map"
           element={
             <RequireAdmin>
               <AdminLiveMapPage />
@@ -95,6 +179,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <PricingEnginePage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/subscription-fees"
+          element={
+            <RequireAdmin>
+              <SubscriptionFeesPage />
             </RequireAdmin>
           }
         />
@@ -111,6 +203,22 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <UsersListPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/drivers/:id"
+          element={
+            <RequireAdmin>
+              <DriverProfilePage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/drivers"
+          element={
+            <RequireAdmin>
+              <DriversManagementPage />
             </RequireAdmin>
           }
         />
@@ -142,7 +250,7 @@ const App: React.FC = () => {
           path="/rides"
           element={
             <RequireAdmin>
-              <RideOpsPage />
+              <RideManagementPage />
             </RequireAdmin>
           }
         />

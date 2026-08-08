@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -153,13 +154,5 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     padding: '12px 16px',
   },
-  send: {
-    background: 'var(--motion-blue)',
-    border: 'none',
-    color: 'var(--pure-white)',
-    borderRadius: 999,
-    padding: '0 18px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
+  send: { ...adminBtn.primary, borderRadius: 999, padding: '0 14px', minHeight: 36 },
 };

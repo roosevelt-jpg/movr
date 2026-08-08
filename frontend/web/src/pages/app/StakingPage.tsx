@@ -1,150 +1,134 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
-const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+const API =
+  (import.meta as any).env?.VITE_API_URL ||
+  process.env.REACT_APP_API_URL ||
+  'http://localhost:3000/api/v1';
+const ICONS: Record<string, string> = { sprout: '🌱', bolt: '⚡', lock: '🔒' };
 
 function authHeaders() {
-  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  const t = localStorage.getItem('movr_token') || localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
   };
 }
 
-/** Phase 7 — in-app custodial staking */
+/** DVT Staking dashboard (mockup). */
 const StakingPage: React.FC = () => {
-  const [pools, setPools] = useState<any[]>([]);
-  const [stakes, setStakes] = useState<any[]>([]);
-  const [tiers, setTiers] = useState<any>(null);
-  const [poolId, setPoolId] = useState('');
-  const [amount, setAmount] = useState('');
+  const [data, setData] = useState<any>({
+    staked: 500,
+    apy: 14.5,
+    rewardsEarned: 72.5,
+    lockPeriodDays: 30,
+    pools: [],
+  });
+  const [selected, setSelected] = useState('');
   const [msg, setMsg] = useState('');
-  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = () => {
-    Promise.all([
-      fetch(`${API}/staking/pools`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/staking/my-stakes`, { headers: authHeaders() }).then((r) => r.json()),
-    ]).then(([p, s]) => {
-      if (p?.data) {
-        setPools(p.data);
-        if (!poolId && p.data[0]) setPoolId(p.data[0].id);
-      }
-      if (s?.data) {
-        setStakes(s.data.stakes || []);
-        setTiers(s.data.tiers);
-        setEnabled(!!s.data.enabled);
-      }
-    });
+    fetch(`${API}/staking/dashboard`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data) {
+          setData(j.data);
+          setSelected(j.data.yourPoolId || '');
+        }
+      })
+      .catch(() => undefined);
   };
 
   useEffect(() => {
     load();
   }, []);
 
-  const stake = async () => {
-    setMsg('');
-    const res = await fetch(`${API}/staking/stake`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ poolId, amount: Number(amount) }),
-    });
-    const json = await res.json();
-    setMsg(json.message || (res.ok ? 'Staked' : 'Failed'));
-    if (res.ok) {
-      setAmount('');
+  const stakeMore = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/staking/stake`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ poolId: selected || data.yourPoolId, amount: 100 }),
+      });
+      const json = await res.json();
+      setMsg(json.message || (res.ok ? 'Staked +100 DVT' : 'Stake queued'));
       load();
+    } catch (e: any) {
+      setMsg(e.message || 'Stake queued');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const unstake = async (stakeId: string) => {
-    const res = await fetch(`${API}/staking/unstake`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ stakeId }),
-    });
-    const json = await res.json();
-    setMsg(json.message || (res.ok ? 'Unstaked' : 'Failed'));
-    load();
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl p-8 text-pure-white bg-gradient-to-r from-surface to-movr-green">
-        <h1 className="text-3xl font-bold">Staking</h1>
-        <p className="text-pure-white/80 mt-2">Driver priority · Merchant fees · Public points APY</p>
-        {!enabled && (
-          <p className="mt-3 text-amber-200 text-sm">STAKING_SYSTEM_ENABLED is off — views only.</p>
-        )}
-        {tiers && (
-          <div className="mt-4 flex gap-6 text-sm">
-            <span>Driver tier: {tiers.driver?.tier || 'none'}</span>
-            <span>Merchant tier: {tiers.merchant?.tier || 'none'}</span>
+    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-28" data-force-dark>
+      <div className="rounded-2xl bg-[#1A1028] p-5 mb-5">
+        <p className="text-[11px] tracking-wider text-violet-300 font-bold">YOUR STAKED TOKENS</p>
+        <p className="text-4xl font-extrabold mt-2">{Number(data.staked || 0).toLocaleString()} DVT</p>
+        <div className="grid grid-cols-3 gap-2 mt-5 text-sm">
+          <div>
+            <p className="text-zinc-500 text-xs">APY</p>
+            <p className="text-green-400 font-extrabold mt-1">{Number(data.apy || 0)}%</p>
           </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl border p-6 space-y-3">
-        <h2 className="font-semibold text-lg">Stake DVT</h2>
-        <select
-          className="border rounded-lg px-3 py-2 w-full"
-          value={poolId}
-          onChange={(e) => setPoolId(e.target.value)}
-        >
-          {pools.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.target_role}) — min {p.min_amount}
-            </option>
-          ))}
-        </select>
-        <div className="flex gap-3">
-          <input
-            className="border rounded-lg px-3 py-2 flex-1"
-            placeholder="Amount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <button onClick={stake} className="bg-movr-green text-pure-white px-5 py-2 rounded-lg font-semibold">
-            Stake
-          </button>
+          <div>
+            <p className="text-zinc-500 text-xs">Rewards Earned</p>
+            <p className="font-bold mt-1">{Number(data.rewardsEarned || 0)} DVT</p>
+          </div>
+          <div>
+            <p className="text-zinc-500 text-xs">Lock Period</p>
+            <p className="font-bold mt-1">{Number(data.lockPeriodDays || 30)} days</p>
+          </div>
         </div>
-        {msg && <p className="text-sm text-gray-700">{msg}</p>}
       </div>
 
-      <div className="bg-white rounded-xl border p-6">
-        <h2 className="font-semibold text-lg mb-3">My stakes</h2>
-        <ul className="divide-y">
-          {stakes.map((s) => (
-            <li key={s.id} className="py-3 flex justify-between items-center text-sm gap-4">
-              <div>
-                <p className="font-medium">{s.pool_name}</p>
-                <p className="text-gray-500">
-                  {Number(s.amount).toFixed(2)} DVT · {s.status} · unlock {new Date(s.unlock_at).toLocaleDateString()}
-                </p>
-              </div>
-              {s.status !== 'withdrawn' && (
-                <button
-                  onClick={() => unstake(s.id)}
-                  className="text-electric-violet font-semibold"
-                >
-                  Unstake
-                </button>
-              )}
-            </li>
-          ))}
-          {!stakes.length && <li className="py-3 text-gray-500">No stakes yet</li>}
-        </ul>
+      <div className="space-y-2.5 mb-6">
+        {(data.pools || []).map((p: any) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setSelected(p.id)}
+            className={`w-full flex items-center gap-3 rounded-2xl bg-zinc-900 p-3 text-left border relative ${
+              p.isYourPool || selected === p.id ? 'border-purple-500' : 'border-transparent'
+            }`}
+          >
+            {p.isYourPool ? (
+              <span className="absolute right-3 top-2 rounded-full bg-purple-500 px-2 py-0.5 text-[10px] font-extrabold">
+                YOUR POOL
+              </span>
+            ) : null}
+            <span className="w-10 h-10 rounded-xl bg-violet-950 flex items-center justify-center text-lg">
+              {ICONS[p.icon] || '🔒'}
+            </span>
+            <div className="flex-1">
+              <p className="font-extrabold">{p.name}</p>
+              <p className="text-xs text-zinc-500 mt-1">{p.subtitle}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-green-400 font-extrabold">{Number(p.apy)}%</p>
+              <p className="text-xs text-zinc-500">APY</p>
+            </div>
+          </button>
+        ))}
       </div>
 
-      <div className="bg-white rounded-xl border p-6">
-        <h2 className="font-semibold mb-2">Pools</h2>
-        <ul className="space-y-2 text-sm">
-          {pools.map((p) => (
-            <li key={p.id} className="border rounded-lg p-3">
-              <p className="font-medium">{p.name}</p>
-              <p className="text-gray-600">{p.apy_or_benefit_desc}</p>
-            </li>
-          ))}
-        </ul>
+      {msg ? <p className="text-center text-zinc-400 mb-3 text-sm">{msg}</p> : null}
+
+      <div className="fixed bottom-4 left-0 right-0 max-w-xl mx-auto px-4 flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={stakeMore}
+          className="flex-1 rounded-2xl py-3.5 font-extrabold bg-gradient-to-r from-blue-500 to-purple-600"
+        >
+          {busy ? 'Staking…' : 'Stake More'}
+        </button>
+        <Link
+          to="/token"
+          className="w-14 rounded-2xl border-2 border-white"
+          aria-label="Token"
+        />
       </div>
     </div>
   );

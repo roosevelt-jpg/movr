@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
 import { formatCurrency } from '../lib/currency';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -186,7 +187,7 @@ export default function RideOpsPage() {
             <span style={ride.disputed ? styles.badgeDispute : styles.badge}>{ride.status}</span>
           </div>
 
-          <div style={styles.actions}>
+          <div style={styles.actions} className="admin-actions">
             <button
               style={styles.ghost}
               type="button"
@@ -279,14 +280,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
   actions: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
-  ghost: {
-    background: '#2a2a2a',
-    border: '1px solid transparent',
-    color: 'var(--pure-white)',
-    borderRadius: 10,
-    padding: '10px 14px',
-    cursor: 'pointer',
-  },
+  ghost: { ...adminBtn.secondary },
   amount: {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',

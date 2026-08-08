@@ -187,11 +187,11 @@ export default function MarketplaceCatalogPage() {
     <AdminShell activeLabel="Marketplace">
       <h1 className="text-2xl font-bold mb-admin-4">Marketplace catalog</h1>
 
-      <div className="flex gap-admin-3 mb-admin-4">
+      <div className="flex gap-admin-3 mb-admin-4 admin-actions">
         <button
           type="button"
-          className={`px-admin-3 py-admin-2 rounded-md ${
-            tab === 'categories' ? 'bg-motion-blue text-pure-white' : 'bg-surface-elevated'
+          className={`admin-btn px-admin-3 py-admin-2 rounded-md ${
+            tab === 'categories' ? 'bg-movr-gradient text-pure-white' : 'bg-surface-elevated'
           }`}
           onClick={() => setTab('categories')}
         >
@@ -199,8 +199,8 @@ export default function MarketplaceCatalogPage() {
         </button>
         <button
           type="button"
-          className={`px-admin-3 py-admin-2 rounded-md ${
-            tab === 'banners' ? 'bg-motion-blue text-pure-white' : 'bg-surface-elevated'
+          className={`admin-btn px-admin-3 py-admin-2 rounded-md ${
+            tab === 'banners' ? 'bg-movr-gradient text-pure-white' : 'bg-surface-elevated'
           }`}
           onClick={() => setTab('banners')}
         >
@@ -252,7 +252,7 @@ export default function MarketplaceCatalogPage() {
                 }}
               />
             </label>
-            <button type="submit" className="rounded-md bg-motion-blue px-admin-3 py-admin-2">
+            <button type="submit" className="admin-btn admin-btn-brand bg-movr-gradient rounded-md px-admin-3 py-admin-2 text-pure-white">
               Add category
             </button>
           </form>
@@ -274,7 +274,7 @@ export default function MarketplaceCatalogPage() {
               },
             ]}
             actions={
-              <label className="rounded-md bg-motion-blue px-admin-3 py-admin-2 cursor-pointer text-admin-sm">
+              <label className="admin-btn admin-btn-brand bg-movr-gradient rounded-md px-admin-3 py-admin-2 cursor-pointer text-admin-sm text-pure-white">
                 Upload banner
                 <input
                   type="file"

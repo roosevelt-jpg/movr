@@ -6,29 +6,76 @@ import { useTheme } from '../theme/ThemeProvider';
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const AVATAR_KEY = 'movr_admin_avatar_url';
 
-const NAV = [
-  { label: 'Overview', to: '/overview' },
-  { label: 'Site content', to: '/cms' },
-  { label: 'Marketplace', to: '/marketplace' },
-  { label: 'Live map', to: '/live-map' },
-  { label: 'Pricing engine', to: '/pricing' },
-  { label: 'Finance', to: '/finance' },
-  { label: 'Users', to: '/users' },
-  { label: 'Rides', to: '/rides' },
-  { label: 'Orders', to: '/orders' },
-  { label: 'Merchants', to: '/merchants' },
-  { label: 'KYC queue', to: '/kyc-queue' },
-  { label: 'Identity review', to: '/identity' },
-  { label: 'Feature flags', to: '/feature-flags' },
-  { label: 'Airdrops', to: '/airdrops' },
-  { label: 'Integrations', to: '/integrations' },
-  { label: 'Payments', to: '/payments' },
-  { label: 'Rewards', to: '/rewards' },
-  { label: 'Vehicle pricing', to: '/vehicles' },
-  { label: 'Channels', to: '/channels' },
-  { label: 'SMS', to: '/sms' },
-  { label: 'Audit', to: '/audit' },
+type NavItem = { label: string; to: string };
+type NavGroup = { title: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Overview',
+    items: [
+      { label: 'Dashboard', to: '/overview' },
+      { label: 'Analytics', to: '/analytics' },
+      { label: 'Live Map', to: '/live-map' },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { label: 'Ride Management', to: '/rides' },
+      { label: 'Dispatcher', to: '/dispatch' },
+      { label: 'Deliveries', to: '/orders' },
+      { label: 'Rentals', to: '/vehicles' },
+      { label: 'Broadcasts', to: '/broadcasts' },
+    ],
+  },
+  {
+    title: 'Marketplace',
+    items: [
+      { label: 'Stores', to: '/marketplace-mgmt' },
+      { label: 'Orders', to: '/orders' },
+      { label: 'Products', to: '/marketplace' },
+      { label: 'Coupons', to: '/promotions' },
+    ],
+  },
+  {
+    title: 'Users',
+    items: [
+      { label: 'Customers', to: '/customers' },
+      { label: 'Drivers', to: '/drivers' },
+      { label: 'Merchants', to: '/merchants' },
+    ],
+  },
+  {
+    title: 'Finance',
+    items: [
+      { label: 'Transactions', to: '/finance' },
+      { label: 'Settlements', to: '/finance' },
+      { label: 'GMV Report', to: '/finance' },
+    ],
+  },
+  {
+    title: 'Tokens',
+    items: [{ label: 'DVT Overview', to: '/tokens' }],
+  },
+  {
+    title: 'Platform',
+    items: [
+      { label: 'Site content', to: '/cms' },
+      { label: 'KYC', to: '/kyc-queue' },
+      { label: 'Pricing', to: '/pricing' },
+      { label: 'Subscription fees', to: '/subscription-fees' },
+      { label: 'Identity review', to: '/identity' },
+      { label: 'Feature flags', to: '/feature-flags' },
+      { label: 'Integrations', to: '/integrations' },
+      { label: 'Payments', to: '/payments' },
+      { label: 'SMS', to: '/sms' },
+      { label: 'Settings', to: '/settings' },
+      { label: 'Audit', to: '/audit' },
+    ],
+  },
 ];
+
+const FLAT_NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 function mediaUrl(url?: string | null) {
   if (!url) return '';
@@ -44,7 +91,19 @@ function mediaUrl(url?: string | null) {
   return url;
 }
 
-/** Admin shell — sidebar + top header with profile dropdown. */
+function resolveActive(pathname: string, activeLabel?: string): NavItem {
+  if (activeLabel) {
+    const byLabel = FLAT_NAV.find((n) => n.label === activeLabel);
+    if (byLabel) return byLabel;
+  }
+  const exact = FLAT_NAV.find((n) => pathname === n.to || pathname.startsWith(`${n.to}/`));
+  if (exact) return exact;
+  if (pathname.startsWith('/map')) return { label: 'Live Map', to: '/live-map' };
+  if (pathname.startsWith('/settings')) return { label: 'Settings', to: '/settings' };
+  return FLAT_NAV[0];
+}
+
+/** Admin shell — grouped sidebar + top header with profile dropdown. */
 export default function AdminShell({
   children,
   activeLabel,
@@ -67,11 +126,7 @@ export default function AdminShell({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const activeItem =
-    NAV.find((n) => activeLabel === n.label || location.pathname.startsWith(n.to)) ||
-    (location.pathname.startsWith('/settings')
-      ? { label: 'Settings', to: '/settings' }
-      : NAV[0]);
+  const activeItem = resolveActive(location.pathname, activeLabel);
 
   useEffect(() => {
     setProfileOpen(false);
@@ -141,6 +196,31 @@ export default function AdminShell({
     }
   };
 
+  const pathMatches = (item: NavItem) => {
+    if (item.to === '/overview') return location.pathname === '/overview';
+    if (item.to === '/drivers') return location.pathname.startsWith('/drivers');
+    if (item.to === '/customers') return location.pathname.startsWith('/customers');
+    if (item.to === '/promotions') return location.pathname.startsWith('/promotions');
+    if (item.to === '/tokens') return location.pathname.startsWith('/tokens');
+    if (item.to === '/dispatch') return location.pathname.startsWith('/dispatch');
+    if (item.to === '/marketplace-mgmt') return location.pathname.startsWith('/marketplace-mgmt');
+    if (item.to === '/marketplace') {
+      return location.pathname === '/marketplace' || location.pathname.startsWith('/marketplace/');
+    }
+    if (item.to === '/live-map') {
+      return location.pathname.startsWith('/live-map') || location.pathname.startsWith('/map');
+    }
+    return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+  };
+
+  const isNavActive = (item: NavItem) => {
+    if (activeLabel && item.label === activeLabel) return true;
+    if (activeLabel && FLAT_NAV.some((n) => n.label === activeLabel)) return false;
+    if (!pathMatches(item)) return false;
+    const first = FLAT_NAV.find(pathMatches);
+    return first?.label === item.label && first?.to === item.to;
+  };
+
   const Avatar = ({ size = 36 }: { size?: number }) =>
     avatarUrl ? (
       <img
@@ -160,7 +240,7 @@ export default function AdminShell({
           ...styles.avatar,
           width: size,
           height: size,
-          background: 'linear-gradient(135deg, var(--electric-violet), var(--motion-blue))',
+          background: 'var(--movr-gradient)',
           color: 'var(--brand-white)',
         }}
       >
@@ -174,22 +254,26 @@ export default function AdminShell({
         <div style={styles.brand}>Movr</div>
         <p style={styles.brandSub}>Admin console</p>
         <nav style={styles.nav}>
-          {NAV.map((item) => {
-            const active =
-              activeLabel === item.label || location.pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                style={{
-                  ...styles.navItem,
-                  ...(active ? styles.navActive : {}),
-                }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {NAV_GROUPS.map((group) => (
+            <div key={group.title} style={styles.navGroup}>
+              <div style={styles.navSection}>{group.title}</div>
+              {group.items.map((item) => {
+                const active = isNavActive(item);
+                return (
+                  <Link
+                    key={`${group.title}-${item.label}-${item.to}`}
+                    to={item.to}
+                    style={{
+                      ...styles.navItem,
+                      ...(active ? styles.navActive : {}),
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
@@ -283,7 +367,7 @@ export default function AdminShell({
             </div>
           </div>
         </header>
-        <main style={styles.content}>{children}</main>
+        <main className="admin-main" style={styles.content}>{children}</main>
       </div>
     </div>
   );
@@ -312,18 +396,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   brand: { fontSize: 22, fontWeight: 800, padding: '0 8px' },
   brandSub: { color: 'var(--text-secondary)', fontSize: 12, padding: '4px 8px 20px', margin: 0 },
-  nav: { display: 'flex', flexDirection: 'column', gap: 4, flex: 1 },
+  nav: { display: 'flex', flexDirection: 'column', gap: 16, flex: 1 },
+  navGroup: { display: 'flex', flexDirection: 'column', gap: 2 },
+  navSection: {
+    color: 'var(--text-secondary)',
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    padding: '4px 12px 8px',
+  },
   navItem: {
     color: 'var(--text-secondary)',
     fontSize: 14,
     fontWeight: 500,
-    padding: '10px 12px',
+    padding: '9px 12px',
     borderRadius: 10,
     textDecoration: 'none',
   },
   navActive: {
     color: 'var(--brand-white)',
-    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    background: 'var(--movr-gradient)',
   },
   mainCol: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' },
   header: {

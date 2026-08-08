@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'react-query';
 import toast from 'react-hot-toast';
+import { adminBtn } from '../styles/adminButtons';
 
 interface Driver {
   id: string;
@@ -289,15 +290,7 @@ const DriverVerificationDashboard: React.FC = () => {
               <>
                 <button
                   onClick={() => approveDriver.mutate(selectedDriver.id)}
-                  style={{
-                    padding: '12px 24px',
-                    backgroundColor: 'var(--success)',
-                    color: 'var(--pure-white)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
+                  style={adminBtn.successSoft}
                 >
                   ✓ Approve Driver
                 </button>
@@ -306,15 +299,7 @@ const DriverVerificationDashboard: React.FC = () => {
                     const reason = prompt('Rejection reason:');
                     if (reason) rejectDriver.mutate({ driverId: selectedDriver.id, reason });
                   }}
-                  style={{
-                    padding: '12px 24px',
-                    backgroundColor: 'var(--error)',
-                    color: 'var(--pure-white)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
+                  style={adminBtn.dangerSoft}
                 >
                   ✗ Reject Driver
                 </button>
@@ -326,15 +311,7 @@ const DriverVerificationDashboard: React.FC = () => {
                   const reason = prompt('Suspension reason:');
                   if (reason) rejectDriver.mutate({ driverId: selectedDriver.id, reason });
                 }}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: 'var(--warning)',
-                  color: 'var(--pure-white)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
+                style={{ ...adminBtn.dangerSoft, background: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.5)', color: '#fbbf24' }}
               >
                 ⚠ Suspend Driver
               </button>

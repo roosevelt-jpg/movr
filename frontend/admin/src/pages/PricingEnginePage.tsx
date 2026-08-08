@@ -3,6 +3,7 @@ import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import AdminOpsNav from '../components/AdminOpsNav';
 import OnOffButton from '../components/OnOffButton';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -301,15 +302,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     padding: '8px 12px',
   },
-  newZone: {
-    border: 'none',
-    background: 'var(--motion-blue)',
-    color: '#fff',
-    borderRadius: 8,
-    padding: '8px 12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
+  newZone: { ...adminBtn.primary },
   live: { color: 'var(--text-secondary)', marginTop: 12 },
   mapHint: {
     marginTop: 12,
@@ -338,14 +331,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 0',
     borderBottom: '1px solid var(--border)',
   },
-  btn: {
-    border: '1px solid var(--border)',
-    background: 'transparent',
-    color: 'var(--pure-white)',
-    borderRadius: 8,
-    padding: '6px 10px',
-    cursor: 'pointer',
-  },
+  btn: { ...adminBtn.secondary },
   form: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
   input: {
     background: 'var(--surface)',
@@ -353,6 +339,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     padding: 8,
     color: 'var(--pure-white)',
+    minWidth: 0,
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    flex: '1 1 180px',
   },
   panel: {
     marginTop: 16,

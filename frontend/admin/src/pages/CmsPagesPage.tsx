@@ -4,6 +4,7 @@ import AdminShell from '../layouts/AdminShell';
 import RichTextEditor from '../components/RichTextEditor';
 import { MediaField } from '../components/CmsMediaField';
 import { HeroBackgroundField } from '../components/HeroBackgroundField';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -1186,10 +1187,11 @@ function SectionEditor({
                 </div>
               ) : null}
               <MediaField
-                label="Image (optional)"
+                label="Banner image"
                 value={item.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                hint="Small banner shown at the top of the card. Clear to fall back to the icon."
                 onChange={(url) => {
                   const items = [...(p.items || [])];
                   items[i] = { ...item, imageUrl: url };
@@ -1251,10 +1253,11 @@ function SectionEditor({
                 />
               </div>
               <MediaField
-                label="Avatar image (optional)"
+                label="Person photo"
                 value={q.avatarUrl || q.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                hint="Shown next to the name. Square photos work best."
                 onChange={(url) => {
                   const items = [...(p.items || p.quotes || [])];
                   items[i] = { ...q, avatarUrl: url };
@@ -1289,6 +1292,23 @@ function SectionEditor({
             disabled={disabled}
             onChange={(next) => set(next)}
           />
+          <MediaField
+            label="Phone screen image"
+            value={p.phoneImageUrl || ''}
+            disabled={disabled}
+            accept="image/*"
+            hint="Shown inside the phone mockup on the right. Upload a ride booking screenshot to replace the default app screen. Clear to restore the default mock."
+            onChange={(v) => set({ phoneImageUrl: v })}
+          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={p.showPhoneMock !== false}
+              disabled={disabled}
+              onChange={(e) => set({ showPhoneMock: e.target.checked })}
+            />
+            Show phone mockup
+          </label>
           <div style={styles.row2}>
             <Field
               label="Primary CTA label"
@@ -1881,31 +1901,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 12px',
     minWidth: 280,
   },
-  btn: {
-    background: 'linear-gradient(90deg,var(--electric-violet),var(--motion-blue))',
-    color: 'var(--pure-white)',
-    border: 'none',
-    borderRadius: 999,
-    padding: '10px 18px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  ghost: {
-    background: 'var(--surface-elevated)',
-    color: 'var(--pure-white)',
-    border: '1px solid var(--border)',
-    borderRadius: 999,
-    padding: '10px 18px',
-    cursor: 'pointer',
-  },
-  danger: {
-    background: 'var(--surface-elevated)',
-    color: 'var(--error)',
-    border: '1px solid var(--surface-elevated)',
-    borderRadius: 999,
-    padding: '10px 18px',
-    cursor: 'pointer',
-  },
+  btn: { ...adminBtn.primary },
+  ghost: { ...adminBtn.secondary },
+  danger: { ...adminBtn.dangerSoft },
   hint: { color: 'var(--text-secondary)', fontSize: 13 },
   pageMeta: { marginBottom: 16, maxWidth: 720, display: 'grid', gap: 12 },
   createBox: {

@@ -223,7 +223,7 @@ export default function UsersListPage() {
               <p className="text-text-secondary m-0">Joined {selected.joined}</p>
               <button
                 type="button"
-                className="rounded-md bg-motion-blue text-pure-white px-admin-3 py-admin-2 font-semibold"
+                className="admin-btn admin-btn-brand bg-movr-gradient rounded-md text-pure-white px-admin-3 py-admin-2 font-semibold"
                 onClick={() =>
                   navigate(`/identity?userId=${encodeURIComponent(selected.id)}`)
                 }

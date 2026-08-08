@@ -82,7 +82,7 @@ const LoginPage: React.FC = () => {
 
         <p className="text-center text-text-secondary text-sm">
           New to Movr?{' '}
-          <Link to="/register" className="text-motion-blue font-semibold">
+          <Link to="/phone" className="text-motion-blue font-semibold">
             Create an account
           </Link>
         </p>

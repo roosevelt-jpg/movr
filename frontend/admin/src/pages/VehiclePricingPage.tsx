@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import { formatCurrency } from '../lib/currency';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -271,15 +272,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   h1: { fontSize: 24, margin: 0, fontWeight: 700, color: '#fff' },
-  addBtn: {
-    background: 'linear-gradient(90deg, #8E2DE2, #4A00E0)',
-    border: 'none',
-    color: '#fff',
-    borderRadius: 12,
-    padding: '10px 16px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
+  addBtn: { ...adminBtn.primary },
   tableWrap: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -332,12 +325,5 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     marginBottom: 8,
   },
-  ghost: {
-    background: 'transparent',
-    border: '1px solid #333',
-    color: '#fff',
-    borderRadius: 12,
-    padding: '10px 16px',
-    cursor: 'pointer',
-  },
+  ghost: { ...adminBtn.secondary },
 };

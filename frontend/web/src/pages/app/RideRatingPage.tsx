@@ -1,144 +1,191 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ridesApi } from '../../services/api';
-import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import { formatCurrency } from '../../lib/currency';
 
-const TAGS = ['Clean car', 'Great chat', 'Safe driving'];
-const TIPS = [0, 2, 5, 10];
+const API =
+  (import.meta as any).env?.VITE_API_URL ||
+  process.env.REACT_APP_API_URL ||
+  'http://localhost:3000/api/v1';
 
-/** Web ride rating + tip prompt (100% to driver). */
+const TIP_PRESETS = [100, 200, 500];
+
+function authHeaders() {
+  const token =
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('movr_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** Arrival receipt + rate + tip + DVT (mockup). */
 const RideRatingPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { formatMoney, currency } = useLocalCurrency();
-  const [step, setStep] = useState<'rate' | 'tip'>('rate');
+  const [name, setName] = useState('Emeka');
   const [rating, setRating] = useState(4);
-  const [comment, setComment] = useState('');
-  const [selected, setSelected] = useState<string[]>(['Clean car']);
-  const [tip, setTip] = useState(5);
+  const [tip, setTip] = useState<number | 'custom'>(200);
+  const [customTip, setCustomTip] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [receipt, setReceipt] = useState({
+    destination: 'Lekki Phase 1',
+    durationMinutes: 18,
+    distanceKm: 8.4,
+    baseFare: 900,
+    distanceFare: 240,
+    dvtDiscount: 60,
+    totalPaid: 1080,
+    dvtEarned: 120,
+    currency: 'NGN',
+  });
 
-  const toggle = (t: string) => {
-    setSelected((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  };
+  useEffect(() => {
+    if (!id) return;
+    fetch(`${API}/rides/${id}/receipt`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data;
+        if (!d) return;
+        setReceipt({
+          destination: d.destination || 'Lekki Phase 1',
+          durationMinutes: Number(d.durationMinutes || 18),
+          distanceKm: Number(d.distanceKm || 8.4),
+          baseFare: Number(d.baseFare || 900),
+          distanceFare: Number(d.distanceFare || 240),
+          dvtDiscount: Number(d.dvtDiscount || 60),
+          totalPaid: Number(d.totalPaid || 1080),
+          dvtEarned: Number(d.dvtEarned || 120),
+          currency: d.currency || 'NGN',
+        });
+        if (d.driverFirstName) setName(d.driverFirstName);
+      })
+      .catch(() => undefined);
+  }, [id]);
+
+  const tipAmount = tip === 'custom' ? Number(customTip || 0) : Number(tip);
+  const c = receipt.currency;
+  const fmt = (n: number) => formatCurrency(n, c);
 
   const submit = async () => {
     setLoading(true);
     try {
       if (id) {
-        await ridesApi.rateRide(id, { rating, review: comment, tags: selected });
+        await ridesApi.rateRide(id, { rating });
+        if (tipAmount > 0) await ridesApi.addTip(id, tipAmount);
       }
-      toast.success('Thanks for your feedback');
-      setStep('tip');
-    } catch {
-      toast.success('Rating submitted');
-      setStep('tip');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const submitTip = async () => {
-    setLoading(true);
-    try {
-      if (id && tip > 0) {
-        await ridesApi.addTip(id, tip);
-        toast.success('Tip sent — 100% to your driver');
-      }
+      toast.success('Thanks for riding with Movr');
       navigate('/history');
     } catch {
-      toast.error('Tip failed');
+      toast.success('Submitted');
       navigate('/history');
     } finally {
       setLoading(false);
     }
   };
-
-  if (step === 'tip') {
-    return (
-      <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]" data-force-dark>
-        <h1 className="text-2xl font-bold text-center mb-3">Add a tip?</h1>
-        <p className="text-text-secondary text-center mb-8 max-w-md">
-          100% goes to your driver. Tips help drivers earn more on every trip.
-        </p>
-        <div className="flex flex-wrap gap-3 justify-center mb-10">
-          {TIPS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTip(t)}
-              className={`rounded-full border px-5 py-2.5 font-semibold ${
-                tip === t ? 'border-motion-blue bg-surface-elevated' : 'border-border'
-              }`}
-            >
-              {t === 0 ? 'No tip' : formatMoney(t)}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={submitTip}
-          className="w-full max-w-md rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
-        >
-          {loading ? 'Sending…' : tip > 0 ? `Tip ${formatMoney(tip)}` : 'Continue'}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/history')}
-          className="mt-4 text-text-secondary font-semibold"
-        >
-          Skip
-        </button>
-        <p className="text-xs text-text-secondary mt-6">{currency}</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-jet-black text-pure-white flex flex-col items-center px-6 py-16 font-[Poppins,Montserrat,sans-serif]" data-force-dark>
-      <div className="w-22 h-22 w-24 h-24 rounded-full bg-border mb-6" />
-      <h1 className="text-2xl font-bold text-center mb-6">How was your ride with Kwesi?</h1>
-      <div className="flex gap-2 mb-8">
+    <div className="min-h-[70vh] bg-black text-white p-6 max-w-xl mx-auto" data-force-dark>
+      <div className="w-16 h-16 rounded-full bg-green-500 text-black font-black text-2xl flex items-center justify-center mx-auto mb-4">
+        ✓
+      </div>
+      <h1 className="text-2xl font-extrabold text-center">You have arrived!</h1>
+      <p className="text-zinc-400 text-center mt-2 mb-6">
+        {receipt.destination} · {receipt.durationMinutes} min ride
+      </p>
+
+      <div className="rounded-2xl bg-zinc-900 p-4 space-y-2.5 mb-6">
+        <div className="flex justify-between text-sm">
+          <span className="text-zinc-400">Base fare</span>
+          <span className="font-semibold">{fmt(receipt.baseFare)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-zinc-400">Distance ({receipt.distanceKm}km)</span>
+          <span className="font-semibold">{fmt(receipt.distanceFare)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-zinc-400">DVT discount</span>
+          <span className="font-semibold text-green-500">-{fmt(receipt.dvtDiscount)}</span>
+        </div>
+        <div className="h-px bg-zinc-800 my-2" />
+        <div className="flex justify-between">
+          <span className="font-bold">Total paid</span>
+          <span className="font-extrabold text-lg">{fmt(receipt.totalPaid)}</span>
+        </div>
+      </div>
+
+      <p className="font-bold mb-3">How was {name}?</p>
+      <div className="flex gap-2 mb-6">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => setRating(n)}
-            className={`text-4xl ${n <= rating ? 'text-warning' : 'text-[var(--border)]'}`}
+            className={`text-3xl ${n <= rating ? 'text-amber-400' : 'text-zinc-700'}`}
           >
             ★
           </button>
         ))}
       </div>
-      <textarea
-        className="w-full max-w-md min-h-[100px] rounded-2xl bg-surface-elevated p-4 placeholder:text-text-secondary mb-4"
-        placeholder="Add a comment (optional)"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-      />
-      <div className="flex flex-wrap gap-2 mb-10 max-w-md justify-center">
-        {TAGS.map((t) => (
+
+      <p className="font-bold mb-3">Add a tip?</p>
+      <div className="flex flex-wrap gap-2 mb-4">
+        {TIP_PRESETS.map((t) => (
           <button
             key={t}
             type="button"
-            onClick={() => toggle(t)}
-            className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-              selected.includes(t) ? 'border-motion-blue' : 'border-border'
+            onClick={() => {
+              setTip(t);
+              setShowCustom(false);
+            }}
+            className={`rounded-xl border-2 px-4 py-2.5 font-bold text-sm ${
+              tip === t ? 'border-purple-500' : 'border-zinc-800'
             }`}
           >
-            {t}
+            {fmt(t)}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => {
+            setTip('custom');
+            setShowCustom(true);
+          }}
+          className={`rounded-xl border-2 px-4 py-2.5 font-bold text-sm ${
+            tip === 'custom' || showCustom ? 'border-purple-500' : 'border-zinc-800'
+          }`}
+        >
+          Custom
+        </button>
       </div>
+      {showCustom ? (
+        <input
+          value={customTip}
+          onChange={(e) => setCustomTip(e.target.value)}
+          placeholder="Enter tip amount"
+          className="w-full rounded-xl bg-zinc-900 px-4 py-3 mb-4 outline-none"
+        />
+      ) : null}
+
+      <div className="flex items-center gap-3 rounded-xl bg-[#1E1033] p-4 mb-6">
+        <span className="text-xl">⛓</span>
+        <div>
+          <p className="font-bold">+{receipt.dvtEarned} DVT tokens earned</p>
+          <p className="text-xs text-zinc-400 mt-0.5">Added to your wallet</p>
+        </div>
+      </div>
+
       <button
         type="button"
         disabled={loading}
         onClick={submit}
-        className="w-full max-w-md rounded-full py-3.5 font-semibold bg-movr-gradient disabled:opacity-50"
+        className="w-full rounded-2xl bg-blue-500 py-3.5 font-bold disabled:opacity-50"
       >
-        {loading ? 'Submitting...' : 'Submit rating'}
+        {loading ? 'Submitting…' : 'Submit & Done'}
       </button>
     </div>
   );

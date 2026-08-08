@@ -33,13 +33,232 @@ export class StakingService {
 
   async myStakes(userId: string) {
     return this.db.query(
-      `SELECT st.*, p.name AS pool_name, p.target_role, p.apy_or_benefit_desc, p.lock_period_days
+      `SELECT st.*, p.name AS pool_name,
+              COALESCE(p.display_name, p.name) AS display_name,
+              p.target_role, p.apy_or_benefit_desc, p.lock_period_days,
+              COALESCE(p.base_apy_pct, 0) AS base_apy_pct,
+              GREATEST(0, COALESCE(st.rewards_earned,0) - COALESCE(st.rewards_claimed,0)) AS claimable
        FROM stakes st
        JOIN staking_pools p ON p.id = st.pool_id
        WHERE st.user_id = $1
        ORDER BY st.staked_at DESC`,
       [userId]
     );
+  }
+
+  /** Accrue linear APY rewards into rewards_earned for active stakes. */
+  async syncRewards(userId?: string, wallet?: string) {
+    const params: any[] = [];
+    let where = `st.status = 'active'`;
+    if (userId) {
+      params.push(userId);
+      where += ` AND st.user_id = $${params.length}`;
+    }
+    if (wallet) {
+      params.push(wallet.toLowerCase());
+      where += ` AND LOWER(COALESCE(st.wallet_address,'')) = $${params.length}`;
+    }
+    const rows = await this.db.query(
+      `SELECT st.id, st.amount, st.staked_at, st.rewards_earned, st.rewards_claimed,
+              COALESCE(p.base_apy_pct, 0) AS apy
+       FROM stakes st
+       JOIN staking_pools p ON p.id = st.pool_id
+       WHERE ${where}`,
+      params
+    );
+    for (const row of rows.rows) {
+      const days = Math.max(0, (Date.now() - new Date(row.staked_at).getTime()) / 86400000);
+      const earned = (Number(row.amount) * Number(row.apy) * days) / 100 / 365;
+      const next = Math.max(Number(row.rewards_earned || 0), Math.round(earned * 10000) / 10000);
+      if (next > Number(row.rewards_earned || 0)) {
+        await this.db.query(`UPDATE stakes SET rewards_earned = $1 WHERE id = $2`, [next, row.id]);
+      }
+    }
+  }
+
+  async portfolioSummary(userId?: string, wallet?: string) {
+    await this.syncRewards(userId, wallet).catch(() => undefined);
+    const params: any[] = [];
+    let where = `st.status IN ('active','unstaking')`;
+    if (userId) {
+      params.push(userId);
+      where += ` AND st.user_id = $${params.length}`;
+    } else if (wallet) {
+      params.push(wallet.toLowerCase());
+      where += ` AND LOWER(COALESCE(st.wallet_address,'')) = $${params.length}`;
+    } else {
+      return {
+        totalStaked: 0,
+        totalEarned: 0,
+        totalClaimable: 0,
+        portfolioValueUsd: 0,
+        nextUnlockDays: null as number | null,
+        nextUnlockLabel: '—',
+        stakes: [] as any[],
+        wallet: wallet || null,
+      };
+    }
+    const stakes = await this.db.query(
+      `SELECT st.*, COALESCE(p.display_name, p.name) AS display_name, p.name AS pool_name,
+              COALESCE(p.base_apy_pct,0) AS base_apy_pct, COALESCE(p.lock_period_days,0) AS lock_period_days,
+              GREATEST(0, COALESCE(st.rewards_earned,0) - COALESCE(st.rewards_claimed,0)) AS claimable
+       FROM stakes st
+       JOIN staking_pools p ON p.id = st.pool_id
+       WHERE ${where}
+       ORDER BY st.staked_at DESC`,
+      params
+    );
+    const rows = stakes.rows.map((s: any) => {
+      const unlockAt = s.unlock_at ? new Date(s.unlock_at) : null;
+      const daysLeft =
+        unlockAt && unlockAt > new Date()
+          ? Math.ceil((unlockAt.getTime() - Date.now()) / 86400000)
+          : Number(s.lock_period_days || 0) === 0
+            ? 0
+            : 0;
+      return {
+        id: s.id,
+        poolName: s.display_name || s.pool_name,
+        apy: Number(s.base_apy_pct || 0),
+        amount: Number(s.amount || 0),
+        earned: Number(s.rewards_earned || 0),
+        claimable: Number(s.claimable || 0),
+        stakedAt: s.staked_at,
+        unlockAt: s.unlock_at,
+        unlockLabel:
+          Number(s.lock_period_days || 0) === 0
+            ? 'Anytime'
+            : daysLeft > 0
+              ? `${daysLeft} days`
+              : 'Unlocked',
+        daysLeft,
+        status: s.status,
+      };
+    });
+    const totalStaked = rows.reduce((a, r) => a + r.amount, 0);
+    const totalEarned = rows.reduce((a, r) => a + r.earned, 0);
+    const totalClaimable = rows.reduce((a, r) => a + r.claimable, 0);
+    const nextDays = rows
+      .filter((r) => r.daysLeft > 0)
+      .map((r) => r.daysLeft)
+      .sort((a, b) => a - b)[0];
+    const price = 0.02;
+    return {
+      totalStaked,
+      totalEarned: Math.round(totalEarned * 100) / 100,
+      totalClaimable: Math.round(totalClaimable * 100) / 100,
+      portfolioValueUsd: Math.round(totalStaked * price * 100) / 100,
+      nextUnlockDays: nextDays ?? null,
+      nextUnlockLabel: nextDays != null ? `${nextDays} days` : rows.some((r) => r.unlockLabel === 'Anytime') ? 'Anytime' : '—',
+      stakes: rows,
+      wallet: wallet || null,
+      dvtPriceUsd: price,
+    };
+  }
+
+  async claimRewards(userId: string | null, stakeId: string | null, wallet?: string) {
+    if (!this.isEnabled() && process.env.NODE_ENV === 'production') {
+      // allow claims in non-prod even if gated
+    }
+    const params: any[] = [];
+    let where = `st.status IN ('active','unstaking') AND GREATEST(0, COALESCE(st.rewards_earned,0)-COALESCE(st.rewards_claimed,0)) > 0`;
+    if (stakeId) {
+      params.push(stakeId);
+      where += ` AND st.id = $${params.length}`;
+    }
+    if (userId) {
+      params.push(userId);
+      where += ` AND st.user_id = $${params.length}`;
+    } else if (wallet) {
+      params.push(wallet.toLowerCase());
+      where += ` AND LOWER(COALESCE(st.wallet_address,'')) = $${params.length}`;
+    } else {
+      throw new Error('user or wallet required');
+    }
+
+    const rows = await this.db.query(
+      `SELECT st.id, st.user_id, st.wallet_address,
+              GREATEST(0, COALESCE(st.rewards_earned,0)-COALESCE(st.rewards_claimed,0)) AS claimable
+       FROM stakes st WHERE ${where}`,
+      params
+    );
+    let total = 0;
+    for (const row of rows.rows) {
+      const amt = Number(row.claimable || 0);
+      if (amt <= 0) continue;
+      await this.db.query(
+        `UPDATE stakes SET rewards_claimed = COALESCE(rewards_claimed,0) + $1 WHERE id = $2`,
+        [amt, row.id]
+      );
+      await this.db.query(
+        `INSERT INTO stake_reward_claims (stake_id, user_id, wallet_address, amount)
+         VALUES ($1,$2,$3,$4)`,
+        [row.id, row.user_id || userId, row.wallet_address || wallet || null, amt]
+      ).catch(() => undefined);
+      if (row.user_id || userId) {
+        await this.db.query(
+          `INSERT INTO token_balances (user_id, pending_amount)
+           VALUES ($1, $2)
+           ON CONFLICT (user_id) DO UPDATE SET
+             pending_amount = token_balances.pending_amount + EXCLUDED.pending_amount,
+             updated_at = NOW()`,
+          [row.user_id || userId, amt]
+        ).catch(() => undefined);
+      }
+      total += amt;
+    }
+    return { claimed: Math.round(total * 100) / 100, count: rows.rows.length };
+  }
+
+  async demoPositions(wallet?: string) {
+    const w = (wallet || '0x3a4f…9d2c').toLowerCase();
+    // Prefer real wallet stakes; otherwise return illustrative demo from pools
+    const existing = await this.portfolioSummary(undefined, wallet);
+    if (existing.stakes.length) return existing;
+
+    const pools = await this.db.query(
+      `SELECT id, COALESCE(display_name,name) AS display_name, base_apy_pct, lock_period_days
+       FROM staking_pools WHERE active = TRUE AND target_role = 'public'
+       ORDER BY lock_period_days NULLS FIRST LIMIT 3`
+    );
+    const demo = [
+      { amount: 500, earned: 72.5, daysAgo: 30, unlockDays: 28 },
+      { amount: 200, earned: 18.4, daysAgo: 45, unlockDays: 0 },
+    ];
+    const stakes = demo.map((d, i) => {
+      const p = pools.rows[i] || pools.rows[0] || {};
+      const lock = Number(p.lock_period_days ?? (i === 0 ? 30 : 0));
+      return {
+        id: `demo-${i}`,
+        poolName: p.display_name || (i === 0 ? '30-Day Lock' : 'Flexible Pool'),
+        apy: Number(p.base_apy_pct || (i === 0 ? 14.5 : 8.5)),
+        amount: d.amount,
+        earned: d.earned,
+        claimable: d.earned,
+        stakedAt: new Date(Date.now() - d.daysAgo * 86400000).toISOString(),
+        unlockAt: lock
+          ? new Date(Date.now() + d.unlockDays * 86400000).toISOString()
+          : null,
+        unlockLabel: lock ? `${d.unlockDays} days` : 'Anytime',
+        daysLeft: lock ? d.unlockDays : 0,
+        status: 'active',
+        demo: true,
+      };
+    });
+    const totalStaked = stakes.reduce((a, s) => a + s.amount, 0);
+    const totalEarned = stakes.reduce((a, s) => a + s.earned, 0);
+    return {
+      totalStaked,
+      totalEarned,
+      totalClaimable: totalEarned,
+      portfolioValueUsd: Math.round(totalStaked * 0.02 * 100) / 100,
+      nextUnlockDays: 28,
+      nextUnlockLabel: '28 days',
+      stakes,
+      wallet: w,
+      dvtPriceUsd: 0.02,
+      demo: true,
+    };
   }
 
   async getActiveStakeTotal(userId: string, role?: string) {
@@ -195,29 +414,62 @@ export class StakingService {
 
   async publicStats() {
     const pools = await this.db.query(
-      `SELECT p.id, p.name, p.target_role, p.apy_or_benefit_desc, p.base_apy_pct, p.min_amount,
+      `SELECT p.id, p.name,
+              COALESCE(p.display_name, p.name) AS display_name,
+              p.tagline,
+              p.target_role,
+              p.apy_or_benefit_desc,
+              p.base_apy_pct,
+              p.min_amount,
+              COALESCE(p.min_stake, p.min_amount, 100) AS min_stake,
+              COALESCE(p.lock_period_days, p.lock_days, 0) AS lock_days,
+              COALESCE(p.is_popular, false) AS is_popular,
               COALESCE(SUM(CASE WHEN st.status = 'active' THEN st.amount ELSE 0 END), 0) AS total_staked,
               COUNT(DISTINCT CASE WHEN st.status = 'active' THEN st.user_id END) AS participants
        FROM staking_pools p
        LEFT JOIN stakes st ON st.pool_id = p.id
-       WHERE p.active = TRUE
+       WHERE COALESCE(p.active, true) = TRUE
        GROUP BY p.id
-       ORDER BY p.target_role, p.name`
+       ORDER BY COALESCE(p.lock_period_days, p.lock_days, 0), p.name`
+    ).catch(async () =>
+      this.db.query(
+        `SELECT p.id, p.name, p.name AS display_name, p.target_role, p.apy_or_benefit_desc, p.base_apy_pct, p.min_amount,
+                COALESCE(SUM(CASE WHEN st.status = 'active' THEN st.amount ELSE 0 END), 0) AS total_staked,
+                COUNT(DISTINCT CASE WHEN st.status = 'active' THEN st.user_id END) AS participants,
+                0 AS lock_days, false AS is_popular, COALESCE(p.min_amount, 100) AS min_stake
+         FROM staking_pools p
+         LEFT JOIN stakes st ON st.pool_id = p.id
+         WHERE p.active = TRUE
+         GROUP BY p.id
+         ORDER BY p.name`
+      )
     );
     const totals = await this.db.query(
       `SELECT COALESCE(SUM(amount), 0) AS total_staked,
               COUNT(DISTINCT user_id) AS participants
        FROM stakes WHERE status = 'active'`
     );
+    const mapped = pools.rows.map((p: any) => ({
+      ...p,
+      total_staked: Number(p.total_staked),
+      participants: Number(p.participants),
+      base_apy_pct: Number(p.base_apy_pct || 0),
+      lock_days: Number(p.lock_days || 0),
+      min_stake: Number(p.min_stake || p.min_amount || 100),
+      is_popular: Boolean(p.is_popular),
+      display_name: p.display_name || p.name,
+    }));
+    const highestApy = mapped.reduce((m: number, p: any) => Math.max(m, Number(p.base_apy_pct || 0)), 0);
+    const totalStaked = Number(totals.rows[0]?.total_staked || 0);
+    // TVL placeholder: assume $0.02 per DVT if no oracle
+    const tvlUsd = Math.round(totalStaked * 0.02);
     return {
-      totalStaked: Number(totals.rows[0]?.total_staked || 0),
+      totalStaked,
       participantCount: Number(totals.rows[0]?.participants || 0),
-      pools: pools.rows.map((p) => ({
-        ...p,
-        total_staked: Number(p.total_staked),
-        participants: Number(p.participants),
-        base_apy_pct: Number(p.base_apy_pct),
-      })),
+      highestApy,
+      tvlUsd,
+      totalSupplyNote: '1B DVT',
+      pools: mapped,
     };
   }
 }

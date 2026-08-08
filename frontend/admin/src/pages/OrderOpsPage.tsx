@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
 import OpsNotesPanel from '../components/OpsNotesPanel';
 import { formatCurrency } from '../lib/currency';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -85,7 +86,7 @@ export default function OrderOpsPage() {
         <button
           type="button"
           onClick={() => navigate(`/orders/${encodeURIComponent(lookup.trim())}`)}
-          style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--motion-blue)', color: '#fff', border: 'none' }}
+          style={adminBtn.primary}
         >
           Load
         </button>
@@ -101,7 +102,7 @@ export default function OrderOpsPage() {
           <p>Status: {order.status}</p>
           <p>Total: {formatCurrency(order.total, order.currency)}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            <button type="button" onClick={forceCancel} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--error)', color: '#fff', border: 'none' }}>
+            <button type="button" onClick={forceCancel} style={adminBtn.danger}>
               Force cancel
             </button>
             <input
@@ -110,7 +111,7 @@ export default function OrderOpsPage() {
               placeholder="status"
               style={{ padding: 8, borderRadius: 8, border: '1px solid var(--border)' }}
             />
-            <button type="button" onClick={overrideStatus} style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--surface)', color: 'var(--pure-white)', border: '1px solid var(--border)' }}>
+            <button type="button" onClick={overrideStatus} style={adminBtn.secondary}>
               Override status
             </button>
           </div>

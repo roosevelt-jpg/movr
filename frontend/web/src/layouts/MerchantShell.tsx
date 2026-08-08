@@ -11,14 +11,19 @@ import {
   BarChart3,
   Menu,
   X,
+  Store,
+  Ticket,
 } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
 
 const NAV = [
-  { to: '/merchant/dashboard', label: 'Orders', icon: LayoutList, match: ['/merchant/dashboard', '/merchant/orders'] },
-  { to: '/merchant/products', label: 'Products', icon: Package, match: ['/merchant/products', '/merchant/store'] },
-  { to: '/merchant/payouts', label: 'Earnings', icon: CreditCard, match: ['/merchant/payouts'] },
   { to: '/merchant/analytics', label: 'Analytics', icon: BarChart3, match: ['/merchant/analytics'] },
+  { to: '/merchant/dashboard', label: 'Orders', icon: LayoutList, match: ['/merchant/dashboard', '/merchant/orders'] },
+  { to: '/merchant/setup', label: 'Setup', icon: Store, match: ['/merchant/setup'] },
+  { to: '/merchant/store', label: 'My Store', icon: Store, match: ['/merchant/store'] },
+  { to: '/merchant/products', label: 'Products', icon: Package, match: ['/merchant/products'] },
+  { to: '/merchant/coupons', label: 'Coupons', icon: Ticket, match: ['/merchant/coupons'] },
+  { to: '/merchant/payouts', label: 'Payouts', icon: CreditCard, match: ['/merchant/payouts'] },
   { to: '/merchant/settings', label: 'Settings', icon: Settings, match: ['/merchant/settings'] },
 ];
 
@@ -62,16 +67,9 @@ export default function MerchantShell({
           );
         })}
         <Link
-          to="/merchant/store"
-          onClick={onNavigate}
-          className="block text-white/45 text-sm px-3 pt-6 hover:text-white"
-        >
-          Store profile
-        </Link>
-        <Link
           to="/merchant/staking"
           onClick={onNavigate}
-          className="block text-white/45 text-sm px-3 hover:text-white"
+          className="block text-white/45 text-sm px-3 pt-6 hover:text-white"
         >
           Staking
         </Link>

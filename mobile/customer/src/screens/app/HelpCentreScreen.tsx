@@ -3,32 +3,46 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   TextInput,
   ScrollView,
+  Linking,
 } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-type Category = {
-  slug: string;
-  title: string;
-  description: string;
-  icon_key: string;
-};
+function authHeaders(): Record<string, string> {
+  const token =
+    (globalThis as any).__MOVR_TOKEN__ ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
-const ICON: Record<string, string> = {
+const TOPIC_ICON: Record<string, string> = {
   car: '🚗',
-  package: '📦',
+  ride: '🚗',
   card: '💳',
+  pay: '💳',
+  package: '📦',
+  order: '📦',
+  chain: '⛓',
+  dvt: '⛓',
 };
 
-/** Mobile Help centre — live help_categories + Movr AI entry. */
+const FALLBACK_TOPICS = [
+  { slug: 'ride', title: 'Ride Issues', icon_key: 'car' },
+  { slug: 'pay', title: 'Payments', icon_key: 'card' },
+  { slug: 'order', title: 'Orders & Delivery', icon_key: 'package' },
+  { slug: 'dvt', title: 'DVT Tokens', icon_key: 'chain' },
+];
+
+/** Help Center — search, topics, tickets, contact (mockup). */
 export default function HelpCentreScreen({
   onOpenCategory,
-  onOpenAi,
   onOpenSupport,
   onBack,
 }: {
@@ -38,8 +52,16 @@ export default function HelpCentreScreen({
   onBack?: () => void;
 }) {
   const [q, setQ] = useState('');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [topics, setTopics] = useState(FALLBACK_TOPICS);
+  const [tickets, setTickets] = useState<any[]>([
+    {
+      subject: 'Payment not received',
+      status: 'In Review',
+      ticketRef: 'MVR-TKT-4821',
+      openedLabel: 'Opened 2 days ago',
+    },
+  ]);
+  const [msg, setMsg] = useState('');
 
   useEffect(() => {
     const url = q.trim()
@@ -48,109 +70,214 @@ export default function HelpCentreScreen({
     const t = setTimeout(() => {
       fetch(url)
         .then((r) => r.json())
-        .then((body) => setCategories(body?.data || []))
-        .catch(() => setCategories([]))
-        .finally(() => setLoading(false));
+        .then((body) => {
+          const rows = body?.data || [];
+          if (Array.isArray(rows) && rows.length) {
+            setTopics(
+              rows.map((c: any) => ({
+                slug: c.slug,
+                title: c.title,
+                icon_key: c.icon_key || c.slug,
+              }))
+            );
+          }
+        })
+        .catch(() => undefined);
     }, q.trim() ? 200 : 0);
     return () => clearTimeout(t);
   }, [q]);
 
+  useEffect(() => {
+    fetch(`${API}/me/support/tickets`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Array.isArray(j?.data?.tickets) && j.data.tickets.length) {
+          setTickets(j.data.tickets);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const raiseTicket = async () => {
+    setMsg('');
+    try {
+      const res = await fetch(`${API}/me/support/tickets`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ subject: 'New support request' }),
+      });
+      const j = await res.json();
+      setMsg(j?.data?.ticketRef ? `Ticket ${j.data.ticketRef} created` : 'Ticket created');
+      const list = await fetch(`${API}/me/support/tickets`, { headers: authHeaders() }).then((r) =>
+        r.json()
+      );
+      if (Array.isArray(list?.data?.tickets)) setTickets(list.data.tickets);
+    } catch {
+      setMsg('Could not create ticket');
+    }
+  };
+
+  const grid = topics.slice(0, 4);
+  while (grid.length < 4) {
+    grid.push(FALLBACK_TOPICS[grid.length]);
+  }
+
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
       <View style={styles.header}>
-        <Text style={styles.brand}>Movr</Text>
         {onBack ? (
           <Pressable onPress={onBack}>
-            <Text style={styles.back}>Close</Text>
+            <Text style={styles.back}>←</Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
-      <TextInput
-        style={styles.search}
-        placeholder="Search help articles"
-        placeholderTextColor="#71717A"
-        value={q}
-        onChangeText={setQ}
-      />
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.heading}>How can we help?</Text>
-        {onOpenAi || onOpenSupport ? (
-          <View style={styles.ctaRow}>
-            {onOpenAi ? (
-              <Pressable style={styles.ctaPrimary} onPress={onOpenAi}>
-                <Text style={styles.ctaPrimaryText}>Talk to Movr AI</Text>
-              </Pressable>
-            ) : null}
-            {onOpenSupport ? (
-              <Pressable style={styles.ctaGhost} onPress={onOpenSupport}>
-                <Text style={styles.ctaGhostText}>Live support</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-        {loading ? <Text style={styles.meta}>Loading…</Text> : null}
-        {categories.map((c) => (
+      <Text style={styles.title}>Help Center</Text>
+      <Text style={styles.sub}>How can we help you today?</Text>
+
+      <View style={styles.searchBox}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.search}
+          placeholder="Search help articles..."
+          placeholderTextColor="#71717A"
+          value={q}
+          onChangeText={setQ}
+        />
+      </View>
+
+      <Text style={styles.section}>POPULAR TOPICS</Text>
+      <View style={styles.grid}>
+        {grid.map((t) => (
           <Pressable
-            key={c.slug}
-            style={styles.card}
-            onPress={() => onOpenCategory?.(c.slug)}
+            key={t.slug}
+            style={styles.topic}
+            onPress={() => onOpenCategory?.(t.slug)}
           >
-            <Text style={styles.cardIcon}>{ICON[c.icon_key] || '•'}</Text>
-            <Text style={styles.cardTitle}>{c.title}</Text>
-            <Text style={styles.cardBody}>{c.description}</Text>
+            <Text style={styles.topicIcon}>{TOPIC_ICON[t.icon_key] || TOPIC_ICON[t.slug] || '•'}</Text>
+            <Text style={styles.topicTitle}>{t.title}</Text>
           </Pressable>
         ))}
-      </ScrollView>
-    </View>
+      </View>
+
+      <Text style={styles.section}>YOUR TICKETS</Text>
+      {tickets.map((t) => (
+        <View key={t.id || t.ticketRef} style={styles.ticket}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ticketTitle}>{t.subject}</Text>
+            <Text style={styles.ticketMeta}>
+              Ticket #{t.ticketRef} · {t.openedLabel}
+            </Text>
+          </View>
+          <View style={styles.status}>
+            <Text style={styles.statusTxt}>{t.status}</Text>
+          </View>
+        </View>
+      ))}
+
+      <Text style={styles.section}>CONTACT US</Text>
+      <Pressable style={styles.contact} onPress={onOpenSupport}>
+        <Text style={styles.contactIcon}>💬</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactTitle}>Live Chat</Text>
+          <Text style={styles.contactSub}>Usually replies in 5 min</Text>
+        </View>
+        <View style={styles.online} />
+      </Pressable>
+      <Pressable
+        style={styles.contact}
+        onPress={() => Linking.openURL('mailto:support@movr.app').catch(() => undefined)}
+      >
+        <Text style={styles.contactIcon}>✉️</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactTitle}>Email Support</Text>
+          <Text style={styles.contactSub}>support@movr.app</Text>
+        </View>
+      </Pressable>
+      <Pressable style={styles.contact} onPress={raiseTicket}>
+        <Text style={styles.contactIcon}>✏️</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.contactTitle}>Raise a Ticket</Text>
+          <Text style={styles.contactSub}>For complex issues</Text>
+        </View>
+      </Pressable>
+
+      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000', paddingHorizontal: spacing[4], paddingTop: spacing[4] },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  brand: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
-  back: { color: '#A1A1AA', fontWeight: '600' },
-  search: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: '#333',
-    color: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: spacing[6],
+  root: { flex: 1, backgroundColor: '#000', paddingHorizontal: spacing[4] },
+  header: { paddingTop: spacing[3], marginBottom: 8 },
+  back: { color: '#FFF', fontSize: 22, fontWeight: '700' },
+  title: { color: '#FFF', fontSize: 28, fontWeight: '800' },
+  sub: { color: '#A1A1AA', marginTop: 6, marginBottom: spacing[4] },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginBottom: spacing[5],
   },
-  body: { paddingBottom: 40 },
-  heading: {
-    color: '#FFFFFF',
-    fontSize: 32,
+  searchIcon: { marginRight: 8 },
+  search: { flex: 1, color: '#FFF', paddingVertical: 14, fontSize: 15 },
+  section: {
+    color: '#71717A',
+    fontSize: 11,
     fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: spacing[4],
+    letterSpacing: 1,
+    marginBottom: 10,
   },
-  ctaRow: { gap: 10, marginBottom: spacing[5] },
-  ctaPrimary: {
-    backgroundColor: '#0055FF',
-    borderRadius: radius.pill,
-    paddingVertical: 14,
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: spacing[5] },
+  topic: {
+    width: '47%',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 16,
+    minHeight: 88,
+  },
+  topicIcon: { fontSize: 22, marginBottom: 8 },
+  topicTitle: { color: '#FFF', fontWeight: '700' },
+  ticket: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: spacing[5],
+    gap: 10,
   },
-  ctaPrimaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  ctaGhost: {
+  ticketTitle: { color: '#FFF', fontWeight: '700' },
+  ticketMeta: { color: '#71717A', fontSize: 12, marginTop: 4 },
+  status: {
     borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: radius.pill,
-    paddingVertical: 14,
+    borderColor: '#F97316',
+    backgroundColor: '#431407',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusTxt: { color: '#FB923C', fontWeight: '700', fontSize: 11 },
+  contact: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+    gap: 12,
   },
-  ctaGhostText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
-  meta: { color: '#A1A1AA', textAlign: 'center', marginBottom: 12 },
-  card: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: spacing[5],
-    marginBottom: spacing[3],
+  contactIcon: { fontSize: 22 },
+  contactTitle: { color: '#FFF', fontWeight: '700' },
+  contactSub: { color: '#71717A', fontSize: 12, marginTop: 2 },
+  online: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
   },
-  cardIcon: { fontSize: 20, marginBottom: 10 },
-  cardTitle: { color: '#FFFFFF', fontWeight: '700', fontSize: 17 },
-  cardBody: { color: '#A1A1AA', marginTop: 6, lineHeight: 20 },
+  msg: { color: '#A78BFA', textAlign: 'center', marginTop: 12 },
 });

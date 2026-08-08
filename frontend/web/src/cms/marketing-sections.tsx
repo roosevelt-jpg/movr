@@ -15,8 +15,47 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { StoreBadgeButton } from '../components/StoreBadges';
+import PhoneMock from '../components/PhoneMock';
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
-import { resolveCmsHeroMedia } from '../brand/assets';
+import { BRAND, resolveCmsHeroMedia } from '../brand/assets';
+import { mediaUrl } from '../lib/media';
+
+const PRODUCT_BANNER_BY_TITLE: Record<string, string> = {
+  ride: BRAND.rideSedan,
+  shop: BRAND.shopPartner,
+  deliver: BRAND.courierMoto,
+  rentals: BRAND.rideSedan,
+};
+
+const TESTIMONIAL_AVATAR_BY_NAME: Record<string, string> = {
+  ama: '/brand/testimonials/ama.jpg',
+  enoch: '/brand/testimonials/enoch.jpg',
+  'boutique 22': '/brand/testimonials/boutique22.jpg',
+};
+
+/** Prefer CMS upload; fall back to brand photo by product title when unset. */
+function resolveProductBanner(item: any): string {
+  if (Object.prototype.hasOwnProperty.call(item || {}, 'imageUrl')) {
+    return mediaUrl(String(item.imageUrl || '').trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(item || {}, 'bannerUrl')) {
+    return mediaUrl(String(item.bannerUrl || '').trim());
+  }
+  const key = String(item?.title || '').toLowerCase().trim();
+  return mediaUrl(PRODUCT_BANNER_BY_TITLE[key] || '');
+}
+
+/** Prefer CMS avatar; fall back to stock portrait by name when unset. */
+function resolveTestimonialAvatar(item: any): string {
+  if (Object.prototype.hasOwnProperty.call(item || {}, 'avatarUrl')) {
+    return mediaUrl(String(item.avatarUrl || '').trim());
+  }
+  if (Object.prototype.hasOwnProperty.call(item || {}, 'imageUrl')) {
+    return mediaUrl(String(item.imageUrl || '').trim());
+  }
+  const key = String(item?.name || '').toLowerCase().trim();
+  return mediaUrl(TESTIMONIAL_AVATAR_BY_NAME[key] || '');
+}
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -206,6 +245,7 @@ export function CmsProductGrid({ payload }: { payload: any }) {
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {(payload.items || []).map((c: any) => {
             const Icon = ICONS[c.iconKey] || Car;
+            const banner = resolveProductBanner(c);
             return (
               <button
                 key={c.title}
@@ -213,13 +253,19 @@ export function CmsProductGrid({ payload }: { payload: any }) {
                 onClick={() => go(navigate, c.href)}
                 className="mkt-product text-left"
               >
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 mb-5 overflow-hidden">
-                  {c.imageUrl ? (
-                    <img src={c.imageUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
+                {banner ? (
+                  <div className="-mx-6 -mt-6 mb-5 overflow-hidden rounded-t-2xl">
+                    <img
+                      src={banner}
+                      alt=""
+                      className="w-full h-28 sm:h-32 object-cover"
+                    />
+                  </div>
+                ) : (
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 mb-5 overflow-hidden">
                     <Icon size={20} className="mkt-ink" />
-                  )}
-                </span>
+                  </span>
+                )}
                 <p className="text-xs tracking-[0.12em] uppercase mkt-soft mb-2">
                   {c.eyebrow || c.category}
                 </p>
@@ -269,24 +315,35 @@ export function CmsTestimonials({ payload }: { payload: any }) {
         {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
         <h2 className="mkt-h2 mt-4 max-w-3xl">{payload.heading}</h2>
         <div className="mt-12 grid md:grid-cols-3 gap-6">
-          {(payload.items || payload.quotes || []).map((q: any) => (
-            <blockquote key={q.name || q.quote} className="mkt-quote">
-              <p className="mkt-ink leading-relaxed text-base">“{q.quote || q.body}”</p>
-              <footer className="mt-6 flex items-center gap-3">
-                {q.avatarUrl || q.imageUrl ? (
-                  <img
-                    src={q.avatarUrl || q.imageUrl}
-                    alt=""
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : null}
-                <div>
-                  <p className="font-semibold mkt-ink">{q.name}</p>
-                  <p className="text-sm mkt-soft mt-0.5">{q.role}</p>
-                </div>
-              </footer>
-            </blockquote>
-          ))}
+          {(payload.items || payload.quotes || []).map((q: any) => {
+            const avatar = resolveTestimonialAvatar(q);
+            const initial = String(q.name || '?').trim().charAt(0).toUpperCase() || '?';
+            return (
+              <blockquote key={q.name || q.quote} className="mkt-quote">
+                <p className="mkt-ink leading-relaxed text-base">“{q.quote || q.body}”</p>
+                <footer className="mt-6 flex items-center gap-3">
+                  {avatar ? (
+                    <img
+                      src={avatar}
+                      alt={q.name || ''}
+                      className="h-11 w-11 rounded-full object-cover shrink-0 ring-1 ring-black/10"
+                    />
+                  ) : (
+                    <span
+                      className="h-11 w-11 rounded-full shrink-0 flex items-center justify-center text-sm font-semibold bg-movr-gradient text-white"
+                      aria-hidden
+                    >
+                      {initial}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-semibold mkt-ink">{q.name}</p>
+                    <p className="text-sm mkt-soft mt-0.5">{q.role}</p>
+                  </div>
+                </footer>
+              </blockquote>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -297,6 +354,7 @@ export function CmsFinalCta({ payload, pageSlug }: { payload: any; pageSlug?: st
   const navigate = useNavigate();
   const media = resolveCmsHeroMedia(payload, pageSlug);
   const hasMedia = Boolean(media.imageUrl || media.videoUrl);
+  const showPhone = payload.showPhoneMock !== false;
   return (
     <section className="mkt-section pb-24">
       <div className="mkt-shell">
@@ -311,43 +369,54 @@ export function CmsFinalCta({ payload, pageSlug }: { payload: any; pageSlug?: st
             imageOpacity={media.imageOpacity}
             overlayOpacity={media.overlayOpacity}
           />
-          <div className="relative">
-            <h2 className="mkt-h2 max-w-2xl">{payload.heading}</h2>
-            {payload.body ? (
-              <p className="mt-4 mkt-muted max-w-xl leading-relaxed">{payload.body}</p>
-            ) : null}
-            <div className="mt-8 flex flex-wrap gap-3">
-              {payload.primaryCta ? (
-                <button
-                  type="button"
-                  onClick={() => go(navigate, payload.primaryCta.href)}
-                  className="mkt-btn-primary"
-                >
-                  {payload.primaryCta.label}
-                </button>
+          <div
+            className={`relative grid gap-10 items-center ${
+              showPhone ? 'lg:grid-cols-[1.1fr_0.9fr]' : ''
+            }`}
+          >
+            <div>
+              <h2 className="mkt-h2 max-w-2xl">{payload.heading}</h2>
+              {payload.body ? (
+                <p className="mt-4 mkt-muted max-w-xl leading-relaxed">{payload.body}</p>
               ) : null}
-              {payload.secondaryCta ? (
-                <button
-                  type="button"
-                  onClick={() => go(navigate, payload.secondaryCta.href)}
-                  className="mkt-btn-ghost"
-                >
-                  {payload.secondaryCta.label}
-                </button>
+              <div className="mt-8 flex flex-wrap gap-3">
+                {payload.primaryCta ? (
+                  <button
+                    type="button"
+                    onClick={() => go(navigate, payload.primaryCta.href)}
+                    className="mkt-btn-primary"
+                  >
+                    {payload.primaryCta.label}
+                  </button>
+                ) : null}
+                {payload.secondaryCta ? (
+                  <button
+                    type="button"
+                    onClick={() => go(navigate, payload.secondaryCta.href)}
+                    className="mkt-btn-ghost"
+                  >
+                    {payload.secondaryCta.label}
+                  </button>
+                ) : null}
+              </div>
+              {payload.note ? <p className="mt-5 text-sm mkt-soft">{payload.note}</p> : null}
+              {payload.storeButtons?.length ? (
+                <div className="mt-8 flex flex-wrap gap-3">
+                  {payload.storeButtons.map((b: any) => (
+                    <StoreBadgeButton
+                      key={b.label}
+                      label={b.label}
+                      store={b.store}
+                      href={b.href}
+                      onClick={() => go(navigate, b.href)}
+                    />
+                  ))}
+                </div>
               ) : null}
             </div>
-            {payload.note ? <p className="mt-5 text-sm mkt-soft">{payload.note}</p> : null}
-            {payload.storeButtons?.length ? (
-              <div className="mt-8 flex flex-wrap gap-3">
-                {payload.storeButtons.map((b: any) => (
-                  <StoreBadgeButton
-                    key={b.label}
-                    label={b.label}
-                    store={b.store}
-                    href={b.href}
-                    onClick={() => go(navigate, b.href)}
-                  />
-                ))}
+            {showPhone ? (
+              <div className="flex justify-center lg:justify-end">
+                <PhoneMock screenUrl={payload.phoneImageUrl || payload.phoneScreenUrl} />
               </div>
             ) : null}
           </div>

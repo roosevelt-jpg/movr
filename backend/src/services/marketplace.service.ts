@@ -173,41 +173,104 @@ export class MarketplaceService {
     let filter = '';
     if (category && category !== 'all') {
       values.push(category);
-      filter = ` AND (c.slug = $${values.length} OR c.id::text = $${values.length})`;
+      filter = ` AND (
+        LOWER(COALESCE(p.menu_category, '')) = LOWER($${values.length})
+        OR EXISTS (
+          SELECT 1 FROM product_categories c
+          WHERE c.id = p.category_id AND (LOWER(c.slug) = LOWER($${values.length}) OR LOWER(c.name) = LOWER($${values.length}))
+        )
+      )`;
     }
     const products = await this.db.query(
       `SELECT p.*,
-              c.id AS category_id,
-              c.name AS category_name,
-              c.slug AS category_slug
+              COALESCE(p.menu_category, c.name, 'All') AS menu_category,
+              COALESCE(p.is_popular, p.is_featured, false) AS is_popular,
+              COALESCE(p.emoji, '🍽️') AS emoji
        FROM products p
        LEFT JOIN product_categories c ON c.id = p.category_id
-       WHERE p.store_id = $1 AND p.in_stock = TRUE${filter}
-       ORDER BY c.sort_order NULLS LAST, p.name`,
+       WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ${filter}
+       ORDER BY COALESCE(p.is_popular, p.is_featured, false) DESC, p.name ASC`,
       values
+    ).catch(() =>
+      this.db.query(
+        `SELECT p.* FROM products p WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ORDER BY p.name`,
+        [storeId]
+      )
     );
-    const variants = await this.db.query(
-      `SELECT pv.* FROM product_variants pv
-       JOIN products p ON p.id = pv.product_id
-       WHERE p.store_id = $1`,
-      [storeId]
-    );
+
+    const ids = products.rows.map((p: any) => p.id);
+    let variants: any[] = [];
+    let addons: any[] = [];
+    if (ids.length) {
+      const v = await this.db.query(
+        `SELECT * FROM product_variants WHERE product_id = ANY($1::uuid[])`,
+        [ids]
+      ).catch(() => ({ rows: [] as any[] }));
+      variants = v.rows;
+      const a = await this.db
+        .query(
+          `SELECT * FROM product_addons
+           WHERE product_id = ANY($1::uuid[]) AND COALESCE(is_active, TRUE) = TRUE
+           ORDER BY sort_order ASC, name ASC`,
+          [ids]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      addons = a.rows;
+    }
     const byProduct: Record<string, any[]> = {};
-    for (const v of variants.rows) {
+    const addonsByProduct: Record<string, any[]> = {};
+    for (const v of variants) {
       byProduct[v.product_id] = byProduct[v.product_id] || [];
       byProduct[v.product_id].push(v);
     }
-    const categories = await this.db.query(
-      `SELECT DISTINCT c.id, c.name, c.slug, c.icon_url, c.sort_order
-       FROM products p
-       JOIN product_categories c ON c.id = p.category_id
-       WHERE p.store_id = $1 AND p.in_stock = TRUE AND c.is_active = TRUE
-       ORDER BY c.sort_order ASC, c.name ASC`,
-      [storeId]
-    );
+    for (const a of addons) {
+      addonsByProduct[a.product_id] = addonsByProduct[a.product_id] || [];
+      addonsByProduct[a.product_id].push({
+        id: a.id,
+        name: a.name,
+        priceDelta: Number(a.price_delta || 0),
+        price_delta: Number(a.price_delta || 0),
+      });
+    }
+
+    const menuCats = await this.db
+      .query(
+        `SELECT DISTINCT menu_category AS name
+         FROM products WHERE store_id = $1 AND menu_category IS NOT NULL
+         ORDER BY menu_category`,
+        [storeId]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    const categories = menuCats.rows.length
+      ? [{ id: 'all', name: 'All', slug: 'all' }, ...menuCats.rows.map((r: any) => ({
+          id: r.name,
+          name: r.name,
+          slug: String(r.name).toLowerCase(),
+        }))]
+      : (
+          await this.db.query(
+            `SELECT DISTINCT c.id, c.name, c.slug, c.icon_url, c.sort_order
+             FROM products p
+             JOIN product_categories c ON c.id = p.category_id
+             WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE AND c.is_active = TRUE
+             ORDER BY c.sort_order ASC, c.name ASC`,
+            [storeId]
+          ).catch(() => ({ rows: [] as any[] }))
+        ).rows;
+
     return {
-      products: products.rows.map((p) => ({ ...p, variants: byProduct[p.id] || [] })),
-      categories: categories.rows,
+      products: products.rows.map((p: any) => ({
+        ...p,
+        variants: byProduct[p.id] || [],
+        addons: addonsByProduct[p.id] || [],
+        rating: Number(p.rating || 4.8),
+        reviewCount: Number(p.review_count || 0),
+        merchantLabel: p.merchant_label || null,
+        longDescription: p.long_description || p.description || null,
+        available: p.in_stock !== false,
+      })),
+      categories,
     };
   }
 
@@ -227,15 +290,43 @@ export class MarketplaceService {
 
   async addCartItem(
     userId: string,
-    data: { storeId: string; productId: string; variantId?: string; quantity?: number }
+    data: {
+      storeId: string;
+      productId: string;
+      variantId?: string;
+      quantity?: number;
+      addonIds?: string[];
+    }
   ) {
     const cart = await this.getOrCreateCart(userId, data.storeId);
     const qty = data.quantity || 1;
+    const addonIds = Array.isArray(data.addonIds)
+      ? data.addonIds.filter(Boolean)
+      : [];
+    let addonTotal = 0;
+    if (addonIds.length) {
+      const sum = await this.db
+        .query(
+          `SELECT COALESCE(SUM(price_delta), 0)::float AS total
+           FROM product_addons WHERE id = ANY($1::uuid[]) AND product_id = $2`,
+          [addonIds, data.productId]
+        )
+        .catch(() => ({ rows: [{ total: 0 }] }));
+      addonTotal = Number(sum.rows[0]?.total || 0);
+    }
     const existing = await this.db.query(
       `SELECT * FROM cart_items
        WHERE cart_id = $1 AND product_id = $2
-         AND COALESCE(variant_id::text, '') = COALESCE($3::text, '')`,
-      [cart.id, data.productId, data.variantId || null]
+         AND COALESCE(variant_id::text, '') = COALESCE($3::text, '')
+         AND COALESCE(addon_ids::text, '{}') = COALESCE($4::uuid[], '{}')::text`,
+      [cart.id, data.productId, data.variantId || null, addonIds]
+    ).catch(() =>
+      this.db.query(
+        `SELECT * FROM cart_items
+         WHERE cart_id = $1 AND product_id = $2
+           AND COALESCE(variant_id::text, '') = COALESCE($3::text, '')`,
+        [cart.id, data.productId, data.variantId || null]
+      )
     );
     if (existing.rows[0]) {
       return this.db.query(
@@ -243,11 +334,19 @@ export class MarketplaceService {
         [qty, existing.rows[0].id]
       );
     }
-    return this.db.query(
-      `INSERT INTO cart_items (cart_id, product_id, variant_id, quantity)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [cart.id, data.productId, data.variantId || null, qty]
-    );
+    return this.db
+      .query(
+        `INSERT INTO cart_items (cart_id, product_id, variant_id, quantity, addon_ids, addon_total)
+         VALUES ($1, $2, $3, $4, $5::uuid[], $6) RETURNING *`,
+        [cart.id, data.productId, data.variantId || null, qty, addonIds, addonTotal]
+      )
+      .catch(() =>
+        this.db.query(
+          `INSERT INTO cart_items (cart_id, product_id, variant_id, quantity)
+           VALUES ($1, $2, $3, $4) RETURNING *`,
+          [cart.id, data.productId, data.variantId || null, qty]
+        )
+      );
   }
 
   async updateCartItem(userId: string, itemId: string, quantity: number) {
@@ -294,15 +393,19 @@ export class MarketplaceService {
       [cart.rows[0].id]
     );
 
-    const lines = items.rows.map((i) => ({
-      ...i,
-      name: i.name,
-      product_name: i.name,
-      variant_label: i.variant_name || '',
-      unit_price: Number(i.price) + Number(i.price_delta || 0),
-      unitPrice: Number(i.price) + Number(i.price_delta || 0),
-      lineTotal: (Number(i.price) + Number(i.price_delta || 0)) * Number(i.quantity),
-    }));
+    const lines = items.rows.map((i) => {
+      const unit =
+        Number(i.price) + Number(i.price_delta || 0) + Number(i.addon_total || 0);
+      return {
+        ...i,
+        name: i.name,
+        product_name: i.name,
+        variant_label: i.variant_name || '',
+        unit_price: unit,
+        unitPrice: unit,
+        lineTotal: unit * Number(i.quantity),
+      };
+    });
     const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
     const deliveryFee = await this.deliveryFee();
     return { ...cart.rows[0], items: lines, subtotal, delivery_fee: deliveryFee };
@@ -349,13 +452,27 @@ export class MarketplaceService {
       data.couponCode || '',
       cart.subtotal
     );
-    const total = Math.max(0, cart.subtotal + deliveryFee - discount);
+    // Platform DVT loyalty discount (mock oracle: 100 NGN / ~1.5% of subtotal, min 0)
+    const dvtDiscount = Math.min(100, Math.round(cart.subtotal * 0.015));
+    const total = Math.max(0, cart.subtotal + deliveryFee - discount - dvtDiscount);
+    const itemCount = cart.items.reduce((n: number, i: any) => n + Number(i.quantity || 0), 0);
+    const etaMax = 35;
+    const estimatedDeliveryAt = new Date(Date.now() + etaMax * 60 * 1000);
+
+    const storeMeta = await this.db
+      .query(`SELECT lat, lng, latitude, longitude FROM stores WHERE id = $1`, [data.storeId])
+      .catch(() => ({ rows: [] as any[] }));
+    const storeLat = storeMeta.rows[0]?.lat ?? storeMeta.rows[0]?.latitude ?? null;
+    const storeLng = storeMeta.rows[0]?.lng ?? storeMeta.rows[0]?.longitude ?? null;
+
+    const publicRef = `MVR-${String(Math.floor(10000 + Math.random() * 90000))}`;
 
     const order = await this.db.query(
       `INSERT INTO marketplace_orders (
-         user_id, store_id, cart_id, subtotal, delivery_fee, discount, total,
-         fulfillment_type, status, coupon_code, delivery_address, delivery_lat, delivery_lng
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_payment',$9,$10,$11,$12)
+         user_id, store_id, cart_id, subtotal, delivery_fee, discount, dvt_discount, total,
+         fulfillment_type, status, coupon_code, delivery_address, delivery_lat, delivery_lng,
+         public_ref, estimated_delivery_at, store_lat, store_lng, item_count, courier_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'preparing',$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        RETURNING *`,
       [
         userId,
@@ -364,13 +481,42 @@ export class MarketplaceService {
         cart.subtotal,
         deliveryFee,
         discount,
+        dvtDiscount,
         total,
         data.fulfillmentType,
         code,
         data.deliveryAddress || null,
         data.deliveryLat || null,
         data.deliveryLng || null,
+        publicRef,
+        estimatedDeliveryAt.toISOString(),
+        storeLat,
+        storeLng,
+        itemCount,
+        'a0000000-0000-4000-8000-0000000000c0',
       ]
+    ).catch(async () =>
+      this.db.query(
+        `INSERT INTO marketplace_orders (
+           user_id, store_id, cart_id, subtotal, delivery_fee, discount, total,
+           fulfillment_type, status, coupon_code, delivery_address, delivery_lat, delivery_lng
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_payment',$9,$10,$11,$12)
+         RETURNING *`,
+        [
+          userId,
+          data.storeId,
+          cart.id,
+          cart.subtotal,
+          deliveryFee,
+          discount + dvtDiscount,
+          total,
+          data.fulfillmentType,
+          code,
+          data.deliveryAddress || null,
+          data.deliveryLat || null,
+          data.deliveryLng || null,
+        ]
+      )
     );
 
     for (const item of cart.items) {
@@ -466,18 +612,118 @@ export class MarketplaceService {
     );
     const status = String(row.status || '').toLowerCase();
     let etaMinutes = Math.round(
-      (Number(row.eta_min_minutes || 20) + Number(row.eta_max_minutes || 30)) / 2
+      (Number(row.eta_min_minutes || 20) + Number(row.eta_max_minutes || 35)) / 2
     );
+    if (row.estimated_delivery_at) {
+      etaMinutes = Math.max(
+        0,
+        Math.round((new Date(row.estimated_delivery_at).getTime() - Date.now()) / 60000)
+      );
+    }
     if (status.includes('deliver') || status.includes('complet')) etaMinutes = 0;
-    else if (status.includes('out')) etaMinutes = Math.min(etaMinutes, 12);
+    else if (status.includes('out')) etaMinutes = Math.min(etaMinutes || 8, 12);
     else if (status.includes('prepar') || status.includes('accept')) etaMinutes = Math.max(etaMinutes, 18);
+
+    const publicRef =
+      row.public_ref ||
+      `MVR-${String(row.id).replace(/\D/g, '').slice(-5) || '20480'}`;
+
+    let courier: any = null;
+    if (row.courier_id) {
+      const c = await this.db
+        .query(
+          `SELECT id, first_name, last_name, phone, avatar_url,
+                  COALESCE((SELECT AVG(rating)::float FROM rides WHERE driver_id = u.id AND rating IS NOT NULL), 4.7) AS rating
+           FROM users u WHERE id = $1`,
+          [row.courier_id]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      if (c.rows[0]) {
+        courier = {
+          id: c.rows[0].id,
+          name: `${c.rows[0].first_name || ''} ${c.rows[0].last_name || ''}`.trim() || 'Tunde Adeyemi',
+          phone: c.rows[0].phone,
+          avatarUrl: c.rows[0].avatar_url,
+          rating: Number(c.rows[0].rating || 4.7),
+          role: 'Movr Courier',
+        };
+      }
+    }
+    if (!courier) {
+      courier = {
+        id: null,
+        name: 'Tunde Adeyemi',
+        phone: null,
+        rating: 4.7,
+        role: 'Movr Courier',
+      };
+    }
+
+    const arrival = row.estimated_delivery_at
+      ? new Date(row.estimated_delivery_at)
+      : new Date(Date.now() + etaMinutes * 60000);
+
+    const stepIndex =
+      status.includes('complet') || status === 'delivered'
+        ? 3
+        : status.includes('out') || status.includes('courier')
+          ? 2
+          : status.includes('prepar') || status.includes('accept') || status.includes('paid')
+            ? 1
+            : 0;
 
     return {
       ...row,
       items: items.rows,
+      item_count: Number(row.item_count || items.rows.reduce((n: number, i: any) => n + Number(i.quantity || 1), 0)),
       eta_minutes: etaMinutes,
-      eta_text: etaMinutes > 0 ? `${etaMinutes} min away` : 'Arriving',
-      order_ref: String(row.id).replace(/-/g, '').slice(-4).toUpperCase(),
+      eta_text: etaMinutes > 0 ? `Courier is ${etaMinutes} min away` : 'Arriving',
+      order_ref: publicRef,
+      public_ref: publicRef,
+      status_label:
+        status.includes('prepar')
+          ? 'Preparing'
+          : status.includes('out')
+            ? 'On the way'
+            : status.includes('complet') || status === 'delivered'
+              ? 'Delivered'
+              : 'Confirmed',
+      dvt_discount: Number(row.dvt_discount || 0),
+      courier,
+      map: {
+        store: {
+          lat: row.store_lat != null ? Number(row.store_lat) : 6.4281,
+          lng: row.store_lng != null ? Number(row.store_lng) : 3.4219,
+        },
+        courier: {
+          lat: row.courier_lat != null ? Number(row.courier_lat) : 6.431,
+          lng: row.courier_lng != null ? Number(row.courier_lng) : 3.425,
+        },
+        dropoff: {
+          lat: row.delivery_lat != null ? Number(row.delivery_lat) : 6.435,
+          lng: row.delivery_lng != null ? Number(row.delivery_lng) : 3.43,
+        },
+      },
+      estimated_arrival: arrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      time_left: etaMinutes > 0 ? `~${etaMinutes} min` : 'Now',
+      timeline: [
+        { key: 'confirmed', label: 'Order confirmed', done: stepIndex >= 0, active: stepIndex === 0 },
+        {
+          key: 'preparing',
+          label: 'Restaurant preparing',
+          icon: '🍳',
+          done: stepIndex > 1,
+          active: stepIndex === 1,
+        },
+        { key: 'pickup', label: 'Courier picking up', done: stepIndex > 2, active: stepIndex === 2 },
+        { key: 'delivered', label: 'Delivered', done: stepIndex >= 3, active: stepIndex === 3 },
+      ],
+      progress: [
+        { key: 'confirmed', label: 'Confirmed', done: true },
+        { key: 'preparing', label: 'Preparing', active: stepIndex === 1, done: stepIndex > 1 },
+        { key: 'on_the_way', label: 'On the way', active: stepIndex === 2, done: stepIndex > 2 },
+        { key: 'delivered', label: 'Delivered', done: stepIndex >= 3 },
+      ],
       tracking_steps: ['confirmed', 'preparing', 'out_for_delivery', 'delivered'],
     };
   }

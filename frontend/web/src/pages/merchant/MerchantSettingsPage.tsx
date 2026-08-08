@@ -1,252 +1,341 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Camera } from 'lucide-react';
 import MerchantShell from '../../layouts/MerchantShell';
-import { VerifiedBadgeWeb } from '@movr/design-system/components/VerifiedBadgeWeb';
-import { TextField, GenderSelect, GenderValue } from '../../components/forms';
-import { mediaUrl } from '../../lib/media';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
-const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}` });
+const API = process.env.REACT_APP_API_URL || '/api/v1';
+const headers = () => ({
+  Authorization: `Bearer ${localStorage.getItem('movr_merchant_token') || ''}`,
+});
 
-/** Merchant account settings — personal profile + business + notifications. */
+const DAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+
+type DayKey = (typeof DAYS)[number];
+type HoursDay = { open: boolean; from: string; to: string };
+type HoursMap = Record<DayKey, HoursDay>;
+
+const DEFAULT_HOURS: HoursMap = {
+  monday: { open: true, from: '08:00', to: '22:00' },
+  tuesday: { open: true, from: '08:00', to: '22:00' },
+  wednesday: { open: true, from: '08:00', to: '22:00' },
+  thursday: { open: true, from: '08:00', to: '22:00' },
+  friday: { open: true, from: '08:00', to: '22:00' },
+  saturday: { open: true, from: '09:00', to: '22:00' },
+  sunday: { open: false, from: '09:00', to: '18:00' },
+};
+
+function normalizeHours(raw: any): HoursMap {
+  const out = { ...DEFAULT_HOURS };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const d of DAYS) {
+    const v = raw[d];
+    if (v && typeof v === 'object') {
+      out[d] = {
+        open: v.open !== false && v.closed !== true,
+        from: v.from || v.open_time || '08:00',
+        to: v.to || v.close_time || '22:00',
+      };
+    }
+  }
+  return out;
+}
+
+/** Store Settings — info, hours, delivery, open status. */
 export default function MerchantSettingsPage() {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [gender, setGender] = useState<GenderValue | string>('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [business, setBusiness] = useState({
+  const [store, setStore] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    category: 'Fast Food',
+    description: '',
+    phone: '',
     email: '',
-    reg: '',
-    payout: '',
+    address: '',
+    minOrderAmount: '500',
+    deliveryRadiusKm: '5',
+    avgPrepTimeMinutes: '20',
+    useMovrCourier: true,
+    useSelfDelivery: false,
+    isOpen: true,
+    acceptPreorders: false,
   });
-  const [alerts, setAlerts] = useState({ newOrders: true, dailySummary: true });
-  const [attestation, setAttestation] = useState<{ status?: string; explorerUrl?: string } | null>(
-    null
-  );
+  const [hours, setHours] = useState<HoursMap>(DEFAULT_HOURS);
 
-  useEffect(() => {
-    axios
-      .get(`${API}/merchant/me`, { headers: headers() })
-      .then(async (res) => {
-        const m = res.data?.data;
-        if (!m) return;
-        setFirstName(m.first_name || '');
-        setLastName(m.last_name || '');
-        setPhone(m.phone || '');
-        setGender(m.gender || '');
-        setAvatarUrl(m.avatar_url || '');
-        setBusiness({
-          email: m.business_email || m.email || '',
-          reg: m.registration_number || m.business_registration_number || '',
-          payout:
-            typeof m.payout_account === 'string'
-              ? m.payout_account
-              : 'GCB Bank · ****3390',
-        });
-        if (m.notifications) {
-          setAlerts({
-            newOrders: m.notifications.new_order_alerts !== false,
-            dailySummary: m.notifications.daily_sales_summary !== false,
-          });
-        }
-        const uid = m.user_id;
-        if (!uid) return;
-        try {
-          const a = await axios.get(`${API}/kyc/attestation/${uid}`, { headers: headers() });
-          const row = a.data?.data;
-          if (!row) return;
-          const chain = String(row.chain || 'polygon-amoy');
-          const explorer = row.tx_hash
-            ? chain.includes('amoy')
-              ? `https://amoy.polygonscan.com/tx/${row.tx_hash}`
-              : `https://polygonscan.com/tx/${row.tx_hash}`
-            : undefined;
-          setAttestation({ status: row.status || row.attestationStatus, explorerUrl: explorer });
-        } catch {
-          /* none yet */
-        }
-      })
-      .catch(() => undefined);
-  }, []);
-
-  const onAvatarSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please choose an image file');
+  const load = async () => {
+    const res = await axios.get(`${API}/merchant/stores`, { headers: headers() });
+    const s = res.data?.data?.[0];
+    if (!s) {
+      toast.error('No store found — create one under My Store first');
       return;
     }
-    setUploading(true);
-    try {
-      const body = new FormData();
-      body.append('avatar', file);
-      const res = await axios.post(`${API}/users/avatar`, body, {
-        headers: { ...headers(), 'Content-Type': 'multipart/form-data' },
-      });
-      const url = res.data?.data?.avatarUrl || res.data?.data?.url;
-      if (!url) throw new Error('Upload did not return a URL');
-      setAvatarUrl(url);
-      toast.success('Profile photo saved');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
+    setStore(s);
+    setForm({
+      name: s.name || '',
+      category: s.category || 'Fast Food',
+      description: s.description || '',
+      phone: s.phone || '',
+      email: s.email || '',
+      address: s.address || '',
+      minOrderAmount: String(s.min_order_amount ?? 500),
+      deliveryRadiusKm: String(s.delivery_radius_km ?? 5),
+      avgPrepTimeMinutes: String(s.avg_prep_time_minutes ?? s.prep_time_minutes ?? 20),
+      useMovrCourier: s.use_movr_courier !== false,
+      useSelfDelivery: Boolean(s.use_self_delivery),
+      isOpen: s.is_open !== false,
+      acceptPreorders: Boolean(s.accept_preorders),
+    });
+    setHours(normalizeHours(s.hours_json));
   };
 
-  const saveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingProfile(true);
-    try {
-      await axios.put(
-        `${API}/users/profile`,
-        {
-          firstName,
-          lastName,
-          phone,
-          gender: gender || null,
-        },
-        { headers: headers() }
-      );
-      toast.success('Profile saved');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Could not save profile');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
+  useEffect(() => {
+    load().catch((e) => toast.error(e?.response?.data?.message || e.message));
+  }, []);
 
-  const persistAlert = async (next: { newOrders: boolean; dailySummary: boolean }) => {
-    setAlerts(next);
+  const save = async () => {
+    if (!store?.id) return;
+    setSaving(true);
     try {
       await axios.patch(
-        `${API}/merchant/settings/notifications`,
+        `${API}/merchant/stores/${store.id}`,
         {
-          new_order_alerts: next.newOrders,
-          daily_sales_summary: next.dailySummary,
+          name: form.name,
+          category: form.category,
+          description: form.description,
+          phone: form.phone,
+          email: form.email,
+          address: form.address,
+          minOrderAmount: Number(form.minOrderAmount),
+          deliveryRadiusKm: Number(form.deliveryRadiusKm),
+          avgPrepTimeMinutes: Number(form.avgPrepTimeMinutes),
+          useMovrCourier: form.useMovrCourier,
+          useSelfDelivery: form.useSelfDelivery,
+          isOpen: form.isOpen,
+          acceptPreorders: form.acceptPreorders,
+          hoursJson: hours,
         },
         { headers: headers() }
       );
-    } catch {
-      toast.error('Could not save notification setting');
+      toast.success('Store settings saved');
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const Row = ({
-    label,
-    value,
-    onClick,
+  const setDay = (day: DayKey, patch: Partial<HoursDay>) => {
+    setHours((h) => ({ ...h, [day]: { ...h[day], ...patch } }));
+  };
+
+  const Toggle = ({
+    checked,
+    onChange,
   }: {
-    label: string;
-    value: string;
-    onClick?: () => void;
+    checked: boolean;
+    onChange: (v: boolean) => void;
   }) => (
     <button
       type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className="w-full flex justify-between gap-4 py-4 border-b border-border text-left disabled:cursor-default"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`w-11 h-6 rounded-full relative transition ${
+        checked ? 'bg-[#8E2DE2]' : 'bg-[#333]'
+      }`}
     >
-      <span className="text-pure-white">{label}</span>
-      <span className="text-text-secondary text-right">{value}</span>
+      <span
+        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition ${
+          checked ? 'left-5' : 'left-0.5'
+        }`}
+      />
     </button>
   );
 
   return (
     <MerchantShell activePath="/merchant/settings">
-      <div className="flex flex-wrap items-center gap-3 mb-8">
-        <h1 className="text-3xl font-bold">Account settings</h1>
-        <VerifiedBadgeWeb status={attestation?.status} explorerUrl={attestation?.explorerUrl} />
-      </div>
-
-      <p className="text-xs tracking-wider text-text-secondary mb-2">PROFILE</p>
-      <form onSubmit={saveProfile} className="mb-10 max-w-xl space-y-4">
-        <div className="flex items-center gap-4 mb-2">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="relative w-16 h-16 rounded-full overflow-hidden border border-border bg-[#1A1A1A] shrink-0"
-            aria-label="Upload profile photo"
-          >
-            {avatarUrl ? (
-              <img src={mediaUrl(avatarUrl)} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="w-full h-full flex items-center justify-center text-lg text-text-secondary">
-                {(firstName || 'M')[0].toUpperCase()}
-              </span>
-            )}
-            <span className="absolute inset-x-0 bottom-0 bg-black/55 text-white text-[10px] py-0.5 flex items-center justify-center gap-1">
-              <Camera size={11} /> {uploading ? '…' : 'Edit'}
-            </span>
-          </button>
-          <p className="text-sm text-text-secondary">Photo saves to the database immediately.</p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onAvatarSelected}
-          />
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Store Settings</h1>
+          <p className="text-[#888888] mt-1">
+            {store?.name || 'Store'}
+            {store?.store_code ? ` · ${store.store_code}` : store?.id ? ` · ${String(store.id).slice(0, 8)}` : ''}
+          </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <TextField
-            label="First name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-          />
-          <TextField
-            label="Last name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-          />
-        </div>
-        <TextField
-          label="Phone"
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <GenderSelect value={gender} onChange={setGender} />
-        <button type="submit" disabled={savingProfile} className="btn-primary rounded-full px-6 py-3">
-          {savingProfile ? 'Saving…' : 'Save profile'}
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !store}
+          className="rounded-xl px-4 py-2.5 font-semibold bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] text-white disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save All Changes'}
         </button>
-      </form>
-
-      <p className="text-xs tracking-wider text-text-secondary mb-2">BUSINESS</p>
-      <div className="mb-10 max-w-xl">
-        <Row label="Business email" value={business.email || '—'} />
-        <Row label="Registration number" value={business.reg || '—'} />
-        <Row label="Payout account" value={business.payout || '—'} />
       </div>
 
-      <p className="text-xs tracking-wider text-text-secondary mb-2">NOTIFICATIONS</p>
-      <div className="mb-10 max-w-xl">
-        <Row
-          label="New order alerts"
-          value={alerts.newOrders ? 'On' : 'Off'}
-          onClick={() => persistAlert({ ...alerts, newOrders: !alerts.newOrders })}
-        />
-        <Row
-          label="Daily sales summary"
-          value={alerts.dailySummary ? 'On' : 'Off'}
-          onClick={() => persistAlert({ ...alerts, dailySummary: !alerts.dailySummary })}
-        />
-      </div>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="rounded-2xl bg-[#1A1A1A] p-5">
+          <h2 className="text-white font-semibold mb-4">Store Information</h2>
+          <label className="text-xs text-[#888888]">Store Name</label>
+          <input
+            className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <label className="text-xs text-[#888888]">Category</label>
+          <select
+            className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+          >
+            {['Fast Food', 'Restaurant', 'Grocery', 'Pharmacy', 'Other'].map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <label className="text-xs text-[#888888]">Description</label>
+          <textarea
+            className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white min-h-[80px]"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-[#888888]">Phone</label>
+              <input
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[#888888]">Email</label>
+              <input
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+          </div>
+          <label className="text-xs text-[#888888]">Address</label>
+          <input
+            className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+          <label className="text-xs text-[#888888]">Min Order</label>
+          <input
+            className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+            value={form.minOrderAmount}
+            onChange={(e) => setForm({ ...form, minOrderAmount: e.target.value })}
+          />
+        </div>
 
-      <Link to="/merchant/store" className="text-sm text-motion-blue hover:underline">
-        Edit store profile & banner →
-      </Link>
+        <div className="rounded-2xl bg-[#1A1A1A] p-5">
+          <h2 className="text-white font-semibold mb-4">Operating Hours</h2>
+          <div className="space-y-3">
+            {DAYS.map((day) => {
+              const d = hours[day];
+              return (
+                <div key={day} className="flex items-center gap-3">
+                  <span className="w-24 capitalize text-white text-sm">{day}</span>
+                  <Toggle checked={d.open} onChange={(v) => setDay(day, { open: v })} />
+                  {d.open ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="time"
+                        className="rounded-lg bg-black/40 border border-white/10 px-2 py-1 text-white text-sm"
+                        value={d.from}
+                        onChange={(e) => setDay(day, { from: e.target.value })}
+                      />
+                      <span className="text-[#666]">-</span>
+                      <input
+                        type="time"
+                        className="rounded-lg bg-black/40 border border-white/10 px-2 py-1 text-white text-sm"
+                        value={d.to}
+                        onChange={(e) => setDay(day, { to: e.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-[#888888] text-sm">Closed</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-[#1A1A1A] p-5">
+          <h2 className="text-white font-semibold mb-4">Delivery Settings</h2>
+          <div className="flex items-center justify-between py-3 border-b border-white/10">
+            <div>
+              <p className="text-white text-sm">App Courier (Movr)</p>
+              <p className="text-xs text-[#888888]">Movr dispatches courier</p>
+            </div>
+            <Toggle
+              checked={form.useMovrCourier}
+              onChange={(v) => setForm({ ...form, useMovrCourier: v })}
+            />
+          </div>
+          <div className="flex items-center justify-between py-3 border-b border-white/10">
+            <div>
+              <p className="text-white text-sm">Self Delivery</p>
+              <p className="text-xs text-[#888888]">Your own riders</p>
+            </div>
+            <Toggle
+              checked={form.useSelfDelivery}
+              onChange={(v) => setForm({ ...form, useSelfDelivery: v })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label className="text-xs text-[#888888]">Delivery Radius (km)</label>
+              <input
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                value={form.deliveryRadiusKm}
+                onChange={(e) => setForm({ ...form, deliveryRadiusKm: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[#888888]">Avg Prep Time (min)</label>
+              <input
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                value={form.avgPrepTimeMinutes}
+                onChange={(e) => setForm({ ...form, avgPrepTimeMinutes: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-[#1A1A1A] p-5">
+          <h2 className="text-white font-semibold mb-4">Store Status</h2>
+          <div className="flex items-center justify-between py-3 border-b border-white/10">
+            <div>
+              <p className="text-white text-sm">Store Is Open</p>
+              <p className="text-xs text-[#888888]">Toggle to close temporarily</p>
+            </div>
+            <Toggle checked={form.isOpen} onChange={(v) => setForm({ ...form, isOpen: v })} />
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-white text-sm">Accept Pre-orders</p>
+              <p className="text-xs text-[#888888]">Allow orders when closed</p>
+            </div>
+            <Toggle
+              checked={form.acceptPreorders}
+              onChange={(v) => setForm({ ...form, acceptPreorders: v })}
+            />
+          </div>
+        </div>
+      </div>
     </MerchantShell>
   );
 }

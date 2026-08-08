@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
+const CHIPS = [500, 1000, 2000, 'all'] as const;
 
 function authHeaders() {
   const token =
@@ -14,23 +15,57 @@ function authHeaders() {
   };
 }
 
-/**
- * Phase 5B — DVT balance, history, redeem.
- * Real token deployment has securities/regulatory implications; this is the technical UX only.
- */
+/** Redeem DVT Tokens — balance card, options, chips, summary (mockup). */
 const TokenPage: React.FC = () => {
-  const [balance, setBalance] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
-  const [amount, setAmount] = useState('');
+  const [balance, setBalance] = useState(2400);
+  const [options, setOptions] = useState<any[]>([]);
+  const [optionId, setOptionId] = useState('ride_credits');
+  const [chip, setChip] = useState<number | 'all'>(1000);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
   const load = () => {
     Promise.all([
       fetch(`${API}/token/balance`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/token/history`, { headers: authHeaders() }).then((r) => r.json()),
-    ]).then(([b, h]) => {
-      if (b?.data) setBalance(b.data);
-      if (h?.data) setHistory(h.data);
+      fetch(`${API}/token/redeem-options`, { headers: authHeaders() }).then((r) => r.json()),
+    ]).then(([b, o]) => {
+      if (b?.data?.total != null) setBalance(Number(b.data.total));
+      if (Array.isArray(o?.data) && o.data.length) {
+        setOptions(o.data);
+        if (!o.data.find((x: any) => x.id === optionId)) setOptionId(o.data[0].id);
+      } else {
+        setOptions([
+          {
+            id: 'ride_credits',
+            label: 'Ride Credits',
+            dvtCost: 500,
+            rewardValue: 1000,
+            rateLabel: '500 DVT → ₦1,000 ride credit',
+            tags: ['Best value', 'Most popular'],
+            tagTone: 'violet',
+            rewardType: 'ride_credit',
+          },
+          {
+            id: 'order_discount',
+            label: 'Order Discount',
+            dvtCost: 300,
+            rewardValue: 500,
+            rateLabel: '300 DVT → ₦500 off any order',
+            tags: [],
+            rewardType: 'order_discount',
+          },
+          {
+            id: 'cash_withdrawal',
+            label: 'Cash Withdrawal',
+            dvtCost: 1000,
+            rewardValue: 1800,
+            rateLabel: '1,000 DVT → ₦1,800 to wallet',
+            tags: ['Lower rate', 'Instant'],
+            tagTone: 'amber',
+            rewardType: 'wallet_cash',
+          },
+        ]);
+      }
     });
   };
 
@@ -38,85 +73,134 @@ const TokenPage: React.FC = () => {
     load();
   }, []);
 
+  const option = options.find((o) => o.id === optionId) || options[0];
+  const amount = chip === 'all' ? balance : Number(chip);
+
+  const youReceive = useMemo(() => {
+    if (!option || !amount) return '—';
+    const units = amount / Number(option.dvtCost || 1);
+    const value = Math.round(units * Number(option.rewardValue || 0));
+    const unit =
+      option.rewardType === 'ride_credit'
+        ? 'ride credit'
+        : option.rewardType === 'order_discount'
+          ? 'order discount'
+          : 'to wallet';
+    return `₦${value.toLocaleString()} ${unit}`;
+  }, [option, amount]);
+
   const redeem = async () => {
     setMsg('');
-    const res = await fetch(`${API}/token/redeem`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ amount: Number(amount) }),
-    });
-    const json = await res.json();
-    if (!res.ok) setMsg(json.message || 'Redeem failed');
-    else {
-      setMsg(`Redeemed ${json.data.dvtBurned} DVT → ${json.data.fiatCredit} ${json.data.currency}`);
-      setAmount('');
-      load();
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/token/redeem`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ amount, optionId: option?.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) setMsg(json.message || 'Redeem failed');
+      else {
+        setMsg(json.data?.youReceive ? `Redeemed · ${json.data.youReceive}` : 'Redeemed');
+        load();
+      }
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl p-8 text-pure-white bg-gradient-to-br from-surface via-electric-violet to-motion-blue">
-        <h1 className="text-3xl font-bold mb-2">DriveToken (DVT)</h1>
-        <p className="text-pure-white/80 text-sm mb-6">Utility rewards balance — pending vs on-chain</p>
-        <p className="text-5xl font-bold">{balance?.total?.toFixed?.(2) ?? '—'}</p>
-        <div className="mt-4 flex gap-6 text-sm text-pure-white/90">
-          <span>Pending: {balance?.pending ?? 0}</span>
-          <span>On-chain: {balance?.onchain ?? 0}</span>
-        </div>
-        {balance?.address && (
-          <p className="mt-3 text-xs text-pure-white/60 font-mono truncate">{balance.address}</p>
-        )}
-        {!balance?.enabled && (
-          <p className="mt-4 text-amber-200 text-sm">
-            TOKEN_SYSTEM_ENABLED is off — ledger credits still accrue; on-chain mint is paused.
-          </p>
-        )}
+    <div className="mx-auto max-w-lg space-y-5 text-white">
+      <div className="flex items-center gap-3">
+        <Link to="/wallet" className="text-xl text-white/70">
+          ←
+        </Link>
+        <h1 className="flex-1 text-center text-lg font-bold">Redeem DVT Tokens</h1>
+        <span className="w-6" />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-lg mb-3">Redeem for wallet credit</h2>
-        <div className="flex gap-3">
-          <input
-            className="border rounded-lg px-3 py-2 flex-1"
-            placeholder="DVT amount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <button
-            onClick={redeem}
-            className="bg-electric-violet text-pure-white px-5 py-2 rounded-lg font-semibold"
-          >
-            Redeem
-          </button>
-        </div>
-        {msg && <p className="mt-2 text-sm text-gray-700">{msg}</p>}
-        <p className="mt-4 text-sm">
-          <Link className="text-motion-blue font-medium" to="/claim">
-            Claim airdrop →
-          </Link>
-          {' · '}
-          <Link className="text-motion-blue font-medium" to="/staking">
-            Stake DVT →
-          </Link>
-        </p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-700 via-violet-600 to-blue-500 p-6">
+        <p className="text-xs font-bold tracking-widest text-violet-100/90">YOUR DVT BALANCE</p>
+        <p className="mt-2 text-4xl font-extrabold">{balance.toLocaleString()} DVT</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-lg mb-3">Activity</h2>
-        <ul className="divide-y">
-          {history.map((row) => (
-            <li key={row.id} className="py-3 flex justify-between text-sm">
-              <span>
-                {row.activity_type}{' '}
-                <span className="text-gray-400">({row.status})</span>
+      <p className="text-xs font-bold tracking-widest text-white/40">REDEEM FOR</p>
+      <div className="space-y-3">
+        {options.map((o) => {
+          const on = o.id === optionId;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setOptionId(o.id)}
+              className={`flex w-full items-start gap-3 rounded-xl border-2 bg-zinc-900 p-4 text-left ${
+                on ? 'border-violet-500' : 'border-zinc-800'
+              }`}
+            >
+              <div className="flex-1">
+                <p className="font-bold">{o.label}</p>
+                <p className="mt-1 text-sm text-white/45">{o.rateLabel}</p>
+                {o.tags?.length ? (
+                  <p
+                    className={`mt-1 text-xs font-semibold ${
+                      o.tagTone === 'amber' ? 'text-amber-500' : 'text-violet-400'
+                    }`}
+                  >
+                    {o.tags.join(' · ')}
+                  </p>
+                ) : null}
+              </div>
+              <span
+                className={`mt-1 flex h-6 w-6 items-center justify-center rounded-full border-2 text-sm ${
+                  on ? 'border-violet-500 bg-violet-500' : 'border-zinc-600'
+                }`}
+              >
+                {on ? '✓' : ''}
               </span>
-              <span className="font-semibold">{Number(row.dvt_amount).toFixed(2)} DVT</span>
-            </li>
-          ))}
-          {!history.length && <li className="py-3 text-gray-500">No activity yet</li>}
-        </ul>
+            </button>
+          );
+        })}
       </div>
+
+      <p className="text-xs font-bold tracking-widest text-white/40">AMOUNT TO REDEEM</p>
+      <div className="grid grid-cols-4 gap-2">
+        {CHIPS.map((c) => {
+          const on = chip === c;
+          return (
+            <button
+              key={String(c)}
+              type="button"
+              onClick={() => setChip(c)}
+              className={`rounded-full border-2 py-2.5 text-sm font-bold ${
+                on ? 'border-violet-500 bg-violet-950' : 'border-zinc-800 bg-zinc-900 text-white/50'
+              }`}
+            >
+              {c === 'all' ? 'All' : Number(c).toLocaleString()}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="space-y-2 rounded-xl bg-zinc-900 p-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-white/50">Redeeming</span>
+          <span className="font-semibold">{amount.toLocaleString()} DVT</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-white/50">You receive</span>
+          <span className="font-extrabold text-green-400">{youReceive}</span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy || amount <= 0}
+        onClick={redeem}
+        className="w-full rounded-full bg-gradient-to-r from-violet-600 to-blue-500 py-3.5 font-bold disabled:opacity-40"
+      >
+        {busy ? 'Redeeming…' : `Redeem ${amount.toLocaleString()} DVT`}
+      </button>
+      {msg ? <p className="text-center text-sm text-green-400">{msg}</p> : null}
     </div>
   );
 };

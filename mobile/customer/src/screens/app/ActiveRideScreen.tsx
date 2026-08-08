@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking, TextInput, ScrollView, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Linking,
+  ScrollView,
+  Image,
+} from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 import RecordingNoticeModal from './RecordingNoticeModal';
+import RideChatScreen from './RideChatScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -17,28 +25,22 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/**
- * Customer active ride — map + ETA/SOS, driver card, Share/Route, fare footer.
- */
+/** Driver matched — map ETA, driver card, Call/Message/SOS, wallet fare, Cancel (mockup). */
 export default function ActiveRideScreen({
   rideId,
   onComplete,
+  onCancelled,
 }: {
   rideId?: string;
   onComplete?: () => void;
+  onCancelled?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
   const [ride, setRide] = useState<any>(null);
   const [proxy, setProxy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatBody, setChatBody] = useState('');
-  const [messages, setMessages] = useState<{ body: string; mine?: boolean }[]>([]);
-  const [shareUrl, setShareUrl] = useState('');
   const [sosMsg, setSosMsg] = useState('');
-  const [emergencyTel, setEmergencyTel] = useState('tel:191');
   const [noticeAcked, setNoticeAcked] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const loadRide = async () => {
     if (!rideId) return;
@@ -51,9 +53,7 @@ export default function ActiveRideScreen({
     if (!rideId) return;
     setNoticeAcked(false);
     loadRide().catch(() => undefined);
-    const t = setInterval(() => {
-      loadRide().catch(() => undefined);
-    }, 8000);
+    const t = setInterval(() => loadRide().catch(() => undefined), 8000);
     fetch(`${API}/rides/${rideId}/masked-session`, {
       method: 'POST',
       headers: authHeaders(),
@@ -66,40 +66,6 @@ export default function ActiveRideScreen({
       .catch(() => undefined);
     return () => clearInterval(t);
   }, [rideId]);
-
-  const shareTrip = async () => {
-    if (!rideId) return;
-    const res = await fetch(`${API}/rides/${rideId}/share-link`, { headers: authHeaders() });
-    const json = await res.json();
-    if (json?.data?.url) {
-      setShareUrl(json.data.url);
-      Linking.openURL(json.data.url).catch(() => undefined);
-    }
-  };
-
-  const openRoute = () => {
-    const d = ride?.dropoff;
-    if (d?.lat != null && d?.lng != null) {
-      Linking.openURL(
-        `https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lng}`
-      ).catch(() => undefined);
-      return;
-    }
-    const q = encodeURIComponent(ride?.destinationName || ride?.dropoff?.address || '');
-    if (q) Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`).catch(() => undefined);
-  };
-
-  const sendChat = async () => {
-    if (!rideId || !chatBody.trim()) return;
-    const body = chatBody.trim();
-    setMessages((m) => [...m, { body, mine: true }]);
-    setChatBody('');
-    await fetch(`${API}/rides/${rideId}/chat`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ body }),
-    }).catch(() => undefined);
-  };
 
   const triggerSos = async () => {
     if (!rideId) return;
@@ -116,28 +82,46 @@ export default function ActiveRideScreen({
         }),
       });
       const json = await res.json();
-      if (json?.data) {
-        if (json.data.quickDial) setEmergencyTel(json.data.quickDial);
-        setSosMsg('SOS active — contacts & ops notified');
-      } else {
-        setSosMsg(json.message || 'SOS failed');
-      }
+      setSosMsg(json?.data ? 'SOS active — contacts & ops notified' : json.message || 'SOS failed');
     } catch (e: any) {
       setSosMsg(e.message || 'SOS failed');
     }
   };
 
+  const cancelRide = async () => {
+    if (!rideId) return;
+    setCancelling(true);
+    try {
+      await fetch(`${API}/rides/${rideId}/cancel`, {
+        method: 'PUT',
+        headers: authHeaders(),
+      });
+      onCancelled?.();
+    } catch {
+      /* ignore */
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const driver = ride?.driver;
-  const eta = Number(ride?.etaMinutes ?? 6);
-  const fare = Number(ride?.fare ?? 0);
-  const dest = ride?.destinationName || ride?.dropoff?.address || 'Destination';
-  const plate = driver?.vehicle?.plate || '—';
-  const model = driver?.vehicle?.model || 'Vehicle';
+  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 2);
+  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 1200);
+  const currency = ride?.currency || 'NGN';
+  const plate = (driver?.vehicle?.plate || 'LAG 294-HG').replace(/-/g, ' ');
+  const model = driver?.vehicle?.model || 'Toyota Corolla';
+  const color = driver?.vehicle?.color || 'Silver';
   const rating = Number(driver?.rating ?? 4.9).toFixed(1);
-  const driverLine = `${plate} · ${model} · ★ ${rating}`;
+  const trips = Number(driver?.tripCount ?? 312);
+  const banner = ride?.etaLabel || `Driver is ${eta} min away`;
+  const payment = ride?.paymentMethod || 'Movr Wallet';
+
+  if (chatOpen && rideId) {
+    return <RideChatScreen rideId={rideId} onBack={() => setChatOpen(false)} />;
+  }
 
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 28 }}>
       {rideId ? (
         <RecordingNoticeModal
           visible={!noticeAcked}
@@ -147,224 +131,214 @@ export default function ActiveRideScreen({
       ) : null}
 
       <View style={styles.map}>
-        <View style={styles.gridOverlay} />
-        <View style={styles.etaBadge}>
-          <Text style={styles.etaText}>ETA {eta} min</Text>
+        <View style={styles.grid} />
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>• {banner}</Text>
         </View>
-        <Pressable style={styles.sos} onPress={triggerSos}>
-          <Text style={styles.sosText}>SOS</Text>
-        </Pressable>
-        <View style={[styles.dot, styles.dotWhite, { top: '28%', left: '22%' }]} />
-        <View style={[styles.dotRing, { bottom: '22%', right: '18%' }]}>
-          <View style={styles.dotBlue} />
-        </View>
+        <View style={styles.carGlow} />
+        <Text style={styles.car}>🚗</Text>
+        <Text style={styles.pin}>📍</Text>
       </View>
 
-      <View style={styles.driverCard}>
-        <View style={styles.driverRow}>
-          {driver?.avatarUrl ? (
-            <Image source={{ uri: driver.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatar} />
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.driverName}>{driver?.name || 'Finding driver…'}</Text>
-            <Text style={styles.driverMeta}>{driver ? driverLine : 'Assigning vehicle'}</Text>
-          </View>
-          <Pressable
-            style={styles.squareBtn}
-            onPress={() => Linking.openURL(`tel:${proxy || '+233000000000'}`)}
-          >
-            <Text style={styles.squareGlyph}>📞</Text>
-          </Pressable>
-          <Pressable style={styles.squareBtn} onPress={() => setChatOpen((v) => !v)}>
-            <Text style={styles.squareGlyph}>💬</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.footerActions}>
-          <Pressable style={styles.actionHalf} onPress={shareTrip}>
-            <Text style={styles.actionHalfText}>↗  Share trip</Text>
-          </Pressable>
-          <Pressable style={styles.actionHalf} onPress={openRoute}>
-            <Text style={styles.actionHalfText}>📍  Route</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Text style={styles.statusLine}>
-        Arriving at {dest} · {formatCurrency(fare, ride?.currency || 'GHS')} fare
+      <Text style={styles.matched}>{ride?.matchedHeadline || 'Driver matched!'}</Text>
+      <Text style={styles.arriving}>
+        Arriving in <Text style={styles.arrivingAccent}>{eta} min</Text>
       </Text>
 
-      {shareUrl ? <Text style={styles.share}>{shareUrl}</Text> : null}
+      <View style={styles.card}>
+        {driver?.avatarUrl ? (
+          <Image source={{ uri: driver.avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={{ fontSize: 26 }}>👨</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{driver?.name || ride?.driver_name || 'Emeka Okafor'}</Text>
+          <Text style={styles.meta}>
+            {model} · {color}
+          </Text>
+          <Text style={styles.stars}>
+            {'★★★★★'} {rating} · {trips} trips
+          </Text>
+        </View>
+        <View style={styles.plate}>
+          <Text style={styles.plateText}>{plate}</Text>
+        </View>
+      </View>
+
+      <View style={styles.actions}>
+        <Pressable
+          style={styles.action}
+          onPress={() => Linking.openURL(`tel:${proxy || driver?.phone || '+234000000000'}`)}
+        >
+          <Text style={styles.actionIcon}>📞</Text>
+          <Text style={styles.actionLabel}>Call</Text>
+        </Pressable>
+        <Pressable style={styles.action} onPress={() => setChatOpen((v) => !v)}>
+          <Text style={styles.actionIcon}>💬</Text>
+          <Text style={styles.actionLabel}>Message</Text>
+        </Pressable>
+        <Pressable style={[styles.action, styles.sos]} onPress={triggerSos}>
+          <Text style={styles.sosIcon}>SOS</Text>
+          <Text style={styles.sosLabel}>SOS</Text>
+        </Pressable>
+      </View>
+
       {sosMsg ? <Text style={styles.sosMsg}>{sosMsg}</Text> : null}
 
-      {chatOpen ? (
-        <View style={styles.chat}>
-          <ScrollView style={{ maxHeight: 120 }}>
-            {messages.map((m, i) => (
-              <Text key={i} style={[styles.chatMsg, m.mine && styles.chatMine]}>
-                {m.body}
-              </Text>
-            ))}
-          </ScrollView>
-          <View style={styles.chatRow}>
-            <TextInput
-              style={styles.chatInput}
-              value={chatBody}
-              onChangeText={setChatBody}
-              placeholder="Message driver…"
-              placeholderTextColor={colors.textSecondary}
-            />
-            <Pressable onPress={sendChat}>
-              <Text style={styles.send}>Send</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
+      <View style={styles.payRow}>
+        <Text style={styles.payLabel}>Paying with</Text>
+        <Text style={styles.payVal}>💳  {payment}</Text>
+      </View>
+      <View style={styles.payRow}>
+        <Text style={styles.payLabel}>Fare estimate</Text>
+        <Text style={styles.fare}>{formatCurrency(fare, currency)}</Text>
+      </View>
+
+
+      <Pressable style={styles.cancel} onPress={cancelRide} disabled={cancelling}>
+        <Text style={styles.cancelText}>{cancelling ? 'Cancelling…' : 'Cancel Ride'}</Text>
+      </Pressable>
 
       {onComplete ? (
-        <Pressable style={styles.cta} onPress={onComplete}>
-          <Text style={styles.ctaText}>End ride</Text>
+        <Pressable style={styles.doneLink} onPress={onComplete}>
+          <Text style={styles.doneText}>Trip complete →</Text>
         </Pressable>
       ) : null}
-    </View>
+    </ScrollView>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-    map: {
-      flex: 1,
-      minHeight: 220,
-      borderRadius: radius.lg,
-      backgroundColor: colors.surfaceElevated,
-      marginBottom: spacing[3],
-      overflow: 'hidden',
-    },
-    gridOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      opacity: 0.15,
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    etaBadge: {
-      position: 'absolute',
-      top: spacing[3],
-      left: spacing[3],
-      backgroundColor: colors.jetBlack,
-      borderRadius: radius.pill,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      zIndex: 2,
-    },
-    etaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 13 },
-    sos: {
-      position: 'absolute',
-      top: spacing[3],
-      right: spacing[3],
-      backgroundColor: '#F5B7B1',
-      borderRadius: radius.pill,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      zIndex: 2,
-    },
-    sosText: { color: colors.jetBlack, fontWeight: '800', letterSpacing: 1 },
-    dot: { position: 'absolute', width: 14, height: 14, borderRadius: 7 },
-    dotWhite: { backgroundColor: colors.pureWhite },
-    dotRing: {
-      position: 'absolute',
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      borderWidth: 3,
-      borderColor: colors.motionBlue,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    dotBlue: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: colors.motionBlue,
-    },
-    driverCard: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.lg,
-      padding: spacing[4],
-      marginBottom: spacing[3],
-    },
-    driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-    avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: colors.surface,
-    },
-    driverName: { color: colors.pureWhite, fontWeight: '700', fontSize: 16 },
-    driverMeta: { color: colors.textSecondary, fontSize: 13, marginTop: 3 },
-    squareBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: radius.sm,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    squareGlyph: { fontSize: 16 },
-    footerActions: {
-      flexDirection: 'row',
-      gap: spacing[2],
-      marginTop: spacing[4],
-    },
-    actionHalf: {
-      flex: 1,
-      borderRadius: radius.md,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingVertical: spacing[3],
-      alignItems: 'center',
-    },
-    actionHalfText: { color: colors.pureWhite, fontWeight: '600', fontSize: 14 },
-    statusLine: {
-      color: colors.textSecondary,
-      textAlign: 'center',
-      fontSize: 14,
-      marginBottom: spacing[3],
-    },
-    share: { color: colors.motionBlue, fontSize: 11, textAlign: 'center', marginBottom: 8 },
-    sosMsg: { color: colors.error, textAlign: 'center', marginBottom: 8, fontWeight: '600' },
-    chat: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.md,
-      padding: spacing[3],
-      marginBottom: spacing[3],
-    },
-    chatMsg: { color: colors.textSecondary, marginBottom: 4 },
-    chatMine: { color: colors.pureWhite, textAlign: 'right' },
-    chatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-    chatInput: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radius.sm,
-      color: colors.pureWhite,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-    },
-    send: { color: colors.motionBlue, fontWeight: '700' },
-    cta: {
-      borderRadius: radius.pill,
-      minHeight: 48,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    ctaText: { color: colors.pureWhite, fontWeight: '700' },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000', padding: spacing[4] },
+  map: {
+    height: 200,
+    borderRadius: 18,
+    backgroundColor: '#0c0c12',
+    marginBottom: spacing[4],
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#1f1f28',
+  },
+  grid: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.35,
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  banner: {
+    alignSelf: 'center',
+    marginTop: 14,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    zIndex: 2,
+  },
+  bannerText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  carGlow: {
+    position: 'absolute',
+    left: '30%',
+    top: '42%',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(168,85,247,0.35)',
+  },
+  car: { position: 'absolute', left: '34%', top: '46%', fontSize: 22 },
+  pin: { position: 'absolute', right: '24%', bottom: '26%', fontSize: 22 },
+  matched: { color: '#A1A1AA', textAlign: 'center', fontSize: 16 },
+  arriving: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: spacing[4],
+  },
+  arrivingAccent: { color: '#A855F7' },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#141414',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: spacing[4],
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  name: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  meta: { color: '#A1A1AA', fontSize: 13, marginTop: 2 },
+  stars: { color: '#F59E0B', fontSize: 12, marginTop: 4 },
+  plate: {
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#0A0A0A',
+  },
+  plateText: { color: '#fff', fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
+  actions: { flexDirection: 'row', gap: 10, marginBottom: spacing[4] },
+  action: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionIcon: { fontSize: 18 },
+  actionLabel: { color: '#fff', fontWeight: '600', fontSize: 12 },
+  sos: { backgroundColor: '#7F1D1D' },
+  sosIcon: { color: '#fff', fontWeight: '900', fontSize: 14 },
+  sosLabel: { color: '#FCA5A5', fontWeight: '700', fontSize: 12 },
+  sosMsg: { color: '#F87171', textAlign: 'center', marginBottom: 8, fontWeight: '600' },
+  payRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  payLabel: { color: '#A1A1AA', fontSize: 14 },
+  payVal: { color: '#fff', fontWeight: '700' },
+  fare: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  chat: {
+    backgroundColor: '#141414',
+    borderRadius: radius.md,
+    padding: spacing[3],
+    marginVertical: spacing[3],
+  },
+  chatMsg: { color: '#A1A1AA', marginBottom: 4 },
+  chatMine: { color: '#fff', textAlign: 'right' },
+  chatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: radius.sm,
+    color: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  send: { color: '#A855F7', fontWeight: '700' },
+  cancel: {
+    marginTop: spacing[4],
+    borderRadius: 16,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A1A1A',
+  },
+  cancelText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  doneLink: { marginTop: 12, alignItems: 'center' },
+  doneText: { color: '#A855F7', fontWeight: '600' },
+});

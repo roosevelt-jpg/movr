@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency, formatRelativeTime } from '@movr/design-system/format';
-import { useWallet } from '../../context/WalletContext';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -14,135 +12,139 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Wallet — mockup: gradient balance card, Send money / Top up, recent activity badges. */
+const ICONS: Record<string, string> = {
+  topup: '↓',
+  ride: '🚗',
+  dvt: '⛓',
+  parcel: '📦',
+  withdraw: '↑',
+  transfer: '↔',
+  tx: '•',
+};
+
+type Tx = {
+  id: string;
+  title: string;
+  amount: number;
+  unit: string;
+  icon: string;
+  createdAt: string;
+  credit: boolean;
+};
+
+/** My Wallet — portfolio card, quick actions, transactions (mockup). */
 export default function WalletScreen({
-  onSend,
   onTopUp,
-  onRedeem,
+  onWithdraw,
+  onTransfer,
+  onClaimDvt,
+  onPaymentMethods,
 }: {
   onSend?: () => void;
   onTopUp?: () => void;
   onRedeem?: () => void;
+  onWithdraw?: () => void;
+  onTransfer?: () => void;
+  onClaimDvt?: () => void;
+  onPaymentMethods?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
+  const [portfolio, setPortfolio] = useState(34850);
+  const [fiat, setFiat] = useState(24500);
+  const [dvt, setDvt] = useState(2400);
+  const [points, setPoints] = useState(850);
+  const [currency, setCurrency] = useState('NGN');
+  const [txs, setTxs] = useState<Tx[]>([]);
 
-  const { balance: ctxBalance, rewardsBalance, transactions, currency, refresh, dvtBalance, refreshDvt } =
-    useWallet();
-  const [estimatedDvt, setEstimatedDvt] = useState(0);
-  const [pointsHistory, setPointsHistory] = useState<any[]>([]);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/wallet/portfolio`, { headers: authHeaders() });
+      const j = await res.json();
+      const d = j?.data;
+      if (!d) return;
+      setPortfolio(Number(d.portfolioValue ?? 0));
+      setFiat(Number(d.fiatBalance ?? 0));
+      setDvt(Number(d.dvtTokens ?? 0));
+      setPoints(Number(d.points ?? 0));
+      setCurrency(d.currency || 'NGN');
+      if (Array.isArray(d.transactions)) setTxs(d.transactions);
+    } catch {
+      /* keep demo defaults */
+    }
+  }, []);
 
   useEffect(() => {
-    refresh();
-    refreshDvt();
-    fetch(`${API}/points/estimated-dvt`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.data?.estimatedDvt != null) setEstimatedDvt(Number(j.data.estimatedDvt));
-      })
-      .catch(() => undefined);
-    fetch(`${API}/points/history`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((j) => {
-        if (Array.isArray(j?.data)) setPointsHistory(j.data.slice(0, 5));
-      })
-      .catch(() => undefined);
-  }, [refresh, refreshDvt]);
+    load();
+  }, [load]);
 
-  const dvtDisplay = estimatedDvt || dvtBalance || Math.round(Number(rewardsBalance) / 10);
+  const fmtAmt = (t: Tx) => {
+    if (t.unit === 'dvt') return `${t.credit || t.amount > 0 ? '+' : ''}${Math.abs(t.amount)} DVT`;
+    const sign = t.amount >= 0 || t.credit ? '+' : '-';
+    return `${sign}${formatCurrency(Math.abs(t.amount), currency)}`;
+  };
 
-  const activity = [
-    ...transactions.slice(0, 8).map((t) => {
-      const type = String(t.type || '').toLowerCase();
-      const amt = Number(t.amount);
-      const isReward = /reward|points|referral|bonus/.test(type);
-      const title =
-        t.reference ||
-        (type.includes('ride')
-          ? 'Ride'
-          : type.includes('transfer') || type.includes('sent')
-            ? 'Sent'
-            : type.includes('topup')
-              ? 'Top up'
-              : t.type || 'Transaction');
-      return {
-        id: `w-${t.id}`,
-        title,
-        when: formatRelativeTime(t.created_at),
-        amount: amt,
-        kind: 'fiat' as const,
-        status: isReward ? 'Reward' : 'Completed',
-      };
-    }),
-    ...pointsHistory.map((p) => ({
-      id: `p-${p.id}`,
-      title: p.reason || p.activity_type || 'Referral reward',
-      when: formatRelativeTime(p.created_at),
-      amount: Number(p.points || p.amount || 0),
-      kind: 'pts' as const,
-      status: 'Reward' as const,
-    })),
-  ].slice(0, 10);
+  const actions = [
+    { key: 'topup', label: 'Top Up', icon: '↑', onPress: onTopUp },
+    { key: 'methods', label: 'Cards', icon: '💳', onPress: onPaymentMethods },
+    { key: 'withdraw', label: 'Withdraw', icon: '↓', onPress: onWithdraw || onTopUp },
+    { key: 'transfer', label: 'Transfer', icon: '↔', onPress: onTransfer },
+    { key: 'claim', label: 'Claim DVT', icon: '⛓', onPress: onClaimDvt },
+    { key: 'redeem', label: 'Redeem', icon: '✨', onPress: onRedeem },
+  ].filter((a) => a.onPress);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
-      <Text style={styles.title}>Wallet</Text>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
+      <Text style={styles.title}>My Wallet</Text>
 
-      <View style={styles.balanceCard}>
-        <View style={styles.balanceGlowA} />
-        <View style={styles.balanceGlowB} />
-        <Text style={styles.label}>Available balance</Text>
-        <Text style={styles.balance}>{formatCurrency(ctxBalance, currency || 'GHS')}</Text>
-        <View style={styles.divider} />
-        <View style={styles.pointsRow}>
-          <View>
-            <Text style={styles.label}>Movr points</Text>
-            <Text style={styles.points}>{Number(rewardsBalance).toLocaleString()} pts</Text>
+      <View style={styles.card}>
+        <View style={styles.glowA} />
+        <View style={styles.glowB} />
+        <Text style={styles.portfolio}>{formatCurrency(portfolio, currency)}</Text>
+        <View style={styles.breakdown}>
+          <View style={styles.metric}>
+            <Text style={styles.metricLabel}>Fiat Balance</Text>
+            <Text style={styles.metricVal}>{formatCurrency(fiat, currency)}</Text>
           </View>
-          <Text style={styles.dvt}>≈ {Number(dvtDisplay).toLocaleString()} DVT at TGE</Text>
+          <View style={styles.metric}>
+            <Text style={styles.metricLabel}>DVT Tokens</Text>
+            <Text style={styles.metricVal}>{Number(dvt).toLocaleString()}</Text>
+          </View>
+          <View style={styles.metric}>
+            <Text style={styles.metricLabel}>Points</Text>
+            <Text style={styles.metricVal}>{Number(points).toLocaleString()}</Text>
+          </View>
         </View>
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.sendBtn} onPress={onSend}>
-          <View style={styles.sendGlow} />
-          <Text style={styles.sendText}>✈  Send money</Text>
-        </Pressable>
-        <Pressable style={styles.topUp} onPress={onTopUp}>
-          <Text style={styles.topUpText}>+ Top up</Text>
-        </Pressable>
+        {actions.map((a) => (
+          <Pressable key={a.key} style={styles.actionBtn} onPress={a.onPress}>
+            <Text style={styles.actionIcon}>{a.icon}</Text>
+            <Text style={styles.actionLabel}>{a.label}</Text>
+          </Pressable>
+        ))}
       </View>
 
-      {onRedeem ? (
-        <Pressable onPress={onRedeem} style={{ marginBottom: spacing[4] }}>
-          <Text style={{ color: colors.motionBlue, textAlign: 'center' }}>Redeem points →</Text>
-        </Pressable>
-      ) : null}
-
-      <Text style={styles.section}>RECENT ACTIVITY</Text>
-      {activity.length === 0 ? (
+      <Text style={styles.section}>TRANSACTIONS</Text>
+      {txs.length === 0 ? (
         <Text style={styles.empty}>No transactions yet.</Text>
       ) : (
-        activity.map((row) => (
-          <View key={row.id} style={styles.item}>
+        txs.map((t) => (
+          <View key={t.id} style={styles.txRow}>
+            <View style={styles.txIcon}>
+              <Text style={styles.txIconText}>{ICONS[t.icon] || ICONS.tx}</Text>
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.itemTitle}>{row.title}</Text>
-              <Text style={styles.itemWhen}>{row.when}</Text>
+              <Text style={styles.txTitle}>{t.title}</Text>
+              <Text style={styles.txWhen}>{formatRelativeTime(t.createdAt)}</Text>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.itemAmt, row.kind === 'pts' && styles.ptsAmt]}>
-                {row.kind === 'pts'
-                  ? `${row.amount > 0 ? '+' : ''}${row.amount} pts`
-                  : `${row.amount >= 0 ? '' : '-'}${formatCurrency(Math.abs(row.amount), currency || 'GHS')}`}
-              </Text>
-              <View style={[styles.badge, row.status === 'Reward' && styles.badgeReward]}>
-                <Text
-                  style={[styles.badgeText, row.status === 'Reward' && styles.badgeRewardText]}
-                >
-                  {row.status}
-                </Text>
-              </View>
-            </View>
+            <Text
+              style={[
+                styles.txAmt,
+                (t.credit || t.amount > 0) && styles.txCredit,
+              ]}
+            >
+              {fmtAmt(t)}
+            </Text>
           </View>
         ))
       )}
@@ -150,96 +152,80 @@ export default function WalletScreen({
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
-    balanceCard: {
-      borderRadius: 24,
-      padding: spacing[5],
-      backgroundColor: '#0a1628',
-      overflow: 'hidden',
-      marginBottom: spacing[4],
-    },
-    balanceGlowA: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: colors.motionBlue,
-      opacity: 0.45,
-    },
-    balanceGlowB: {
-      position: 'absolute',
-      right: -40,
-      top: -40,
-      width: 180,
-      height: 180,
-      borderRadius: 90,
-      backgroundColor: colors.electricViolet,
-      opacity: 0.35,
-    },
-    label: { color: 'rgba(255,255,255,0.7)', fontSize: 13, zIndex: 1 },
-    balance: { color: colors.pureWhite, fontSize: 36, fontWeight: '700', marginTop: 6, zIndex: 1 },
-    divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: spacing[4] },
-    pointsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-end',
-      zIndex: 1,
-    },
-    points: { color: colors.pureWhite, fontSize: 22, fontWeight: '700', marginTop: 4 },
-    dvt: { color: '#8eb6ff', fontSize: 13, fontWeight: '600' },
-    actions: { flexDirection: 'row', gap: spacing[3], marginBottom: spacing[5] },
-    sendBtn: {
-      flex: 1.35,
-      borderRadius: radius.lg,
-      minHeight: 52,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.electricViolet,
-      overflow: 'hidden',
-    },
-    sendGlow: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: colors.motionBlue,
-      opacity: 0.45,
-    },
-    sendText: { color: colors.pureWhite, fontWeight: '700', zIndex: 1 },
-    topUp: {
-      flex: 1,
-      borderRadius: radius.lg,
-      minHeight: 52,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceElevated,
-    },
-    topUpText: { color: colors.pureWhite, fontWeight: '700' },
-    section: {
-      color: colors.textSecondary,
-      fontSize: 12,
-      letterSpacing: 0.8,
-      fontWeight: '600',
-      marginBottom: spacing[3],
-    },
-    empty: { color: colors.textSecondary, fontSize: 14 },
-    item: {
-      flexDirection: 'row',
-      padding: spacing[4],
-      borderRadius: radius.lg,
-      backgroundColor: colors.surfaceElevated,
-      marginBottom: spacing[3],
-    },
-    itemTitle: { color: colors.pureWhite, fontWeight: '600' },
-    itemWhen: { color: colors.textSecondary, fontSize: 12, marginTop: 4 },
-    itemAmt: { color: colors.pureWhite, fontWeight: '700' },
-    ptsAmt: { color: colors.motionBlue },
-    badge: {
-      marginTop: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 3,
-      borderRadius: radius.pill,
-      backgroundColor: 'rgba(0,217,122,0.18)',
-    },
-    badgeReward: { backgroundColor: 'rgba(0,85,255,0.22)' },
-    badgeText: { color: colors.success, fontSize: 11, fontWeight: '700' },
-    badgeRewardText: { color: colors.motionBlue },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', paddingHorizontal: spacing[4], paddingTop: spacing[4] },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700', marginBottom: spacing[4] },
+  card: {
+    borderRadius: 22,
+    padding: spacing[5],
+    overflow: 'hidden',
+    backgroundColor: '#3B5CFF',
+    marginBottom: spacing[4],
+  },
+  glowA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#8E2DE2', opacity: 0.75 },
+  glowB: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#3B82F6',
+    opacity: 0.45,
+    left: '40%',
+  },
+  portfolio: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    fontWeight: '800',
+    zIndex: 1,
+  },
+  breakdown: {
+    flexDirection: 'row',
+    marginTop: spacing[5],
+    zIndex: 1,
+    gap: 8,
+  },
+  metric: { flex: 1 },
+  metricLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600' },
+  metricVal: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginTop: 4 },
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: spacing[5],
+  },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionIcon: { color: '#E4E4E7', fontSize: 18 },
+  actionLabel: { color: '#FFFFFF', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  section: {
+    color: '#71717A',
+    fontSize: 12,
+    letterSpacing: 1,
+    fontWeight: '700',
+    marginBottom: spacing[3],
+  },
+  empty: { color: '#71717A', fontSize: 14 },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1F1F1F',
+  },
+  txIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  txIconText: { fontSize: 16, color: '#A1A1AA' },
+  txTitle: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  txWhen: { color: '#71717A', fontSize: 12, marginTop: 3 },
+  txAmt: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  txCredit: { color: '#22C55E' },
+});

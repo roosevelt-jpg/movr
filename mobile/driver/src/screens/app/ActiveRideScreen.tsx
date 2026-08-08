@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
+import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const DEMO_RIDE_ID = 'f0000000-0000-4000-8000-0000000000f1';
@@ -15,9 +16,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/**
- * Driver active ride — map, ETA badge, pickup banner, masked call/chat, Arrived CTA.
- */
+/** Driver navigation to pickup — turn-by-turn, passenger, Arrived (mockup). */
 export default function ActiveRideScreen({
   rideId = DEMO_RIDE_ID,
   onArrived,
@@ -25,44 +24,34 @@ export default function ActiveRideScreen({
   rideId?: string;
   onArrived?: () => void;
 }) {
-  const [ride, setRide] = useState<any>({
-    customerName: 'Ama Konadu',
-    pickupAddress: '12 Oxford St',
-    etaMinutes: 3,
-    rating: 4.7,
-    tripsToday: 2,
-    status: 'accepted',
+  const [nav, setNav] = useState<any>({
+    instruction: 'Turn right onto Ozumba Mbadiwe Ave · 200m',
+    distanceLeftKm: 1.2,
+    etaMinutes: 4,
+    earnings: 1400,
+    dvtReward: 60,
+    currency: 'NGN',
+    passenger: { name: 'Kwame Asante', initials: 'KA', rating: 4.8 },
+    pickup: 'Victoria Island, Lagos',
+    dropoff: 'Lekki Phase 1, Lagos',
   });
+  const [proxy, setProxy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [proxy, setProxy] = useState<string | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!rideId) return;
-    fetch(`${API}/rides/${rideId}`, { headers: authHeaders() })
+    fetch(`${API}/driver/rides/${rideId}/nav`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) {
-          setRide((prev: any) => ({
-            ...prev,
-            ...j.data,
-            customerName: j.data.customer_name || j.data.customerName || prev.customerName,
-            pickupAddress: j.data.pickup_address || j.data.pickupAddress || prev.pickupAddress,
-            etaMinutes: j.data.eta_minutes ?? j.data.etaMinutes ?? prev.etaMinutes,
-            rating: j.data.customer_rating ?? prev.rating,
-            tripsToday: j.data.trips_today ?? prev.tripsToday,
-            status: j.data.status || prev.status,
-          }));
-        }
+        if (j?.data) setNav((n: any) => ({ ...n, ...j.data }));
       })
       .catch(() => undefined);
 
     fetch(`${API}/rides/${rideId}/masked-session`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({}),
+      body: '{}',
     })
       .then((r) => r.json())
       .then((j) => {
@@ -73,224 +62,215 @@ export default function ActiveRideScreen({
 
   const arrived = async () => {
     setBusy(true);
-    setMsg('');
     try {
-      if (rideId) {
-        const res = await fetch(`${API}/rides/${rideId}/arrived`, {
+      const res = await fetch(`${API}/rides/${rideId}/arrived`, {
+        method: 'PUT',
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        await fetch(`${API}/rides/${rideId}/start`, {
           method: 'PUT',
           headers: authHeaders(),
         });
-        if (!res.ok) {
-          await fetch(`${API}/rides/${rideId}/start`, {
-            method: 'PUT',
-            headers: authHeaders(),
-          });
-        }
       }
-      setRide((r: any) => ({ ...r, status: 'arrived' }));
-      setMsg('Marked arrived at pickup');
+      setMsg('Arrived at pickup');
       onArrived?.();
     } catch {
-      setRide((r: any) => ({ ...r, status: 'arrived' }));
-      setMsg('Marked arrived at pickup');
+      setMsg('Arrived at pickup');
       onArrived?.();
     } finally {
       setBusy(false);
     }
   };
 
-  const sendChat = async () => {
-    const body = 'On my way';
-    setMessages((prev) => [...prev, `You: ${body}`]);
-    if (!rideId) return;
-    await fetch(`${API}/rides/${rideId}/chat`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ body }),
-    }).catch(() => undefined);
-  };
-
-  const name = ride.customerName || 'Ama Konadu';
-  const address = ride.pickupAddress || '12 Oxford St';
+  const p = nav.passenger || {};
 
   return (
     <View style={styles.root}>
-      <View style={styles.map}>
-        <View style={styles.grid} />
-        <View style={styles.etaBadge}>
-          <Text style={styles.etaText}>{ride.etaMinutes ?? 3} min to pickup</Text>
+      <View style={styles.navBox}>
+        <View style={styles.turnIcon}>
+          <Text style={styles.turnArrow}>↱</Text>
         </View>
-        <View style={styles.pin}>
-          <View style={styles.pinDot} />
-        </View>
-      </View>
-
-      <View style={styles.banner}>
-        <View style={styles.bannerGlow} />
-        <Text style={styles.bannerLabel}>Picking up</Text>
-        <Text style={styles.bannerTitle}>
-          {name} · {address}
+        <Text style={styles.navText} numberOfLines={2}>
+          {nav.instruction}
         </Text>
+        <Text style={styles.left}>{Number(nav.distanceLeftKm)} km left</Text>
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.cardRow}>
-          <View style={styles.avatar} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardName}>{name}</Text>
-            <Text style={styles.cardMeta}>
-              ★ {Number(ride.rating || 4.7).toFixed(1)} · {ride.tripsToday ?? 2} trips today
-            </Text>
-          </View>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => Linking.openURL(`tel:${proxy || '+233000000000'}`)}
-          >
-            <Text style={styles.iconGlyph}>☎</Text>
-          </Pressable>
-          <Pressable style={styles.iconBtn} onPress={() => setChatOpen((v) => !v)}>
-            <Text style={styles.iconGlyph}>💬</Text>
-          </Pressable>
+      <View style={styles.map}>
+        <View style={styles.path} />
+        <Text style={styles.car}>🚗</Text>
+        <View style={styles.dest} />
+      </View>
+
+      <View style={styles.metrics}>
+        <View style={styles.metric}>
+          <Text style={styles.metricVal}>{nav.etaMinutes} min</Text>
+          <Text style={styles.metricLab}>ETA</Text>
         </View>
-        <Text style={styles.privacy}>Calls and messages are number-masked for privacy</Text>
-        {chatOpen ? (
-          <View style={{ marginTop: spacing[3] }}>
-            {messages.map((m, i) => (
-              <Text key={i} style={{ color: '#A1A1AA', marginBottom: 4 }}>
-                {m}
-              </Text>
-            ))}
-            <Pressable
-              style={[styles.iconBtn, { marginTop: 8, width: '100%' as any }]}
-              onPress={sendChat}
-            >
-              <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Send quick chat</Text>
-            </Pressable>
-          </View>
-        ) : null}
+        <View style={styles.metric}>
+          <Text style={[styles.metricVal, { color: '#A78BFA' }]}>
+            {formatCurrency(Number(nav.earnings || 0), nav.currency || 'NGN')}
+          </Text>
+          <Text style={styles.metricLab}>Earnings</Text>
+        </View>
+        <View style={styles.metric}>
+          <Text style={[styles.metricVal, { color: '#A78BFA' }]}>+{nav.dvtReward || 60}</Text>
+          <Text style={[styles.metricLab, { color: '#A78BFA' }]}>DVT</Text>
+        </View>
+      </View>
+
+      <View style={styles.passenger}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{p.initials || 'KA'}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{p.name || 'Kwame Asante'}</Text>
+          <Text style={styles.rating}>★★★★★ {Number(p.rating || 4.8).toFixed(1)} passenger</Text>
+        </View>
+        <Pressable
+          style={styles.comm}
+          onPress={() => Linking.openURL(`tel:${proxy || ''}`).catch(() => undefined)}
+        >
+          <Text>📞</Text>
+        </Pressable>
+        <Pressable
+          style={styles.comm}
+          onPress={() =>
+            Linking.openURL(`${API.replace('/api/v1', '')}/ride/${rideId}/chat`).catch(
+              () => undefined
+            )
+          }
+        >
+          <Text>💬</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.route}>
+        <View style={styles.routeRow}>
+          <View style={[styles.dot, { backgroundColor: '#A78BFA' }]} />
+          <Text style={styles.routeText}>{nav.pickup}</Text>
+        </View>
+        <View style={styles.line} />
+        <View style={styles.routeRow}>
+          <View style={[styles.dot, { backgroundColor: '#3B82F6' }]} />
+          <Text style={styles.routeText}>{nav.dropoff}</Text>
+        </View>
       </View>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable
-        style={[styles.cta, ride.status === 'arrived' && styles.ctaDone]}
-        onPress={arrived}
-        disabled={busy || ride.status === 'arrived'}
-      >
-        <View style={styles.ctaLeft} />
-        <View style={styles.ctaRight} />
-        <Text style={styles.ctaText}>
-          {busy ? 'Updating…' : ride.status === 'arrived' ? 'At pickup' : 'Arrived at pickup'}
-        </Text>
+      <Pressable style={styles.arrived} onPress={arrived} disabled={busy}>
+        <Text style={styles.arrivedText}>{busy ? '…' : 'Arrived at Pickup'}</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000', padding: spacing[4] },
+  root: { flex: 1, backgroundColor: '#000', paddingHorizontal: spacing[4], paddingTop: spacing[3] },
+  navBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    marginBottom: spacing[3],
+  },
+  turnIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turnArrow: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+  navText: { flex: 1, color: '#FFF', fontWeight: '600', fontSize: 13 },
+  left: { color: '#A1A1AA', fontWeight: '700', fontSize: 12 },
   map: {
-    flex: 1,
-    minHeight: 220,
-    borderRadius: 20,
-    backgroundColor: '#1A1A1A',
-    overflow: 'hidden',
+    height: 200,
+    borderRadius: 18,
+    backgroundColor: '#0A0A0F',
     marginBottom: spacing[3],
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  grid: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.45,
-    backgroundColor: 'transparent',
-    // diagonal hatch approximation
-    borderWidth: 0,
-  },
-  etaBadge: {
+  path: {
     position: 'absolute',
-    top: spacing[3],
-    left: spacing[3],
-    backgroundColor: '#000000',
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    zIndex: 2,
+    width: 4,
+    height: '70%',
+    backgroundColor: '#3B82F6',
+    borderRadius: 2,
+    transform: [{ rotate: '25deg' }],
   },
-  etaText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
-  pin: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(59,92,255,0.25)',
+  car: { fontSize: 32, zIndex: 2 },
+  dest: {
+    position: 'absolute',
+    bottom: 40,
+    right: 80,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#F97316',
+  },
+  metrics: {
+    flexDirection: 'row',
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginBottom: spacing[3],
+  },
+  metric: { flex: 1, alignItems: 'center' },
+  metricVal: { color: '#FFF', fontWeight: '800', fontSize: 16 },
+  metricLab: { color: '#71717A', fontSize: 11, marginTop: 4 },
+  passenger: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pinDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#3B5CFF' },
-  banner: {
-    borderRadius: 16,
-    padding: spacing[4],
-    marginBottom: spacing[3],
-    overflow: 'hidden',
-    backgroundColor: '#6345ED',
-  },
-  bannerGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#3B5CFF',
-    opacity: 0.55,
-  },
-  bannerLabel: { color: '#C4B5FD', fontSize: 13, zIndex: 1 },
-  bannerTitle: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 18,
-    marginTop: 4,
-    zIndex: 1,
-  },
-  card: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: spacing[4],
+    gap: 10,
     marginBottom: spacing[3],
   },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardName: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
-  cardMeta: { color: '#A1A1AA', marginTop: 2, fontSize: 13 },
-  iconBtn: {
+  avatarText: { color: '#FFF', fontWeight: '800' },
+  name: { color: '#FFF', fontWeight: '800', fontSize: 16 },
+  rating: { color: '#EAB308', fontSize: 12, marginTop: 3 },
+  comm: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#18181B',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconGlyph: { fontSize: 16, color: '#FFFFFF' },
-  privacy: { color: '#71717A', fontSize: 11, marginTop: spacing[3] },
-  msg: { color: '#A1A1AA', marginBottom: spacing[2], fontSize: 13 },
-  cta: {
-    marginTop: 'auto' as any,
-    marginBottom: spacing[4],
-    borderRadius: radius.pill,
-    minHeight: 54,
+  route: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 14,
+    padding: spacing[3],
+    marginBottom: spacing[3],
+  },
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  line: { width: 2, height: 12, backgroundColor: '#3F3F46', marginLeft: 4, marginVertical: 2 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  routeText: { color: '#E4E4E7', fontWeight: '600' },
+  msg: { color: '#A1A1AA', textAlign: 'center', marginBottom: 8 },
+  arrived: {
+    marginTop: 'auto',
+    marginBottom: spacing[5],
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#22C55E',
+    backgroundColor: '#052E16',
+    paddingVertical: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backgroundColor: '#0F766E',
   },
-  ctaDone: { opacity: 0.7 },
-  ctaLeft: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0F766E',
-  },
-  ctaRight: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#3B5CFF',
-    opacity: 0.65,
-  },
-  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  arrivedText: { color: '#4ADE80', fontWeight: '800', fontSize: 16 },
 });

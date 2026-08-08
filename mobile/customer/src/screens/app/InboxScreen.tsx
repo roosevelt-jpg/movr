@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
+import { spacing } from '@movr/design-system/theme';
 import { formatRelativeTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -10,50 +9,48 @@ function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  return token
-    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    : { 'Content-Type': 'application/json' };
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
 const TABS = [
-  { key: undefined, label: 'All' },
-  { key: 'order_update', label: 'Order' },
-  { key: 'ride_update', label: 'Ride' },
-  { key: 'rewards', label: 'Rewards' },
-  { key: 'security', label: 'Security' },
+  { key: 'all', label: 'All' },
+  { key: 'rides', label: 'Rides' },
+  { key: 'orders', label: 'Orders' },
+  { key: 'tokens', label: 'Tokens' },
 ] as const;
 
-/** Inbox — mockup: title + Mark all read, category tabs, unread blue rail cards. */
+const ICONS: Record<string, { bg: string; glyph: string }> = {
+  dvt: { bg: '#4C1D95', glyph: '⛓' },
+  tokens: { bg: '#4C1D95', glyph: '⛓' },
+  order: { bg: '#14532D', glyph: '🍔' },
+  orders: { bg: '#14532D', glyph: '🍔' },
+  ride: { bg: '#27272A', glyph: '🚗' },
+  rides: { bg: '#27272A', glyph: '🚗' },
+  promo: { bg: '#27272A', glyph: '🏷' },
+  rating: { bg: '#27272A', glyph: '⭐' },
+  system: { bg: '#27272A', glyph: '•' },
+};
+
+/** Notifications — filters, unread purple rail, mark all read (mockup). */
 export default function InboxScreen({
-  onOpenWhatsApp,
-  onOpenBot,
-  onOpenSupport,
+  onOpenClaim,
 }: {
   onOpenWhatsApp?: () => void;
   onOpenBot?: () => void;
   onOpenSupport?: () => void;
+  onOpenClaim?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-  const iconMeta: Record<string, { bg: string; glyph: string }> = {
-    ride_update: { bg: 'rgba(0,85,255,0.25)', glyph: '🚗' },
-    order_update: { bg: 'rgba(255,184,0,0.25)', glyph: '📦' },
-    rewards: { bg: 'rgba(63,112,72,0.35)', glyph: '🎁' },
-    security: { bg: 'rgba(255,59,92,0.25)', glyph: '🛡' },
-    promo: { bg: 'rgba(106,0,255,0.25)', glyph: '✨' },
-    system: { bg: colors.surfaceElevated, glyph: 'ℹ' },
-  };
-
-  const [category, setCategory] = useState<string | undefined>();
+  const [category, setCategory] = useState('all');
   const [messages, setMessages] = useState<any[]>([]);
 
   const load = () => {
-    const q = category ? `?category=${category}` : '';
-    fetch(`${API}/inbox${q}`, { headers: authHeaders() })
+    const q = category && category !== 'all' ? `?category=${category}` : '';
+    fetch(`${API}/notifications${q}`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((j) => {
-        setMessages(j.data?.messages || j.data || []);
-      })
+      .then((j) => setMessages(j.data || []))
       .catch(() => undefined);
   };
 
@@ -62,154 +59,124 @@ export default function InboxScreen({
   }, [category]);
 
   const markAllRead = async () => {
-    await fetch(`${API}/inbox/mark-all-read`, {
+    await fetch(`${API}/notifications/mark-all-read`, {
       method: 'PATCH',
       headers: authHeaders(),
     }).catch(() => undefined);
     load();
   };
 
-  const markOne = async (id: string) => {
-    await fetch(`${API}/inbox/${id}/read`, {
+  const markOne = async (id: string, item: any) => {
+    await fetch(`${API}/notifications/${id}/read`, {
       method: 'PATCH',
       headers: authHeaders(),
     }).catch(() => undefined);
+    if (item.category === 'tokens' || item.icon === 'dvt') onOpenClaim?.();
     load();
   };
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Inbox</Text>
+        <Text style={styles.title}>Notifications</Text>
         <Pressable onPress={markAllRead}>
-          <Text style={styles.markRead}>Mark all read</Text>
+          <Text style={styles.mark}>Mark all read</Text>
         </Pressable>
       </View>
 
-      <View style={styles.tabsWrap}>
-        <FlatList
-          horizontal
-          data={TABS as any[]}
-          keyExtractor={(i) => String(i.key || 'all')}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabs}
-          renderItem={({ item }) => {
-            const active = category === item.key;
-            return (
-              <Pressable onPress={() => setCategory(item.key)} style={styles.tab}>
-                <Text style={[styles.tabText, active && styles.tabActive]}>{item.label}</Text>
-                {active ? <View style={styles.underline} /> : null}
-              </Pressable>
-            );
-          }}
-        />
+      <View style={styles.tabs}>
+        {TABS.map((t) => (
+          <Pressable
+            key={t.key}
+            style={[styles.tab, category === t.key && styles.tabOn]}
+            onPress={() => setCategory(t.key)}
+          >
+            <Text style={[styles.tabTxt, category === t.key && styles.tabTxtOn]}>{t.label}</Text>
+          </Pressable>
+        ))}
       </View>
 
       <FlatList
         data={messages}
-        keyExtractor={(m) => String(m.id)}
-        contentContainerStyle={{ paddingHorizontal: spacing[4], paddingBottom: spacing[8] }}
+        keyExtractor={(i) => String(i.id)}
+        contentContainerStyle={{ paddingBottom: 40 }}
         renderItem={({ item }) => {
-          const meta = iconMeta[item.category] || iconMeta.system;
-          const unread = !item.read && !item.is_read;
+          const icon = ICONS[item.icon] || ICONS[item.category] || ICONS.system;
+          const unread = Boolean(item.unread);
           return (
-            <Pressable onPress={() => markOne(item.id)} style={[styles.card, unread && styles.cardUnread]}>
-              {unread ? <View style={styles.unreadRail} /> : null}
-              <View style={[styles.icon, { backgroundColor: meta.bg }]}>
-                <Text>{meta.glyph}</Text>
+            <Pressable
+              style={[styles.card, unread && styles.cardUnread]}
+              onPress={() => markOne(item.id, item)}
+            >
+              {unread ? <View style={styles.rail} /> : null}
+              <View style={[styles.icon, { backgroundColor: icon.bg }]}>
+                <Text>{icon.glyph}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.msgTitle}>{item.title}</Text>
-                <Text style={styles.msgBody} numberOfLines={2}>
-                  {item.body || item.description}
+                <Text style={styles.itemTitle}>{item.title}</Text>
+                <Text style={styles.itemBody} numberOfLines={2}>
+                  {item.body}
                 </Text>
-                <Text style={styles.msgWhen}>{formatRelativeTime(item.created_at)}</Text>
+                <Text style={styles.when}>{formatRelativeTime(item.createdAt)}</Text>
               </View>
             </Pressable>
           );
         }}
-        ListEmptyComponent={
-          <Text style={{ color: colors.textSecondary, padding: spacing[4] }}>No messages</Text>
-        }
-        ListFooterComponent={
-          onOpenWhatsApp || onOpenBot || onOpenSupport ? (
-            <View style={{ marginTop: spacing[4], gap: spacing[2] }}>
-              {onOpenWhatsApp ? (
-                <Pressable onPress={onOpenWhatsApp}>
-                  <Text style={styles.channelLink}>WhatsApp booking →</Text>
-                </Pressable>
-              ) : null}
-              {onOpenBot ? (
-                <Pressable onPress={onOpenBot}>
-                  <Text style={styles.channelLink}>Movr AI →</Text>
-                </Pressable>
-              ) : null}
-              {onOpenSupport ? (
-                <Pressable onPress={onOpenSupport}>
-                  <Text style={styles.channelLink}>Support →</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No notifications</Text>}
       />
     </View>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.jetBlack },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: spacing[4],
-      paddingTop: spacing[4],
-      paddingBottom: spacing[2],
-    },
-    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-    markRead: { color: colors.textSecondary, fontWeight: '500', fontSize: 14 },
-    tabsWrap: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      marginBottom: spacing[3],
-    },
-    tabs: { paddingHorizontal: spacing[4], paddingTop: spacing[2], gap: spacing[4] },
-    tab: { marginRight: spacing[4], paddingBottom: spacing[2] },
-    tabText: { color: colors.textSecondary, fontWeight: '600', fontSize: 15 },
-    tabActive: { color: colors.pureWhite },
-    underline: { height: 3, backgroundColor: colors.motionBlue, marginTop: 6, borderRadius: 2 },
-    card: {
-      flexDirection: 'row',
-      gap: spacing[3],
-      padding: spacing[4],
-      borderRadius: radius.lg,
-      backgroundColor: colors.surfaceElevated,
-      marginBottom: spacing[3],
-      overflow: 'hidden',
-      position: 'relative',
-    },
-    cardUnread: {},
-    unreadRail: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 3,
-      backgroundColor: colors.motionBlue,
-    },
-    icon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginLeft: 4,
-    },
-    msgTitle: { color: colors.pureWhite, fontWeight: '700', fontSize: 15 },
-    msgBody: { color: colors.textSecondary, marginTop: 4, fontSize: 13, lineHeight: 18 },
-    msgWhen: { color: colors.textSecondary, fontSize: 12, marginTop: 8 },
-    channelLink: { color: colors.motionBlue, fontWeight: '600', marginBottom: spacing[2] },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000', paddingHorizontal: spacing[4], paddingTop: spacing[4] },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  title: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  mark: { color: '#A855F7', fontWeight: '700' },
+  tabs: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  tab: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  tabOn: { backgroundColor: '#A855F7', borderColor: '#A855F7' },
+  tabTxt: { color: '#A1A1AA', fontWeight: '600' },
+  tabTxtOn: { color: '#fff' },
+  card: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  cardUnread: { backgroundColor: 'rgba(168,85,247,0.12)' },
+  rail: {
+    position: 'absolute',
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#A855F7',
+  },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemTitle: { color: '#fff', fontWeight: '700' },
+  itemBody: { color: '#A1A1AA', marginTop: 4, fontSize: 13 },
+  when: { color: '#71717A', fontSize: 12, marginTop: 6 },
+  empty: { color: '#71717A', textAlign: 'center', marginTop: 40 },
+});

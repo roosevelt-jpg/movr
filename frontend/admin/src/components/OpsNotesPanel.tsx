@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { formatLocalTime } from '../lib/currency';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -129,13 +130,5 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 10,
     marginBottom: 8,
   },
-  btn: {
-    border: 'none',
-    borderRadius: 8,
-    padding: '8px 12px',
-    background: 'var(--motion-blue)',
-    color: 'var(--pure-white)',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
+  btn: { ...adminBtn.primary },
 };

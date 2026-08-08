@@ -1,72 +1,95 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-const FALLBACK = [
-  {
-    title: 'Ride, shop, and deliver — all in one app',
-    body: 'Book a ride, order from local stores, or send a parcel, all from the same place.',
-    icon_key: 'van',
-  },
-  {
-    title: 'Pay with wallet, MoMo, or card',
-    body: 'Top up once and use Movr across rides, orders, and deliveries.',
-    icon_key: 'wallet',
-  },
-  {
-    title: 'Earn points on every trip',
-    body: 'Redeem rewards or convert points when DVT launches.',
-    icon_key: 'points',
-  },
-];
+type Landing = {
+  brand: string;
+  tagline: string;
+  headline: string;
+  body: string;
+  ctaPrimary: string;
+  ctaSecondary: string;
+  chips: { label: string; icon: string }[];
+};
 
-/** First-run onboarding carousel — live /public/onboarding. */
-export default function OnboardingIntroScreen({ onDone }: { onDone?: () => void }) {
-  const [slides, setSlides] = useState(FALLBACK);
-  const [step, setStep] = useState(0);
+const FALLBACK: Landing = {
+  brand: 'Movr',
+  tagline: 'MOVE · SHOP · DELIVER',
+  headline: "Africa's Super-App Is Here",
+  body: 'One platform for rides, shopping, deliveries, and rentals — powered by blockchain rewards.',
+  ctaPrimary: 'Get Started',
+  ctaSecondary: 'Already have an account? Sign in',
+  chips: [
+    { label: 'Ride', icon: '🚗' },
+    { label: 'Shop', icon: '🛍️' },
+    { label: 'Deliver', icon: '📦' },
+  ],
+};
+
+/** Landing / onboarding — brand hero, service chips, Get Started + Sign in. */
+export default function OnboardingIntroScreen({
+  onDone,
+  onSignIn,
+}: {
+  onDone?: () => void;
+  onSignIn?: () => void;
+}) {
+  const [landing, setLanding] = useState<Landing>(FALLBACK);
 
   useEffect(() => {
     fetch(`${API}/public/onboarding`)
       .then((r) => r.json())
       .then((body) => {
-        if (Array.isArray(body?.data) && body.data.length) setSlides(body.data);
+        if (body?.landing) {
+          const L = body.landing;
+          setLanding({
+            brand: L.brand || FALLBACK.brand,
+            tagline: L.tagline || FALLBACK.tagline,
+            headline: L.headline || FALLBACK.headline,
+            body: L.body || FALLBACK.body,
+            ctaPrimary: L.ctaPrimary || FALLBACK.ctaPrimary,
+            ctaSecondary: L.ctaSecondary || FALLBACK.ctaSecondary,
+            chips: (L.chips || FALLBACK.chips).map((c: any, i: number) => ({
+              label: c.label,
+              icon: FALLBACK.chips[i]?.icon || '✨',
+            })),
+          });
+        }
       })
       .catch(() => undefined);
   }, []);
 
-  const slide = slides[step] || FALLBACK[0];
-
-  const next = () => {
-    if (step < slides.length - 1) setStep(step + 1);
-    else onDone?.();
-  };
-
-  const icon =
-    slide.icon_key === 'wallet' ? '💳' : slide.icon_key === 'points' ? '✦' : '🚐';
-
   return (
     <View style={styles.root}>
+      <View style={styles.topGlow} />
       <View style={styles.mid}>
-        <View style={styles.illust}>
-          <Text style={styles.illustIcon}>{icon}</Text>
+        <Text style={styles.brand}>{landing.brand}</Text>
+        <Text style={styles.tagline}>{landing.tagline}</Text>
+
+        <View style={styles.chips}>
+          {landing.chips.map((c) => (
+            <View key={c.label} style={styles.chip}>
+              <Text style={styles.chipIcon}>{c.icon}</Text>
+              <Text style={styles.chipText}>{c.label}</Text>
+            </View>
+          ))}
         </View>
-        <Text style={styles.title}>{slide.title}</Text>
-        <Text style={styles.body}>{slide.body}</Text>
+
+        <Text style={styles.headline}>{landing.headline}</Text>
+        <Text style={styles.body}>{landing.body}</Text>
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.dots}>
-          {slides.map((_, i) => (
-            <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
-          ))}
-        </View>
-        <Pressable style={styles.btn} onPress={next}>
+        <Pressable style={styles.btn} onPress={onDone}>
           <View style={styles.btnGradA} />
           <View style={styles.btnGradB} />
-          <Text style={styles.btnText}>
-            {step < slides.length - 1 ? 'Next' : 'Get started'}
+          <Text style={styles.btnText}>{landing.ctaPrimary}</Text>
+        </Pressable>
+        <Pressable onPress={onSignIn || onDone}>
+          <Text style={styles.signIn}>
+            Already have an account? <Text style={styles.signInBold}>Sign in</Text>
           </Text>
         </Pressable>
       </View>
@@ -82,52 +105,76 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
     justifyContent: 'space-between',
   },
-  mid: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  illust: {
-    width: 160,
-    height: 160,
-    borderRadius: 20,
-    backgroundColor: '#1A1A1A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing[8],
+  topGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#8E2DE2',
   },
-  illustIcon: { fontSize: 48, color: '#3B5CFF' },
-  title: {
+  mid: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
+  brand: {
     color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 52,
+    fontWeight: '800',
+    letterSpacing: -1,
+    textShadowColor: 'rgba(142,45,226,0.55)',
+    textShadowRadius: 24,
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  tagline: {
+    color: '#A1A1AA',
+    fontSize: 13,
+    letterSpacing: 3,
+    marginTop: 12,
+    marginBottom: 28,
+    fontWeight: '500',
+  },
+  chips: { flexDirection: 'row', gap: 10, marginBottom: 36, flexWrap: 'wrap', justifyContent: 'center' },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipIcon: { fontSize: 14 },
+  chipText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
+  headline: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: spacing[3],
+    marginBottom: 14,
+    paddingHorizontal: 8,
   },
   body: {
     color: '#A1A1AA',
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
+    fontSize: 15,
   },
-  footer: { gap: spacing[5] },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, alignItems: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2A2A2A' },
-  dotActive: {
-    width: 28,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#3B5CFF',
-  },
+  footer: { gap: spacing[4], paddingBottom: 8 },
   btn: {
-    borderRadius: 999,
-    paddingVertical: 16,
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#0F766E',
+    backgroundColor: '#3B5CFF',
   },
-  btnGradA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#6B21A8', opacity: 0.7 },
+  btnGradA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#8E2DE2', opacity: 0.85 },
   btnGradB: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#3B5CFF',
-    opacity: 0.55,
-    left: '40%',
+    opacity: 0.75,
+    left: '35%',
   },
-  btnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  btnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 17, zIndex: 1 },
+  signIn: { color: '#A1A1AA', textAlign: 'center', fontSize: 14 },
+  signInBold: { color: '#FFFFFF', fontWeight: '700' },
 });

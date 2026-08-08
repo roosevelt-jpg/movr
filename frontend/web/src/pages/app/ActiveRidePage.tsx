@@ -1,38 +1,44 @@
 import React, { useEffect, useState } from 'react';
-import { Phone, MessageCircle, Share2, MapPin } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { Phone, MessageCircle } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 import { ridesApi } from '../../services/api';
+import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import { formatCurrency } from '../../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 const headers = () => ({
-  Authorization: `Bearer ${localStorage.getItem('movr_token') || ''}`,
+  Authorization: `Bearer ${localStorage.getItem('movr_token') || localStorage.getItem('token') || ''}`,
   'Content-Type': 'application/json',
 });
 
-/** Active ride — ETA/SOS map, masked call/chat, share trip. */
+/** Driver matched — ETA map, Call/Message/SOS, wallet fare, Cancel (mockup). */
 const ActiveRidePage: React.FC = () => {
   const { id } = useParams();
-  const { formatMoney } = useLocalCurrency();
+  const navigate = useNavigate();
+  const { currency: locCurrency } = useLocalCurrency();
   const [ride, setRide] = useState<any>(null);
   const [proxy, setProxy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatBody, setChatBody] = useState('');
   const [messages, setMessages] = useState<string[]>([]);
   const [sosMsg, setSosMsg] = useState('');
-  const [emergencyTel, setEmergencyTel] = useState('tel:191');
   const [noticeAcked, setNoticeAcked] = useState(false);
   const [noticeBusy, setNoticeBusy] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     if (!id) return;
-    setNoticeAcked(false);
     ridesApi
       .getRideDetails(id)
       .then((res) => setRide(res.data?.data || res.data))
       .catch(() => undefined);
+  };
 
+  useEffect(() => {
+    if (!id) return;
+    setNoticeAcked(false);
+    load();
+    const t = setInterval(load, 8000);
     fetch(`${API}/rides/${id}/masked-session`, {
       method: 'POST',
       headers: headers(),
@@ -43,18 +49,17 @@ const ActiveRidePage: React.FC = () => {
         if (j?.data?.customerProxyNumber) setProxy(j.data.customerProxyNumber);
       })
       .catch(() => undefined);
+    return () => clearInterval(t);
   }, [id]);
 
   const triggerSos = async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${API}/sos/trigger`, {
+      await fetch(`${API}/sos/trigger`, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify({ rideId: id, triggeredBy: 'rider' }),
       });
-      const json = await res.json();
-      if (json?.data?.quickDial) setEmergencyTel(json.data.quickDial);
       setSosMsg('SOS active — ops notified');
       toast.success('SOS triggered');
     } catch {
@@ -62,19 +67,14 @@ const ActiveRidePage: React.FC = () => {
     }
   };
 
-  const shareTrip = async () => {
+  const cancelRide = async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${API}/rides/${id}/share-link`, { headers: headers() });
-      const json = await res.json();
-      const url = json?.data?.url;
-      if (url) {
-        await navigator.clipboard?.writeText(url);
-        toast.success('Share link copied');
-        window.open(url, '_blank');
-      }
+      await fetch(`${API}/rides/${id}/cancel`, { method: 'PUT', headers: headers() });
+      toast.success('Ride cancelled');
+      navigate('/dashboard');
     } catch {
-      toast.error('Could not create share link');
+      toast.error('Could not cancel');
     }
   };
 
@@ -94,10 +94,7 @@ const ActiveRidePage: React.FC = () => {
     if (!id) return;
     setNoticeBusy(true);
     try {
-      await fetch(`${API}/rides/${id}/recording/notice`, {
-        method: 'POST',
-        headers: headers(),
-      });
+      await fetch(`${API}/rides/${id}/recording/notice`, { method: 'POST', headers: headers() });
       setNoticeAcked(true);
     } catch {
       toast.error('Could not log recording notice');
@@ -106,29 +103,31 @@ const ActiveRidePage: React.FC = () => {
     }
   };
 
-  const name =
-    ride?.driver_name || ride?.driverName || 'Driver';
-  const plate = ride?.vehicle_plate || ride?.plate || '—';
-  const fare = Number(ride?.estimated_fare || ride?.actual_fare || 45);
+  const driver = ride?.driver;
+  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 2);
+  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 1200);
+  const currency = ride?.currency || locCurrency || 'NGN';
+  const plate = String(driver?.vehicle?.plate || 'LAG 294-HG').replace(/-/g, ' ');
+  const model = driver?.vehicle?.model || 'Toyota Corolla';
+  const color = driver?.vehicle?.color || 'Silver';
+  const rating = Number(driver?.rating ?? 4.9).toFixed(1);
+  const trips = Number(driver?.tripCount ?? 312);
+  const banner = ride?.etaLabel || `Driver is ${eta} min away`;
+  const payment = ride?.paymentMethod || 'Movr Wallet';
+  const name = driver?.name || ride?.driver_name || 'Emeka Okafor';
 
   return (
-    <div className="min-h-[70vh] rounded-2xl bg-jet-black text-pure-white overflow-hidden border border-border relative" data-force-dark>
+    <div className="min-h-[70vh] rounded-2xl bg-black text-white overflow-hidden border border-zinc-800 relative max-w-xl mx-auto" data-force-dark>
       {!noticeAcked ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-jet-black/80 p-6">
-          <div className="max-w-md rounded-2xl border border-border bg-surface-elevated p-6 space-y-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-warning">Safety recording</p>
-            <p className="text-lg font-bold leading-snug">
-              This trip is recorded for safety. Recording is stored securely and only reviewed if
-              there&apos;s a dispute or safety report.
-            </p>
-            <p className="text-sm text-text-secondary">
-              Footage is recorded on the driver device and uploaded later — not live-streamed.
-            </p>
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-6">
+          <div className="max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-400">Safety recording</p>
+            <p className="text-lg font-bold">This trip is recorded for safety.</p>
             <button
               type="button"
               disabled={noticeBusy}
               onClick={acknowledgeRecording}
-              className="w-full rounded-xl bg-motion-blue py-3 font-semibold"
+              className="w-full rounded-xl bg-purple-600 py-3 font-semibold"
             >
               {noticeBusy ? 'Saving…' : 'I understand — continue'}
             </button>
@@ -136,115 +135,115 @@ const ActiveRidePage: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="relative h-64 md:h-80 bg-surface-elevated">
+      <div className="relative h-52 bg-[#0c0c12]">
         <div
-          className="absolute inset-0 opacity-40"
+          className="absolute inset-0 opacity-30"
           style={{
             backgroundImage:
-              'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
+              'linear-gradient(#2a2a35 1px, transparent 1px), linear-gradient(90deg, #2a2a35 1px, transparent 1px)',
             backgroundSize: '28px 28px',
           }}
         />
-        <div className="absolute top-4 left-4 rounded-full bg-jet-black/80 px-3 py-1.5 text-sm font-semibold">
-          ETA {ride?.eta_minutes ?? 6} min
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-sm font-semibold">
+          • {banner}
         </div>
-        <button
-          type="button"
-          onClick={triggerSos}
-          className="absolute top-4 right-4 rounded-full bg-error text-black font-bold px-4 py-1.5 text-sm"
-        >
-          SOS
-        </button>
-        <a
-          href={emergencyTel}
-          className="absolute top-14 right-4 rounded-full bg-jet-black/80 border border-border px-3 py-1 text-xs font-semibold"
-        >
-          Call Police
-        </a>
-        <div className="absolute left-[28%] top-[32%] w-3 h-3 rounded-full bg-white" />
-        <div className="absolute right-[30%] bottom-[28%] w-4 h-4 rounded-full border-2 border-motion-blue" />
+        <div className="absolute left-[32%] top-[42%] w-12 h-12 rounded-full bg-purple-500/30" />
+        <span className="absolute left-[36%] top-[46%] text-xl">🚗</span>
+        <span className="absolute right-[24%] bottom-[26%] text-xl">📍</span>
       </div>
 
-      <div className="p-5 md:p-6 space-y-4">
-        {sosMsg ? <p className="text-error text-sm font-semibold text-center">{sosMsg}</p> : null}
+      <div className="p-5 space-y-4">
+        <div className="text-center">
+          <p className="text-zinc-400">{ride?.matchedHeadline || 'Driver matched!'}</p>
+          <p className="text-xl font-bold mt-1">
+            Arriving in <span className="text-purple-400">{eta} min</span>
+          </p>
+        </div>
 
-        <div className="rounded-2xl bg-surface-elevated border border-border p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex gap-3">
-              <div className="w-12 h-12 rounded-full bg-surface border border-border" />
-              <div>
-                <p className="font-bold text-lg">{name}</p>
-                <p className="text-sm text-text-secondary">{plate}</p>
-                <p className="text-sm text-text-secondary">★ {Number(ride?.rating || 4.9).toFixed(1)}</p>
-              </div>
-            </div>
+        <div className="rounded-2xl bg-zinc-900 p-4 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-xl">👨</div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold">{name}</p>
+            <p className="text-sm text-zinc-400">
+              {model} · {color}
+            </p>
+            <p className="text-xs text-amber-400 mt-1">
+              ★★★★★ {rating} · {trips} trips
+            </p>
+          </div>
+          <div className="border border-zinc-600 rounded-md px-2 py-1 text-[11px] font-extrabold tracking-wide">
+            {plate}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <a
+            href={`tel:${proxy || driver?.phone || ''}`}
+            className="rounded-xl bg-zinc-900 py-3 flex flex-col items-center gap-1"
+          >
+            <Phone size={18} />
+            <span className="text-xs font-semibold">Call</span>
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              if (id) navigate(`/ride/${id}/chat`);
+              else setChatOpen((v) => !v);
+            }}
+            className="rounded-xl bg-zinc-900 py-3 flex flex-col items-center gap-1"
+          >
+            <MessageCircle size={18} />
+            <span className="text-xs font-semibold">Message</span>
+          </button>
+          <button
+            type="button"
+            onClick={triggerSos}
+            className="rounded-xl bg-red-900/80 py-3 flex flex-col items-center gap-1"
+          >
+            <span className="font-black text-sm">SOS</span>
+            <span className="text-xs font-semibold text-red-200">SOS</span>
+          </button>
+        </div>
+
+        {sosMsg ? <p className="text-red-400 text-sm text-center font-semibold">{sosMsg}</p> : null}
+
+        <div className="flex justify-between text-sm">
+          <span className="text-zinc-400">Paying with</span>
+          <span className="font-bold">💳 {payment}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-zinc-400">Fare estimate</span>
+          <span className="font-extrabold">{formatCurrency(fare, currency)}</span>
+        </div>
+
+        {chatOpen ? (
+          <div className="space-y-2 rounded-xl bg-zinc-900 p-3">
+            {messages.map((m, i) => (
+              <p key={i} className="text-sm text-zinc-400">
+                {m}
+              </p>
+            ))}
             <div className="flex gap-2">
-              <a
-                href={`tel:${proxy || ''}`}
-                className="w-11 h-11 rounded-xl bg-surface border border-border flex items-center justify-center"
-                title="Masked call"
-              >
-                <Phone size={18} />
-              </a>
-              <button
-                type="button"
-                onClick={() => setChatOpen((v) => !v)}
-                className="w-11 h-11 rounded-xl bg-surface border border-border flex items-center justify-center"
-              >
-                <MessageCircle size={18} />
+              <input
+                value={chatBody}
+                onChange={(e) => setChatBody(e.target.value)}
+                placeholder="Message driver…"
+                className="flex-1 rounded-lg bg-black border border-zinc-700 px-3 py-2 text-sm"
+              />
+              <button type="button" onClick={sendChat} className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold">
+                Send
               </button>
             </div>
           </div>
+        ) : null}
 
-          <p className="text-xs text-text-secondary mt-3">
-            Calls and messages are number-masked for this ride
-          </p>
-
-          {chatOpen ? (
-            <div className="mt-3 space-y-2">
-              {messages.map((m, i) => (
-                <p key={i} className="text-sm text-text-secondary">
-                  {m}
-                </p>
-              ))}
-              <div className="flex gap-2">
-                <input
-                  value={chatBody}
-                  onChange={(e) => setChatBody(e.target.value)}
-                  placeholder="Message driver…"
-                  className="flex-1 rounded-lg bg-surface border border-border px-3 py-2 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={sendChat}
-                  className="rounded-lg bg-motion-blue px-3 py-2 text-sm font-semibold"
-                >
-                  Send
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <button
-              type="button"
-              onClick={shareTrip}
-              className="rounded-xl bg-surface border border-border py-3 font-semibold flex items-center justify-center gap-2"
-            >
-              <Share2 size={16} /> Share trip
-            </button>
-            <button
-              type="button"
-              className="rounded-xl bg-surface border border-border py-3 font-semibold flex items-center justify-center gap-2"
-            >
-              <MapPin size={16} /> Route
-            </button>
-          </div>
-        </div>
-
-        <p className="text-center text-text-secondary text-sm pb-2">
-          {ride?.status || 'In progress'} · {formatMoney(fare)} fare
-        </p>
+        <button
+          type="button"
+          onClick={cancelRide}
+          className="w-full rounded-2xl bg-zinc-900 py-3.5 font-bold"
+        >
+          Cancel Ride
+        </button>
       </div>
     </div>
   );

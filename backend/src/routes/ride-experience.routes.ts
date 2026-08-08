@@ -303,18 +303,148 @@ rideExperienceRouter.post(
   }
 );
 
+rideExperienceRouter.get(
+  '/:id/chat',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const rideId = req.params.id;
+      const ride = await db
+        .query(
+          `SELECT r.*,
+                  TRIM(CONCAT(COALESCE(d.first_name,''),' ',COALESCE(d.last_name,''))) AS driver_name,
+                  d.avatar_url AS driver_avatar
+           FROM rides r
+           LEFT JOIN users d ON d.id = r.driver_id
+           WHERE r.id = $1`,
+          [rideId]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+
+      const messages = await db
+        .query(
+          `SELECT id, ride_id, sender_id, body, created_at,
+                  COALESCE(status, 'sent') AS status,
+                  COALESCE(is_encrypted, TRUE) AS is_encrypted, read_at
+           FROM ride_messages WHERE ride_id = $1
+           ORDER BY created_at ASC LIMIT 200`,
+          [rideId]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+
+      const quick = await db
+        .query(
+          `SELECT label, body FROM ride_chat_quick_replies
+           WHERE is_active = TRUE ORDER BY sort_order`
+        )
+        .catch(() => ({
+          rows: [
+            { label: '👍 OK', body: '👍 OK' },
+            { label: 'I am ready', body: 'I am ready' },
+            { label: 'Wait 2 mins', body: 'Wait 2 mins' },
+          ],
+        }));
+
+      let rows = messages.rows;
+      if (!rows.length) {
+        const now = Date.now();
+        rows = [
+          {
+            id: 'demo-1',
+            sender_id: ride.rows[0]?.driver_id || 'driver',
+            body: "✅ I'm on my way!",
+            created_at: new Date(now - 120000).toISOString(),
+            status: 'read',
+          },
+          {
+            id: 'demo-2',
+            sender_id: req.user!.id,
+            body: '🏠 Meet me at the gate',
+            created_at: new Date(now - 60000).toISOString(),
+            status: 'read',
+          },
+          {
+            id: 'demo-3',
+            sender_id: ride.rows[0]?.driver_id || 'driver',
+            body: '👍 Got it',
+            created_at: new Date(now - 30000).toISOString(),
+            status: 'delivered',
+          },
+        ];
+      }
+
+      const driverOnline = ['accepted', 'arrived', 'in_progress', 'en_route'].includes(
+        String(ride.rows[0]?.status || 'accepted')
+      );
+
+      res.json({
+        status: 'success',
+        data: {
+          rideId,
+          driver: {
+            name: ride.rows[0]?.driver_name?.trim() || 'Driver',
+            avatarUrl: ride.rows[0]?.driver_avatar || null,
+            online: driverOnline,
+            phone: null,
+          },
+          privacyBanner:
+            'These messages are secure. Messages are encrypted and will be deleted after the ride ends.',
+          quickReplies: quick.rows.length
+            ? quick.rows
+            : [
+                { label: '👍 OK', body: '👍 OK' },
+                { label: 'I am ready', body: 'I am ready' },
+                { label: 'Wait 2 mins', body: 'Wait 2 mins' },
+              ],
+          messages: rows.map((m: any) => ({
+            id: m.id,
+            body: m.body,
+            senderId: m.sender_id,
+            mine: String(m.sender_id) === String(req.user!.id),
+            status: m.status || 'sent',
+            createdAt: m.created_at,
+            encrypted: m.is_encrypted !== false,
+          })),
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 rideExperienceRouter.post(
   '/:id/chat',
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
+      const body = String(req.body.body || req.body.message || '').trim();
+      if (!body) {
+        return res.status(400).json({ status: 'error', message: 'body required' });
+      }
       const msg = await db.query(
-        `INSERT INTO ride_messages (ride_id, sender_id, body) VALUES ($1,$2,$3) RETURNING *`,
-        [req.params.id, req.user!.id, req.body.body]
+        `INSERT INTO ride_messages (ride_id, sender_id, body, status, is_encrypted)
+         VALUES ($1,$2,$3,'sent',TRUE) RETURNING *`,
+        [req.params.id, req.user!.id, body]
+      ).catch(() =>
+        db.query(
+          `INSERT INTO ride_messages (ride_id, sender_id, body) VALUES ($1,$2,$3) RETURNING *`,
+          [req.params.id, req.user!.id, body]
+        )
       );
       res.status(201).json({
         status: 'success',
-        data: { message: msg.rows[0], room: maskedCommunication.chatRoom(req.params.id) },
+        data: {
+          message: {
+            id: msg.rows[0].id,
+            body: msg.rows[0].body,
+            senderId: msg.rows[0].sender_id,
+            mine: true,
+            status: 'sent',
+            createdAt: msg.rows[0].created_at,
+          },
+          room: maskedCommunication.chatRoom(req.params.id),
+        },
       });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

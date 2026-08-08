@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Moon, Sun } from 'lucide-react';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -99,17 +100,8 @@ export default function AdminLoginPage() {
         <button
           type="submit"
           disabled={loading}
-          style={{
-            width: '100%',
-            marginTop: 28,
-            border: 'none',
-            borderRadius: 999,
-            padding: '14px 0',
-            fontWeight: 700,
-            color: 'var(--brand-white)',
-            cursor: 'pointer',
-            background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
-          }}
+          className="admin-btn"
+          style={{ ...adminBtn.block, marginTop: 28 }}
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

@@ -83,6 +83,7 @@ function HomepageFallback() {
               body: 'On-demand cars, bikes, and tricycles.',
               cta: 'Book a ride',
               href: '/login',
+              imageUrl: '/brand/ride-sedan.png',
             },
             {
               iconKey: 'heart',
@@ -91,6 +92,7 @@ function HomepageFallback() {
               body: 'Buy from local stores with delivery.',
               cta: 'Browse stores',
               href: '/marketplace',
+              imageUrl: '/brand/shop-partner.png',
             },
             {
               iconKey: 'package',
@@ -99,6 +101,7 @@ function HomepageFallback() {
               body: 'Parcels tracked from pickup to drop-off.',
               cta: 'Send a parcel',
               href: '/login',
+              imageUrl: '/brand/courier-moto.png',
             },
             {
               iconKey: 'key',
@@ -107,6 +110,7 @@ function HomepageFallback() {
               body: 'Self-drive or chauffeured vehicles.',
               cta: 'Explore rentals',
               href: '/#rentals',
+              imageUrl: '/brand/ride-sedan.png',
             },
           ],
         }}

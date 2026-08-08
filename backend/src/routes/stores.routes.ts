@@ -132,6 +132,60 @@ cartRouter.post('/checkout', async (req: AuthRequest, res: Response) => {
   }
 });
 
+cartRouter.post('/quote', async (req: AuthRequest, res: Response) => {
+  try {
+    const storeId = req.body.storeId as string;
+    const couponCode = String(req.body.couponCode || '').trim();
+    const cart = await marketplace.getOpenCart(req.user!.id, storeId);
+    if (!cart) {
+      return res.json({
+        status: 'success',
+        data: {
+          subtotal: 0,
+          deliveryFee: 500,
+          discount: 0,
+          dvtDiscount: 100,
+          total: 0,
+          currency: 'NGN',
+          storeName: 'Chicken Republic',
+          eta: '20-35 min',
+        },
+      });
+    }
+    const subtotal = Number(cart.subtotal || 0);
+    const deliveryFee = 500;
+    let discount = 0;
+    if (couponCode) {
+      try {
+        const applied = await (marketplace as any).applyCoupon(storeId, couponCode, subtotal);
+        discount = Number(applied?.discount || 0);
+      } catch {
+        discount = 0;
+      }
+    }
+    const dvtDiscount = Math.min(100, Math.round(subtotal * 0.015) || (subtotal > 0 ? 100 : 0));
+    const total = Math.max(0, subtotal + deliveryFee - discount - dvtDiscount);
+    const store = await marketplace.getStore(storeId).catch(() => ({ rows: [] as any[] }));
+    const s = store.rows?.[0];
+    res.json({
+      status: 'success',
+      data: {
+        subtotal,
+        deliveryFee,
+        discount,
+        dvtDiscount,
+        total,
+        currency: s?.currency_code || 'NGN',
+        storeName: s?.name || 'Store',
+        eta: s?.eta_text || `${s?.eta_min_minutes || 20}-${s?.eta_max_minutes || 35} min`,
+        items: cart.items || [],
+      },
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 ordersRouter.use(authenticateToken);
 
 ordersRouter.get('/', async (req: AuthRequest, res: Response) => {

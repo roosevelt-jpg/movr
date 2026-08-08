@@ -89,7 +89,7 @@ export default function MerchantOnboardingPage() {
       );
 
       toast.success('Storefront created');
-      navigate('/merchant/dashboard');
+      navigate('/merchant/setup');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Onboarding failed');
     } finally {

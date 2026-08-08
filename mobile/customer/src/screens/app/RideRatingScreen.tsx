@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import TipPromptScreen from './TipPromptScreen';
+import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const TAGS = ['Clean car', 'Great chat', 'Safe driving'] as const;
 const DEMO_RIDE = 'f3000000-0000-4000-8000-0000000000a9';
+const TIP_PRESETS = [100, 200, 500];
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -17,26 +17,56 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Post-ride rating — stars, comment, quick tags (mockup). */
+/** Arrival receipt + rate + tip + DVT earned (mockup). */
 export default function RideRatingScreen({
   rideId = DEMO_RIDE,
-  driverName = 'Kwesi',
+  driverName = 'Emeka',
   onDone,
 }: {
   rideId?: string;
   driverName?: string;
   onDone?: () => void;
 }) {
-  const [step, setStep] = useState<'rate' | 'tip'>('rate');
   const [name, setName] = useState(driverName);
   const [rating, setRating] = useState(4);
-  const [comment, setComment] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [tip, setTip] = useState<number | 'custom'>(200);
+  const [customTip, setCustomTip] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
+  const [receipt, setReceipt] = useState({
+    destination: 'Lekki Phase 1',
+    durationMinutes: 18,
+    distanceKm: 8.4,
+    baseFare: 900,
+    distanceFare: 240,
+    dvtDiscount: 60,
+    totalPaid: 1080,
+    dvtEarned: 120,
+    currency: 'NGN',
+  });
 
   useEffect(() => {
     if (!rideId) return;
+    fetch(`${API}/rides/${rideId}/receipt`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data;
+        if (!d) return;
+        setReceipt({
+          destination: d.destination || 'Lekki Phase 1',
+          durationMinutes: Number(d.durationMinutes || 18),
+          distanceKm: Number(d.distanceKm || 8.4),
+          baseFare: Number(d.baseFare || 900),
+          distanceFare: Number(d.distanceFare || 240),
+          dvtDiscount: Number(d.dvtDiscount || 60),
+          totalPaid: Number(d.totalPaid || 1080),
+          dvtEarned: Number(d.dvtEarned || 120),
+          currency: d.currency || 'NGN',
+        });
+        if (d.driverFirstName) setName(d.driverFirstName);
+      })
+      .catch(() => undefined);
     fetch(`${API}/rides/${rideId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -46,48 +76,71 @@ export default function RideRatingScreen({
       .catch(() => undefined);
   }, [rideId]);
 
-  const toggle = (t: string) => {
-    setSelected((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  };
+  const tipAmount = tip === 'custom' ? Number(customTip || 0) : Number(tip);
 
   const submit = async () => {
     setLoading(true);
     setMsg('');
     try {
       if (rideId) {
-        const res = await fetch(`${API}/rides/${rideId}/rate`, {
+        const rateRes = await fetch(`${API}/rides/${rideId}/rate`, {
           method: 'POST',
           headers: authHeaders(),
-          body: JSON.stringify({ rating, review: comment, tags: selected }),
+          body: JSON.stringify({ rating }),
         });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.message || 'Failed to save rating');
+        const rateJson = await rateRes.json().catch(() => ({}));
+        if (!rateRes.ok) throw new Error(rateJson.message || 'Failed to save rating');
+        if (tipAmount > 0) {
+          await fetch(`${API}/rides/${rideId}/tip`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ amount: tipAmount }),
+          }).catch(() => undefined);
+        }
       }
-      setMsg('Thanks for your feedback');
-      setStep('tip');
+      onDone?.();
     } catch (e: any) {
-      setMsg(e.message || 'Could not save rating');
+      setMsg(e.message || 'Could not submit');
     } finally {
       setLoading(false);
     }
   };
 
-  if (step === 'tip') {
-    return (
-      <TipPromptScreen
-        rideId={rideId}
-        driverName={name}
-        onSkip={onDone}
-        onDone={() => onDone?.()}
-      />
-    );
-  }
+  const c = receipt.currency;
 
   return (
-    <View style={styles.root}>
-      <View style={styles.avatar} />
-      <Text style={styles.title}>How was your ride with {name}?</Text>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
+      <View style={styles.check}>
+        <Text style={styles.checkMark}>✓</Text>
+      </View>
+      <Text style={styles.title}>You have arrived!</Text>
+      <Text style={styles.sub}>
+        {receipt.destination} · {receipt.durationMinutes} min ride
+      </Text>
 
+      <View style={styles.fareCard}>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Base fare</Text>
+          <Text style={styles.fareVal}>{formatCurrency(receipt.baseFare, c)}</Text>
+        </View>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Distance ({receipt.distanceKm}km)</Text>
+          <Text style={styles.fareVal}>{formatCurrency(receipt.distanceFare, c)}</Text>
+        </View>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>DVT discount</Text>
+          <Text style={[styles.fareVal, styles.discount]}>
+            -{formatCurrency(receipt.dvtDiscount, c)}
+          </Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.fareRow}>
+          <Text style={styles.totalLabel}>Total paid</Text>
+          <Text style={styles.totalVal}>{formatCurrency(receipt.totalPaid, c)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.how}>How was {name}?</Text>
       <View style={styles.stars}>
         {[1, 2, 3, 4, 5].map((n) => (
           <Pressable key={n} onPress={() => setRating(n)}>
@@ -96,111 +149,128 @@ export default function RideRatingScreen({
         ))}
       </View>
 
-      <TextInput
-        style={styles.comment}
-        placeholder="Add a comment (optional)"
-        placeholderTextColor="#71717A"
-        multiline
-        value={comment}
-        onChangeText={setComment}
-      />
+      <Text style={styles.how}>Add a tip?</Text>
+      <View style={styles.tips}>
+        {TIP_PRESETS.map((t) => (
+          <Pressable
+            key={t}
+            style={[styles.tipBtn, tip === t && styles.tipOn]}
+            onPress={() => {
+              setTip(t);
+              setShowCustom(false);
+            }}
+          >
+            <Text style={styles.tipText}>{formatCurrency(t, c)}</Text>
+          </Pressable>
+        ))}
+        <Pressable
+          style={[styles.tipBtn, (tip === 'custom' || showCustom) && styles.tipOn]}
+          onPress={() => {
+            setTip('custom');
+            setShowCustom(true);
+          }}
+        >
+          <Text style={styles.tipText}>Custom</Text>
+        </Pressable>
+      </View>
+      {showCustom ? (
+        <TextInput
+          style={styles.customInput}
+          keyboardType="numeric"
+          placeholder="Enter tip amount"
+          placeholderTextColor="#71717A"
+          value={customTip}
+          onChangeText={setCustomTip}
+        />
+      ) : null}
 
-      <View style={styles.chips}>
-        {TAGS.map((t) => {
-          const on = selected.includes(t);
-          return (
-            <Pressable
-              key={t}
-              onPress={() => toggle(t)}
-              style={[styles.chip, on && styles.chipOn]}
-            >
-              <Text style={styles.chipText}>{t}</Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.dvtBanner}>
+        <Text style={styles.dvtIcon}>⛓</Text>
+        <View>
+          <Text style={styles.dvtTitle}>+{receipt.dvtEarned} DVT tokens earned</Text>
+          <Text style={styles.dvtSub}>Added to your wallet</Text>
+        </View>
       </View>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
       <Pressable style={styles.cta} onPress={submit} disabled={loading}>
-        <View style={styles.ctaLeft} />
-        <View style={styles.ctaRight} />
-        <Text style={styles.ctaText}>{loading ? 'Submitting…' : 'Submit rating'}</Text>
+        <Text style={styles.ctaText}>{loading ? 'Submitting…' : 'Submit & Done'}</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#000000',
-    padding: spacing[5],
+  root: { flex: 1, backgroundColor: '#000', paddingHorizontal: spacing[5], paddingTop: spacing[6] },
+  check: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#22C55E',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#2A2A2A',
-    marginTop: spacing[8],
-    marginBottom: spacing[4],
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: spacing[4],
-  },
-  stars: { flexDirection: 'row', gap: 10, marginBottom: spacing[5] },
-  star: { fontSize: 36 },
-  starOn: { color: '#F5C542' },
-  starOff: { color: '#3F3F46' },
-  comment: {
-    width: '100%',
-    minHeight: 100,
-    backgroundColor: '#1A1A1A',
+  checkMark: { color: '#000', fontSize: 28, fontWeight: '900' },
+  title: { color: '#fff', fontSize: 26, fontWeight: '800', textAlign: 'center' },
+  sub: { color: '#A1A1AA', textAlign: 'center', marginTop: 8, marginBottom: 20 },
+  fareCard: {
+    backgroundColor: '#141414',
     borderRadius: 16,
     padding: 16,
-    color: '#FFFFFF',
-    textAlignVertical: 'top',
-    marginBottom: spacing[4],
+    marginBottom: 24,
   },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: spacing[5],
-  },
-  chip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#1A1A1A',
+  fareRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  fareLabel: { color: '#A1A1AA' },
+  fareVal: { color: '#fff', fontWeight: '600' },
+  discount: { color: '#22C55E' },
+  divider: { height: 1, backgroundColor: '#27272A', marginVertical: 8 },
+  totalLabel: { color: '#fff', fontWeight: '700' },
+  totalVal: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  how: { color: '#fff', fontWeight: '700', fontSize: 16, marginBottom: 12 },
+  stars: { flexDirection: 'row', gap: 8, marginBottom: 24 },
+  star: { fontSize: 32 },
+  starOn: { color: '#F59E0B' },
+  starOff: { color: '#3F3F46' },
+  tips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  tipBtn: {
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#27272A',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    backgroundColor: '#141414',
   },
-  chipOn: { borderColor: '#3B5CFF', backgroundColor: 'rgba(59,92,255,0.15)' },
-  chipText: { color: '#FFFFFF', fontWeight: '600', fontSize: 13 },
-  msg: { color: '#A1A1AA', marginBottom: 12 },
+  tipOn: { borderColor: '#A855F7' },
+  tipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  customInput: {
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    color: '#fff',
+    padding: 12,
+    marginBottom: 16,
+  },
+  dvtBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1E1033',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  dvtIcon: { fontSize: 22 },
+  dvtTitle: { color: '#fff', fontWeight: '700' },
+  dvtSub: { color: '#A1A1AA', fontSize: 12, marginTop: 2 },
+  msg: { color: '#F87171', marginBottom: 8 },
   cta: {
-    width: '100%',
-    marginTop: 'auto' as any,
-    marginBottom: spacing[4],
-    borderRadius: radius.pill,
-    minHeight: 54,
+    borderRadius: 14,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    backgroundColor: '#0F766E',
+    backgroundColor: '#3B82F6',
   },
-  ctaLeft: { ...StyleSheet.absoluteFillObject, backgroundColor: '#0F766E' },
-  ctaRight: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#3B5CFF',
-    opacity: 0.7,
-  },
-  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

@@ -212,6 +212,7 @@ export const CMS_SEED: Array<{
               body: 'On-demand cars, bikes, and tricycles across the city.',
               cta: 'Book a ride',
               href: '/login',
+              imageUrl: '/brand/ride-sedan.png',
             },
             {
               iconKey: 'heart',
@@ -220,6 +221,7 @@ export const CMS_SEED: Array<{
               body: 'Buy from local stores with delivery to your door.',
               cta: 'Browse stores',
               href: '/marketplace',
+              imageUrl: '/brand/shop-partner.png',
             },
             {
               iconKey: 'package',
@@ -228,6 +230,7 @@ export const CMS_SEED: Array<{
               body: 'Parcels and orders tracked from pickup to drop-off.',
               cta: 'Send a parcel',
               href: '/login',
+              imageUrl: '/brand/courier-moto.png',
             },
             {
               iconKey: 'key',
@@ -236,6 +239,7 @@ export const CMS_SEED: Array<{
               body: 'Self-drive or chauffeured vehicles when you need them.',
               cta: 'Explore rentals',
               href: '/#rentals',
+              imageUrl: '/brand/ride-sedan.png',
             },
           ],
         },
@@ -290,18 +294,21 @@ export const CMS_SEED: Array<{
                 'The app for my commute, my groceries, and sending things to my mom — all in one place.',
               name: 'Ama',
               role: 'Rider · Kumasi',
+              avatarUrl: '/brand/testimonials/ama.jpg',
             },
             {
               quote:
                 'I keep everything I earn. The subscription pays for itself in two days.',
               name: 'Enoch',
               role: 'Driver · Accra',
+              avatarUrl: '/brand/testimonials/enoch.jpg',
             },
             {
               quote:
                 'Orders come straight to my phone. Delivery is handled — I just focus on the shop.',
               name: 'Boutique 22',
               role: 'Merchant · Osu',
+              avatarUrl: '/brand/testimonials/boutique22.jpg',
             },
           ],
         },
@@ -323,6 +330,8 @@ export const CMS_SEED: Array<{
           primaryCta: { label: 'Get started', href: '/register' },
           secondaryCta: { label: 'Get the app', href: '/download' },
           note: 'Available on iOS and Android.',
+          showPhoneMock: true,
+          phoneImageUrl: '',
           storeButtons: [
             { label: 'App Store', store: 'ios', href: '/download' },
             { label: 'Google Play', store: 'android', href: '/download' },

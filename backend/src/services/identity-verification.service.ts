@@ -529,6 +529,10 @@ class IdentityVerificationService {
     ).rows[0];
     const driverId = driver?.id;
 
+    const merchant = (
+      await database.query(`SELECT * FROM merchants WHERE user_id = $1 LIMIT 1`, [userId])
+    ).rows[0];
+
     const docs = driverId
       ? (
           await database.query(
@@ -538,22 +542,49 @@ class IdentityVerificationService {
         ).rows
       : [];
 
+    const merchantDocs = merchant
+      ? (
+          await database.query(
+            `SELECT * FROM merchant_kyc_documents WHERE merchant_id = $1 ORDER BY created_at DESC`,
+            [merchant.id]
+          )
+        ).rows
+      : [];
+
     const nationalDoc =
       docs.find((d: any) => d.document_type === 'national_id' || d.national_id_number) || docs[0];
     const licenseDoc = docs.find((d: any) => d.document_type === 'driving_license');
-    const country = nationalDoc?.national_id_country || user.country || 'GH';
-    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    const ownerIdDoc = merchantDocs.find((d: any) =>
+      ['ghana_card', 'national_id', 'owner_id', 'nin'].includes(String(d.document_type || ''))
+    );
+    const businessDoc = merchantDocs.find((d: any) =>
+      ['business_reg', 'cac', 'business_registration'].includes(String(d.document_type || ''))
+    );
+    const taxDoc = merchantDocs.find((d: any) =>
+      ['tax_id', 'tin', 'tax'].includes(String(d.document_type || ''))
+    );
 
-    const idNumber = nationalDoc?.national_id_number || nationalDoc?.document_number;
+    const country = nationalDoc?.national_id_country || user.country || merchant?.country || 'GH';
+    const fullName =
+      merchant?.business_name ||
+      `${user.first_name || ''} ${user.last_name || ''}`.trim();
+
+    const idNumber =
+      nationalDoc?.national_id_number ||
+      nationalDoc?.document_number ||
+      ownerIdDoc?.document_number;
     const licenseNumber =
-      nationalDoc?.driving_license_number || licenseDoc?.document_number;
-    const vehicleReg = nationalDoc?.vehicle_registration_number;
+      nationalDoc?.driving_license_number ||
+      licenseDoc?.document_number ||
+      businessDoc?.document_number;
+    const vehicleReg =
+      nationalDoc?.vehicle_registration_number || taxDoc?.document_number;
     const phone = nationalDoc?.linked_phone_number || user.phone;
 
     const checks: any[] = [];
 
     let licenseStatus: 'match' | 'mismatch' | 'unverifiable' = 'unverifiable';
-    if (idNumber && licenseNumber) {
+    if (idNumber && licenseNumber && !merchant) {
       const nia = await national.verifyNationalId(country, idNumber, fullName);
       const lic = await dvla.verifyLicense(licenseNumber, fullName);
       if (nia.pendingManualReview || lic.pendingManualReview) {
@@ -563,13 +594,30 @@ class IdentityVerificationService {
       } else {
         licenseStatus = 'mismatch';
       }
+    } else if (merchant && ownerIdDoc && businessDoc) {
+      // Merchant graph: owner ID ↔ business registration (manual review until APIs available)
+      licenseStatus =
+        /approv|verif/i.test(String(ownerIdDoc.status || '')) &&
+        /approv|verif/i.test(String(businessDoc.status || ''))
+          ? 'match'
+          : 'unverifiable';
     }
     checks.push(
       (
         await database.query(
           `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
            VALUES ($1,'id_to_license',$2,$3::jsonb) RETURNING *`,
-          [userId, licenseStatus, JSON.stringify({ idNumber, licenseNumber })]
+          [
+            userId,
+            licenseStatus,
+            JSON.stringify({
+              idNumber,
+              licenseNumber,
+              merchant: Boolean(merchant),
+              ownerDoc: ownerIdDoc?.document_type || null,
+              businessDoc: businessDoc?.document_type || null,
+            }),
+          ]
         )
       ).rows[0]
     );
@@ -580,13 +628,19 @@ class IdentityVerificationService {
         d.document_type === 'authorization_letter' ||
         d.document_type === 'vehicle_lease_agreement'
     );
-    if (vehicleReg && idNumber) {
+    if (vehicleReg && idNumber && !merchant) {
       const veh = await dvla.verifyVehicleRegistration(vehicleReg, fullName);
       if (veh.pendingManualReview) vehicleStatus = 'unverifiable';
       else if (veh.matched || authLetter) vehicleStatus = 'match';
       else vehicleStatus = 'mismatch';
     } else if (authLetter) {
       vehicleStatus = 'match';
+    } else if (merchant && ownerIdDoc && taxDoc) {
+      vehicleStatus =
+        /approv|verif/i.test(String(ownerIdDoc.status || '')) &&
+        /approv|verif/i.test(String(taxDoc.status || ''))
+          ? 'match'
+          : 'unverifiable';
     }
     checks.push(
       (
@@ -599,12 +653,16 @@ class IdentityVerificationService {
             JSON.stringify({
               vehicleReg,
               authorizationLetter: Boolean(authLetter),
+              merchant: Boolean(merchant),
+              taxDoc: taxDoc?.document_type || null,
               note:
                 vehicleStatus === 'mismatch'
                   ? 'Fleet/authorized-operator may need authorization letter override'
                   : authLetter
                     ? 'Authorized via authorization letter / lease agreement'
-                    : undefined,
+                    : merchant
+                      ? 'Owner ID ↔ tax / business credential'
+                      : undefined,
             }),
           ]
         )
@@ -645,12 +703,22 @@ class IdentityVerificationService {
         [driverId]
       );
     }
+    if (merchant && allPass) {
+      await database
+        .query(`UPDATE merchants SET identity_linked = TRUE, updated_at = NOW() WHERE id = $1`, [
+          merchant.id,
+        ])
+        .catch(() => undefined);
+    }
 
     return {
       identityLinked: allPass,
       checks,
       countryOfId: country,
       fieldPattern: national.idFieldPattern(country),
+      role: merchant ? 'merchant' : driver ? 'driver' : user.user_type || 'user',
+      merchantId: merchant?.id || null,
+      driverId: driverId || null,
     };
   }
 
@@ -706,21 +774,121 @@ class IdentityVerificationService {
     userId: string,
     adminId: string,
     reason: string,
-    checkType: string,
-    status: 'match' | 'mismatch' | 'unverifiable'
+    checkType: string | string[] = 'all',
+    status: 'match' | 'mismatch' | 'unverifiable' = 'match'
   ) {
     const database = this.db;
-    const row = await database.query(
-      `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
-       VALUES ($1,$2,$3,$4::jsonb) RETURNING *`,
-      [userId, checkType, status, JSON.stringify({ manualOverride: true, adminId, reason })]
-    );
+    const types =
+      !checkType || checkType === 'all'
+        ? (['id_to_license', 'id_to_vehicle', 'id_to_phone'] as const)
+        : Array.isArray(checkType)
+          ? checkType
+          : [checkType];
+
+    const rows: any[] = [];
+    for (const type of types) {
+      const row = await database.query(
+        `INSERT INTO identity_link_checks (user_id, check_type, status, details_json)
+         VALUES ($1,$2::identity_link_check_type,$3::identity_link_status,$4::jsonb) RETURNING *`,
+        [userId, type, status, JSON.stringify({ manualOverride: true, adminId, reason })]
+      );
+      rows.push(row.rows[0]);
+    }
+
+    if (status === 'match') {
+      const driver = (
+        await database.query(`SELECT id FROM drivers WHERE user_id = $1 LIMIT 1`, [userId])
+      ).rows[0];
+      if (driver?.id) {
+        await database.query(
+          `UPDATE identity_verifications
+           SET identity_linked = TRUE, link_verified = TRUE, link_verified_at = NOW()
+           WHERE driver_id = $1`,
+          [driver.id]
+        );
+      }
+      await database
+        .query(
+          `UPDATE merchants SET identity_linked = TRUE, updated_at = NOW() WHERE user_id = $1`,
+          [userId]
+        )
+        .catch(() => undefined);
+    }
+
     await database.query(
       `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, metadata)
        VALUES ($1,'identity_link_override','user',$2,$3,$4::jsonb)`,
-      [adminId, userId, reason, JSON.stringify({ checkType, status })]
+      [adminId, userId, reason, JSON.stringify({ checkTypes: types, status })]
     );
-    return row.rows[0];
+    return { overrides: rows, identityLinked: status === 'match' };
+  }
+
+  /** Approve identity after review — updates KYC status for driver or merchant. */
+  async approveSubject(userId: string, adminId: string, opts?: { reason?: string }) {
+    const database = this.db;
+    const merchant = (
+      await database.query(`SELECT * FROM merchants WHERE user_id = $1 LIMIT 1`, [userId])
+    ).rows[0];
+    const driver = (
+      await database.query(`SELECT * FROM drivers WHERE user_id = $1 LIMIT 1`, [userId])
+    ).rows[0];
+
+    if (merchant) {
+      await database.query(
+        `UPDATE merchants
+         SET kyc_status = 'approved', status = COALESCE(NULLIF(status, ''), 'active'),
+             identity_linked = TRUE, updated_at = NOW()
+         WHERE id = $1`,
+        [merchant.id]
+      );
+      await database.query(
+        `UPDATE merchant_kyc_documents
+         SET status = 'verified', reviewed_by = $2, reviewed_at = NOW()
+         WHERE merchant_id = $1 AND COALESCE(status, 'pending') NOT IN ('rejected')`,
+        [merchant.id, adminId]
+      );
+    }
+    if (driver) {
+      await database.query(`UPDATE drivers SET kyc_status = 'approved' WHERE id = $1`, [driver.id]);
+      await database
+        .query(
+          `UPDATE identity_verifications
+           SET status = 'verified', identity_linked = TRUE, link_verified = TRUE, link_verified_at = NOW()
+           WHERE driver_id = $1`,
+          [driver.id]
+        )
+        .catch(() => undefined);
+      await database
+        .query(
+          `UPDATE driver_kyc_documents
+           SET status = 'verified', updated_at = NOW()
+           WHERE driver_user_id = $1 AND COALESCE(status, 'pending') NOT IN ('rejected')`,
+          [userId]
+        )
+        .catch(() => undefined);
+    }
+
+    await database.query(
+      `INSERT INTO audit_log (admin_id, action, resource_type, resource_id, reason, metadata)
+       VALUES ($1,'identity_approve','user',$2,$3,$4::jsonb)`,
+      [
+        adminId,
+        userId,
+        opts?.reason || 'Approved & attested on-chain',
+        JSON.stringify({
+          merchantId: merchant?.id || null,
+          driverId: driver?.id || null,
+        }),
+      ]
+    );
+
+    return {
+      userId,
+      role: merchant ? 'merchant' : driver ? 'driver' : 'user',
+      merchantId: merchant?.id || null,
+      driverId: driver?.id || null,
+      kycStatus: 'approved',
+    };
   }
 }
 

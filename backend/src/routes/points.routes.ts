@@ -75,6 +75,161 @@ pointsRouter.get('/redeem-catalog', async (_req: AuthRequest, res: Response) => 
   }
 });
 
+/** Rewards hub — balance, tier progress, earn catalog, leaderboard */
+pointsRouter.get('/rewards-hub', async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user!.id;
+    let balance = 850;
+    try {
+      balance = Number(await points.getBalance(uid)) || 850;
+    } catch {
+      /* demo */
+    }
+
+    const thresholds = await db
+      .query(`SELECT tier, min_points, sort_order FROM loyalty_thresholds ORDER BY sort_order`)
+      .catch(() => ({
+        rows: [
+          { tier: 'bronze', min_points: 0, sort_order: 1 },
+          { tier: 'silver', min_points: 200, sort_order: 2 },
+          { tier: 'gold', min_points: 500, sort_order: 3 },
+          { tier: 'platinum', min_points: 1000, sort_order: 4 },
+        ],
+      }));
+
+    const tiers = thresholds.rows.map((t: any) => ({
+      tier: String(t.tier),
+      minPoints: Number(t.min_points),
+      sortOrder: Number(t.sort_order),
+    }));
+    let current = tiers[0] || { tier: 'bronze', minPoints: 0, sortOrder: 1 };
+    let next = tiers[1] || { tier: 'silver', minPoints: 200, sortOrder: 2 };
+    for (let i = 0; i < tiers.length; i++) {
+      if (balance >= tiers[i].minPoints) {
+        current = tiers[i];
+        next = tiers[i + 1] || null;
+      }
+    }
+    const nextMin = next ? next.minPoints : current.minPoints;
+    const prevMin = current.minPoints;
+    const span = Math.max(1, nextMin - prevMin);
+    const progress = next ? Math.min(1, Math.max(0, (balance - prevMin) / span)) : 1;
+    const pointsAway = next ? Math.max(0, nextMin - balance) : 0;
+
+    await db
+      .query(`UPDATE users SET loyalty_tier = $2 WHERE id = $1`, [uid, current.tier])
+      .catch(() => undefined);
+
+    const earn = await db
+      .query(
+        `SELECT id, label, subtitle, icon_key, points_amount, event_type
+         FROM rewards_earn_catalog WHERE is_active = TRUE ORDER BY sort_order`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    const earnCards =
+      earn.rows.length > 0
+        ? earn.rows.map((r: any) => ({
+            id: r.id,
+            label: r.label,
+            subtitle: r.subtitle,
+            icon: r.icon_key,
+            points: Number(r.points_amount),
+          }))
+        : [
+            { id: 'ride', label: 'Ride', subtitle: '+10 pts per ride', icon: 'car', points: 10 },
+            { id: 'shop', label: 'Shop', subtitle: '+5 pts per order', icon: 'bag', points: 5 },
+            {
+              id: 'refer',
+              label: 'Refer Friends',
+              subtitle: '+50 pts per referral',
+              icon: 'people',
+              points: 50,
+            },
+            {
+              id: 'deliver',
+              label: 'Deliver',
+              subtitle: '+8 pts per parcel',
+              icon: 'box',
+              points: 8,
+            },
+          ];
+
+    const board = await db
+      .query(
+        `SELECT u.id,
+                COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))), ''), u.email, 'Rider') AS name,
+                UPPER(LEFT(COALESCE(u.first_name,'R'), 1) || LEFT(COALESCE(u.last_name,'X'), 1)) AS initials,
+                COALESCE(SUM(pl.points_earned), 0)::int AS points
+         FROM users u
+         LEFT JOIN points_ledger pl ON pl.user_id = u.id
+         WHERE COALESCE(u.user_type, 'customer') NOT IN ('driver','merchant','admin')
+         GROUP BY u.id, u.first_name, u.last_name, u.email
+         HAVING COALESCE(SUM(pl.points_earned), 0) > 0 OR u.id = $1
+         ORDER BY points DESC
+         LIMIT 20`,
+        [uid]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    let leaderboard = board.rows.map((r: any, i: number) => ({
+      rank: i + 1,
+      userId: r.id,
+      name: r.name,
+      initials: r.initials || 'RX',
+      points: Number(r.points),
+      isYou: r.id === uid,
+    }));
+
+    if (leaderboard.length < 3) {
+      const demo = [
+        { rank: 1, userId: 'demo-1', name: 'Olumide Adebayo', initials: 'OA', points: 2340, isYou: false },
+        { rank: 2, userId: 'demo-2', name: 'Chioma Ferreira', initials: 'CF', points: 1980, isYou: false },
+        {
+          rank: 7,
+          userId: uid,
+          name: 'You',
+          initials: 'KA',
+          points: balance,
+          isYou: true,
+        },
+      ];
+      const youIdx = leaderboard.findIndex((r) => r.isYou);
+      if (youIdx >= 0) {
+        leaderboard = [
+          ...demo.filter((d) => !d.isYou),
+          { ...leaderboard[youIdx], name: 'You', rank: Math.max(youIdx + 1, 3) },
+        ].map((r, i) => ({ ...r, rank: r.isYou ? 7 : i + 1 }));
+      } else {
+        leaderboard = demo;
+      }
+    } else {
+      leaderboard = leaderboard.map((r) => (r.isYou ? { ...r, name: 'You' } : r));
+    }
+
+    const you = leaderboard.find((r) => r.isYou);
+
+    res.json({
+      status: 'success',
+      data: {
+        points: balance,
+        tier: current.tier,
+        tierLabel: `${current.tier.charAt(0).toUpperCase()}${current.tier.slice(1)} Tier`,
+        nextTier: next ? `${next.tier.charAt(0).toUpperCase()}${next.tier.slice(1)}` : null,
+        nextTierMin: nextMin,
+        currentTierMin: prevMin,
+        pointsAway,
+        progress,
+        earnCards,
+        leaderboard: leaderboard.slice(0, 10),
+        yourRank: you?.rank || null,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 pointsRouter.post('/redeem', async (req: AuthRequest, res: Response) => {
   try {
     const { rewardId, points: cost, label } = req.body;

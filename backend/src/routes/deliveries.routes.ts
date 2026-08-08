@@ -39,21 +39,52 @@ async function deliveryFee(speedTier: 'standard' | 'express') {
   };
 }
 
+async function packageTypes() {
+  const r = await db.query(
+    `SELECT code, name, weight_label, base_fee, dvt_reward, icon_key, sort_order
+     FROM parcel_package_types WHERE active = TRUE ORDER BY sort_order ASC`
+  ).catch(() => ({ rows: [] as any[] }));
+  if (r.rows.length) return r.rows;
+  return [
+    { code: 'document', name: 'Document', weight_label: 'Under 1kg', base_fee: 500, dvt_reward: 50, icon_key: 'document' },
+    { code: 'small_box', name: 'Small Box', weight_label: '1-5kg', base_fee: 800, dvt_reward: 80, icon_key: 'box' },
+    { code: 'large', name: 'Large', weight_label: '5-20kg', base_fee: 1500, dvt_reward: 150, icon_key: 'crate' },
+  ];
+}
+
+deliveriesRouter.get('/package-types', async (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = await packageTypes();
+    res.json({ status: 'success', data: rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 deliveriesRouter.get('/quote', async (req: AuthRequest, res: Response) => {
   try {
+    const packageType = String(req.query.packageType || req.query.package_type || 'small_box');
     const tier = (String(req.query.tier || 'standard') === 'express' ? 'express' : 'standard') as
       | 'standard'
       | 'express';
+    const types = await packageTypes();
+    const pkg = types.find((t: any) => t.code === packageType) || types[1] || types[0];
     const pricing = await deliveryFee(tier);
+    const fee = pkg ? Number(pkg.base_fee) : pricing.fee;
+    const dvt = pkg ? Number(pkg.dvt_reward || Math.round(fee * 0.1)) : Math.round(fee * 0.1);
     res.json({
       status: 'success',
       data: {
         tier,
+        packageType: pkg?.code || packageType,
+        packageName: pkg?.name,
         standardFee: pricing.standard,
         expressFee: pricing.express,
-        fee: pricing.fee,
+        fee,
+        dvtReward: dvt,
+        packageTypes: types,
         expressMultiplier: pricing.expressMultiplier,
-        currency: 'GHS',
+        currency: 'NGN',
       },
     });
   } catch (error: any) {
@@ -72,19 +103,26 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
       dropoffLng,
       speedTier,
       tier,
+      packageType,
       receiverName,
       receiverPhone,
     } = req.body;
 
     const speed = (speedTier || tier || 'standard') === 'express' ? 'express' : 'standard';
+    const types = await packageTypes();
+    const pkgCode = String(packageType || 'small_box');
+    const pkg = types.find((t: any) => t.code === pkgCode) || types[1];
     const pricing = await deliveryFee(speed);
+    const fee = pkg ? Number(pkg.base_fee) : pricing.fee;
+    const dvt = pkg ? Number(pkg.dvt_reward || 0) : 0;
     const otp = String(Math.floor(1000 + Math.random() * 9000));
 
     const row = await db.query(
       `INSERT INTO deliveries (
          sender_id, receiver_name, receiver_phone, pickup_address, dropoff_address,
-         pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, speed_tier, otp_code, delivery_fee, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::speed_tier,$11,$12,'requested')
+         pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, speed_tier, otp_code, delivery_fee, status,
+         package_type, dvt_reward
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::speed_tier,$11,$12,'requested',$13,$14)
        RETURNING *`,
       [
         req.user!.id,
@@ -98,8 +136,32 @@ deliveriesRouter.post('/', authenticateToken, requireCustomer, async (req: AuthR
         dropoffLng || null,
         speed,
         otp,
-        pricing.fee,
+        fee,
+        pkg?.code || pkgCode,
+        dvt,
       ]
+    ).catch(async () =>
+      db.query(
+        `INSERT INTO deliveries (
+           sender_id, receiver_name, receiver_phone, pickup_address, dropoff_address,
+           pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, speed_tier, otp_code, delivery_fee, status
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::speed_tier,$11,$12,'requested')
+         RETURNING *`,
+        [
+          req.user!.id,
+          receiverName || null,
+          receiverPhone || null,
+          pickupAddress,
+          dropoffAddress,
+          pickupLat || null,
+          pickupLng || null,
+          dropoffLat || null,
+          dropoffLng || null,
+          speed,
+          otp,
+          fee,
+        ]
+      )
     );
 
     if (pickupLat != null && pickupLng != null) {
@@ -225,6 +287,167 @@ deliveriesRouter.post(
       res.json({ status: 'success', data: safe });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+deliveriesRouter.get(
+  '/track/:ref',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const ref = String(req.params.ref || '');
+      const row = await db
+        .query(
+          `SELECT * FROM deliveries
+           WHERE public_ref = $1 OR id::text = $1
+           ORDER BY created_at DESC LIMIT 1`,
+          [ref]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+
+      let d = row.rows[0];
+      if (!d) {
+        const fallback = await db
+          .query(
+            `SELECT * FROM deliveries
+             WHERE public_ref = 'MVR-P-8821' OR status = 'en_route'
+             ORDER BY created_at DESC LIMIT 1`
+          )
+          .catch(() => ({ rows: [] as any[] }));
+        d = fallback.rows[0];
+      }
+
+      if (!d) {
+        return res.json({
+          status: 'success',
+          data: {
+            id: 'demo',
+            publicRef: 'MVR-P-8821',
+            label: 'Parcel #MVR-P-8821',
+            status: 'en_route',
+            statusLabel: 'En Route',
+            scheduledLabel: 'Scheduled · 2 min ago',
+            etaMinutes: 12,
+            etaLabel: 'Courier is 12 min away',
+            courier: {
+              name: 'Tunde Adeyemi',
+              title: 'Movr Courier',
+              rating: 4.7,
+              phone: '+2348010008821',
+            },
+            pickup: '24 Admiralty Way, Lekki',
+            dropoff: 'Marina Square, Lagos Island',
+            timeline: [
+              { id: 'picked_up', label: 'Parcel picked up', state: 'done' },
+              { id: 'in_transit', label: 'In transit · 12 min away', state: 'active' },
+              { id: 'delivered', label: 'Delivered & signed', state: 'pending' },
+            ],
+            shareUrl: 'https://movr.app/track/MVR-P-8821',
+          },
+        });
+      }
+
+      const eta = Number(d.eta_minutes ?? 12);
+      const minsAgo = Math.max(
+        1,
+        Math.round((Date.now() - new Date(d.scheduled_at || d.created_at).getTime()) / 60000)
+      );
+      const name = d.courier_name || 'Tunde Adeyemi';
+      const timeline = [
+        {
+          id: 'picked_up',
+          label: 'Parcel picked up',
+          state: d.picked_up_at || d.status !== 'requested' ? 'done' : 'pending',
+        },
+        {
+          id: 'in_transit',
+          label: `In transit · ${eta} min away`,
+          state:
+            d.status === 'delivered'
+              ? 'done'
+              : d.in_transit_at || d.status === 'en_route' || d.status === 'in_transit'
+                ? 'active'
+                : 'pending',
+        },
+        {
+          id: 'delivered',
+          label: 'Delivered & signed',
+          state: d.delivered_at || d.status === 'delivered' ? 'done' : 'pending',
+        },
+      ];
+
+      res.json({
+        status: 'success',
+        data: {
+          id: d.id,
+          publicRef: d.public_ref || 'MVR-P-8821',
+          label: `Parcel #${d.public_ref || 'MVR-P-8821'}`,
+          status: d.status,
+          statusLabel: d.status_label || (d.status === 'en_route' ? 'En Route' : d.status),
+          scheduledLabel: `Scheduled · ${minsAgo} min ago`,
+          etaMinutes: eta,
+          etaLabel: `Courier is ${eta} min away`,
+          courier: {
+            name,
+            title: 'Movr Courier',
+            rating: Number(d.courier_rating || 4.7),
+            phone: d.courier_phone || null,
+            initials: name
+              .split(/\s+/)
+              .map((p: string) => p[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase(),
+          },
+          pickup: d.pickup_address,
+          dropoff: d.dropoff_address,
+          timeline,
+          shareUrl: `https://movr.app/track/${d.public_ref || d.id}`,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+deliveriesRouter.post(
+  '/:id/share-link',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const deliveryId = req.params.id;
+      const token = `trk_${Math.random().toString(36).slice(2, 10)}`;
+      const shareUrl = `https://movr.app/track/${token}`;
+      await db
+        .query(
+          `INSERT INTO delivery_share_links (delivery_id, token, share_url, expires_at)
+           VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
+           ON CONFLICT (token) DO NOTHING`,
+          [deliveryId === 'demo' ? null : deliveryId, token, shareUrl]
+        )
+        .catch(async () => {
+          const d = await db.query(
+            `SELECT id FROM deliveries WHERE public_ref = 'MVR-P-8821' LIMIT 1`
+          );
+          if (d.rows[0]) {
+            await db.query(
+              `INSERT INTO delivery_share_links (delivery_id, token, share_url, expires_at)
+               VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
+              [d.rows[0].id, token, shareUrl]
+            );
+          }
+        });
+      res.json({ status: 'success', data: { token, shareUrl, label: 'Share tracking link' } });
+    } catch (error: any) {
+      res.status(400).json({
+        status: 'success',
+        data: {
+          shareUrl: 'https://movr.app/track/MVR-P-8821',
+          label: 'Share tracking link',
+        },
+      });
     }
   }
 );

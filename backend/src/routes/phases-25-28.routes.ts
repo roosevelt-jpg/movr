@@ -11,12 +11,14 @@ import { NationalIdVerificationService } from '../services/ghana-card-verificati
 import identityVerification from '../services/identity-verification.service';
 import { WalletTransferService } from '../services/wallet-transfer.service';
 import { TripRecordingService } from '../services/trip-recording.service';
+import { KycAttestationService } from '../services/kyc-attestation.service';
 
 const db = new DatabaseService();
 const pricing = new PricingEngineService(db);
 const nationalId = new NationalIdVerificationService(db);
 const transfers = new WalletTransferService(db);
 const recordings = new TripRecordingService(db);
+const kycAttestation = new KycAttestationService(db);
 
 export const adminPricingRouter = Router();
 export const identityLinkRouter = Router();
@@ -474,6 +476,144 @@ identityLinkRouter.post(
   }
 );
 
+/** KYC Step 3 — identity verification mockup */
+identityLinkRouter.get(
+  '/me/step3',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const uid = req.user!.id;
+      let row = await db
+        .query(`SELECT * FROM driver_identity_verification WHERE user_id = $1`, [uid])
+        .catch(() => ({ rows: [] as any[] }));
+      if (!row.rows[0]) {
+        await db
+          .query(
+            `INSERT INTO driver_identity_verification (user_id, step, id_type, status)
+             VALUES ($1, 3, 'national_id', 'in_progress')
+             ON CONFLICT (user_id) DO NOTHING`,
+            [uid]
+          )
+          .catch(() => undefined);
+        row = await db
+          .query(`SELECT * FROM driver_identity_verification WHERE user_id = $1`, [uid])
+          .catch(() => ({ rows: [] as any[] }));
+      }
+      const v = row.rows[0] || {};
+      res.json({
+        status: 'success',
+        data: {
+          step: 3,
+          totalSteps: 3,
+          title: 'Verify your identity',
+          subtitle: 'Required for driver accounts. Takes under 2 minutes.',
+          idType: v.id_type || 'national_id',
+          idFrontUrl: v.id_front_url || null,
+          idBackUrl: v.id_back_url || null,
+          selfieStatus: v.selfie_status || 'pending',
+          selfieUrl: v.selfie_url || null,
+          status: v.status || 'in_progress',
+          idTypes: [
+            {
+              id: 'national_id',
+              label: 'National ID Card',
+              subtitle: 'NIN slip or card accepted',
+              icon: 'id',
+            },
+            {
+              id: 'drivers_license',
+              label: "Driver's License",
+              subtitle: 'Valid license required for drivers',
+              icon: 'car',
+            },
+            {
+              id: 'passport',
+              label: 'International Passport',
+              subtitle: 'Bio data page required',
+              icon: 'passport',
+            },
+          ],
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+identityLinkRouter.patch(
+  '/me/step3',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const uid = req.user!.id;
+      const b = req.body || {};
+      const result = await db.query(
+        `INSERT INTO driver_identity_verification (
+           user_id, step, id_type, id_front_url, id_back_url, selfie_url, selfie_status, status, updated_at
+         ) VALUES (
+           $1, 3,
+           COALESCE($2, 'national_id'),
+           $3, $4, $5,
+           COALESCE($6, 'pending'),
+           COALESCE($7, 'in_progress'),
+           NOW()
+         )
+         ON CONFLICT (user_id) DO UPDATE SET
+           id_type = COALESCE($2, driver_identity_verification.id_type),
+           id_front_url = COALESCE($3, driver_identity_verification.id_front_url),
+           id_back_url = COALESCE($4, driver_identity_verification.id_back_url),
+           selfie_url = COALESCE($5, driver_identity_verification.selfie_url),
+           selfie_status = COALESCE($6, driver_identity_verification.selfie_status),
+           status = COALESCE($7, driver_identity_verification.status),
+           updated_at = NOW()
+         RETURNING *`,
+        [
+          uid,
+          b.idType || null,
+          b.idFrontUrl || null,
+          b.idBackUrl || null,
+          b.selfieUrl || null,
+          b.selfieStatus || null,
+          b.status || null,
+        ]
+      );
+      res.json({ status: 'success', data: result.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+identityLinkRouter.post(
+  '/me/step3/submit',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.query(
+        `UPDATE driver_identity_verification
+         SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+         WHERE user_id = $1
+         RETURNING *`,
+        [req.user!.id]
+      );
+      if (!result.rows[0]) {
+        await db.query(
+          `INSERT INTO driver_identity_verification (user_id, step, status, submitted_at)
+           VALUES ($1, 3, 'submitted', NOW())`,
+          [req.user!.id]
+        );
+      }
+      res.json({
+        status: 'success',
+        data: { submitted: true, message: 'Identity verification submitted for review' },
+      });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 /** Driver self-serve: current document upload status for onboarding UI. */
 identityLinkRouter.get(
   '/me/status',
@@ -576,11 +716,51 @@ identityLinkRouter.get(
          FROM users WHERE id = $1::uuid`,
         [userId]
       );
+      const merchant = await db.query(
+        `SELECT id, business_name, kyc_status, status, identity_linked, category, country, created_at
+         FROM merchants WHERE user_id = $1::uuid LIMIT 1`,
+        [userId]
+      ).catch(() => ({ rows: [] as any[] }));
+      const driver = await db.query(
+        `SELECT id, kyc_status FROM drivers WHERE user_id = $1::uuid LIMIT 1`,
+        [userId]
+      ).catch(() => ({ rows: [] as any[] }));
+      const merchantDocs = merchant.rows[0]
+        ? await db
+            .query(
+              `SELECT id, document_type, label, document_number, file_url, status, created_at
+               FROM merchant_kyc_documents WHERE merchant_id = $1 ORDER BY created_at DESC`,
+              [merchant.rows[0].id]
+            )
+            .catch(() => ({ rows: [] as any[] }))
+        : { rows: [] as any[] };
+      const driverKycDocs = await db
+        .query(
+          `SELECT document_type AS key, label, status, rejection_reason, file_url
+           FROM driver_kyc_documents WHERE driver_user_id = $1`,
+          [userId]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      const attestation = await db
+        .query(`SELECT * FROM kyc_attestations WHERE user_id = $1::uuid`, [userId])
+        .catch(() => ({ rows: [] as any[] }));
+
       const u = user.rows[0];
+      const m = merchant.rows[0];
+      const d = driver.rows[0];
       const latest = docs.rows[0] || {};
+      const isMerchant = Boolean(m);
       const checkStatus = (type: string) => {
         const row = checks.rows.find((c: any) => c.check_type === type);
         return String(row?.status || 'pending').toLowerCase();
+      };
+      const normalizeDocStatus = (raw?: string, hasFile?: boolean) => {
+        const s = String(raw || '').toLowerCase();
+        if (/verif|approv|match/.test(s)) return 'verified';
+        if (/reject|fail|mismatch/.test(s)) return 'rejected';
+        if (/review|upload|pending|submitted|in_review/.test(s)) return 'pending';
+        if (hasFile) return 'pending';
+        return 'pending';
       };
       const docStatus = (hasValue: boolean, linkedCheck?: string) => {
         if (linkedCheck === 'match' || latest.status === 'verified' || latest.identity_linked) {
@@ -594,7 +774,7 @@ identityLinkRouter.get(
       const idVeh = checkStatus('id_to_vehicle');
       const idPhone = checkStatus('id_to_phone');
 
-      const created = u?.created_at ? new Date(u.created_at) : null;
+      const created = m?.created_at || u?.created_at ? new Date(m?.created_at || u.created_at) : null;
       let appliedAgo = '';
       if (created) {
         const days = Math.max(0, Math.floor((Date.now() - created.getTime()) / 86400000));
@@ -602,49 +782,116 @@ identityLinkRouter.get(
           days === 0 ? 'Applied today' : days === 1 ? 'Applied 1 day ago' : `Applied ${days} days ago`;
       }
 
-      const documentsSummary = [
-        {
-          type: 'ghana_card',
-          label: 'Ghana Card',
-          status: docStatus(Boolean(latest.national_id_number), idLic),
-        },
-        {
-          type: 'driving_license',
-          label: 'Driving license',
-          status: docStatus(Boolean(latest.driving_license_number), idLic),
-        },
-        {
-          type: 'vehicle_registration',
-          label: 'Vehicle registration',
-          status: docStatus(Boolean(latest.vehicle_registration_number), idVeh),
-        },
-      ];
+      const merchantDocLabel = (type: string, fallback: string) => {
+        const map: Record<string, string> = {
+          ghana_card: 'Ghana Card',
+          national_id: 'National ID',
+          owner_id: 'Owner ID',
+          business_reg: 'Business registration',
+          cac: 'CAC Registration',
+          tax_id: 'Tax ID / TIN',
+          tin: 'Tax ID / TIN',
+          driving_license: 'Driving license',
+          vehicle_registration: 'Vehicle registration',
+        };
+        return map[type] || fallback;
+      };
+
+      let documentsSummary: any[];
+      if (isMerchant && merchantDocs.rows.length) {
+        documentsSummary = merchantDocs.rows.slice(0, 6).map((doc: any) => ({
+          type: doc.document_type,
+          label: doc.label || merchantDocLabel(doc.document_type, doc.document_type),
+          status: normalizeDocStatus(doc.status, Boolean(doc.file_url)),
+          fileUrl: doc.file_url || null,
+          documentNumber: doc.document_number || null,
+        }));
+      } else if (driverKycDocs.rows.length) {
+        documentsSummary = driverKycDocs.rows.map((doc: any) => ({
+          type: doc.key,
+          label: doc.label || merchantDocLabel(doc.key, doc.key),
+          status: normalizeDocStatus(doc.status, Boolean(doc.file_url)),
+          fileUrl: doc.file_url || null,
+        }));
+      } else if (isMerchant) {
+        documentsSummary = [
+          { type: 'ghana_card', label: 'Ghana Card', status: 'pending' },
+          { type: 'business_reg', label: 'Business registration', status: 'pending' },
+          { type: 'tax_id', label: 'Tax ID / TIN', status: 'pending' },
+        ];
+      } else {
+        documentsSummary = [
+          {
+            type: 'ghana_card',
+            label: 'Ghana Card',
+            status: docStatus(Boolean(latest.national_id_number), idLic),
+          },
+          {
+            type: 'driving_license',
+            label: 'Driving license',
+            status: docStatus(Boolean(latest.driving_license_number), idLic),
+          },
+          {
+            type: 'vehicle_registration',
+            label: 'Vehicle registration',
+            status: docStatus(Boolean(latest.vehicle_registration_number), idVeh),
+          },
+        ];
+      }
+
+      const linkStatus = isMerchant
+        ? [
+            { label: 'Owner ID ↔ Business registration', type: 'id_to_license', status: idLic },
+            { label: 'Owner ID ↔ Tax / credentials', type: 'id_to_vehicle', status: idVeh },
+            { label: 'Owner ID ↔ Phone number', type: 'id_to_phone', status: idPhone },
+          ]
+        : [
+            { label: 'National ID ↔ Driving license', type: 'id_to_license', status: idLic },
+            { label: 'National ID ↔ Vehicle license', type: 'id_to_vehicle', status: idVeh },
+            { label: 'National ID ↔ Phone number', type: 'id_to_phone', status: idPhone },
+          ];
+
+      const att = attestation.rows[0];
+      const identityLinked =
+        Boolean(m?.identity_linked) ||
+        docs.rows.some((row: any) => row.identity_linked) ||
+        [idLic, idVeh].every((s) => s === 'match');
+
+      const displayName = isMerchant
+        ? m.business_name || `${u?.first_name || ''} ${u?.last_name || ''}`.trim()
+        : `${u?.first_name || ''} ${u?.last_name || ''}`.trim() || u?.email || u?.phone || u?.id;
 
       res.json({
         status: 'success',
         data: {
           checks: checks.rows,
           documents: docs.rows,
+          merchantDocuments: merchantDocs.rows,
           documentsSummary,
-          identityLinked: docs.rows.some((d: any) => d.identity_linked),
-          linkStatus: [
-            { label: 'National ID ↔ Driving license', type: 'id_to_license', status: idLic },
-            { label: 'National ID ↔ Vehicle license', type: 'id_to_vehicle', status: idVeh },
-            { label: 'National ID ↔ Phone number', type: 'id_to_phone', status: idPhone },
-          ],
+          identityLinked,
+          kycStatus: m?.kyc_status || d?.kyc_status || null,
+          attestation: att
+            ? {
+                status: att.status,
+                txHash: att.tx_hash,
+                chain: att.chain,
+                verifiedAt: att.verified_at,
+                explorerUrl: kycAttestation.explorerTxUrl(att.tx_hash),
+              }
+            : null,
+          linkStatus,
           profile: u
             ? {
                 id: u.id,
-                name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || u.phone || u.id,
-                role:
-                  u.user_type === 'driver'
-                    ? 'Driver'
-                    : u.user_type === 'merchant'
-                      ? 'Merchant'
-                      : 'Rider',
+                name: displayName || u.id,
+                role: isMerchant ? 'Merchant' : d ? 'Driver' : u.user_type === 'driver' ? 'Driver' : 'Rider',
                 avatarUrl: u.avatar_url || null,
                 appliedAgo,
-                createdAt: u.created_at,
+                createdAt: m?.created_at || u.created_at,
+                merchantId: m?.id || null,
+                driverId: d?.id || null,
+                businessName: m?.business_name || null,
+                category: m?.category || null,
               }
             : null,
         },
@@ -668,10 +915,71 @@ identityLinkRouter.post(
         req.params.userId,
         req.user!.id,
         req.body.reason,
-        req.body.checkType,
-        req.body.status
+        req.body.checkType || 'all',
+        req.body.status || 'match'
       );
       res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+/** Approve identity + publish KYC attestation (driver or merchant). */
+identityLinkRouter.post(
+  '/:userId/approve',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = String(req.params.userId || '').trim();
+      if (!/^[0-9a-fA-F-]{36}$/.test(userId)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid user id' });
+      }
+
+      let linkResult: any = null;
+      try {
+        linkResult = await identityVerification.linkIdentityDocuments(userId);
+      } catch {
+        /* continue with manual approve */
+      }
+
+      // Force-match remaining checks when admin explicitly approves
+      await identityVerification.manualOverrideLink(
+        userId,
+        req.user!.id,
+        req.body.reason || 'Approved & attested on-chain',
+        'all',
+        'match'
+      );
+
+      const subject = await identityVerification.approveSubject(userId, req.user!.id, {
+        reason: req.body.reason || 'Approved & attested on-chain',
+      });
+
+      const attestation = await kycAttestation.publishAttestation(userId, 'Verified', {
+        documentType:
+          subject.role === 'merchant' ? 'merchant_identity_review' : 'identity_review',
+        verificationMethod: linkResult?.identityLinked
+          ? 'full_identity_link_verified'
+          : 'manual_admin_approve',
+        approvalTimestamp: new Date(),
+        verifierAdminId: req.user!.id,
+        identityLinked: true,
+        trustTier: 'full_identity_link_verified',
+      });
+
+      res.json({
+        status: 'success',
+        data: {
+          ...subject,
+          link: linkResult,
+          attestation: {
+            ...attestation,
+            explorerUrl: kycAttestation.explorerTxUrl(attestation.tx_hash),
+          },
+        },
+      });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }

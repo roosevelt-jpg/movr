@@ -142,12 +142,40 @@ referralsRouter.get('/progress', async (req: AuthRequest, res: Response) => {
         status_label: statusLabel,
       };
     });
+    const joinedCount = referrals.filter((r: any) =>
+      ['qualified', 'first_ride_completed', 'first_ride_pending'].includes(String(r.status))
+    ).length;
+    const ptsEarned =
+      totalRewards ||
+      referrals.filter((r: any) => r.status === 'qualified').length * 50;
+
+    const cfg = await db
+      .query(`SELECT * FROM referral_reward_config WHERE id = 1`)
+      .catch(() => ({ rows: [] as any[] }));
+    const c = cfg.rows[0] || {};
+    const giveAmt = Number(c.give_fiat_amount ?? 500);
+    const giveCur = c.give_currency || 'NGN';
+    const getPts = Number(c.points_amount ?? 50);
+
     res.json({
       status: 'success',
       data: {
         referrals,
-        totalRewards,
+        totalRewards: ptsEarned,
         invitedCount: referrals.length,
+        joinedCount,
+        ptsEarned,
+        promo: {
+          headline:
+            c.headline ||
+            `Give ${giveCur === 'NGN' ? '₦' : ''}${giveAmt.toLocaleString()}, Get ${getPts} pts`,
+          body:
+            c.body ||
+            'Share your code. When a friend completes their first ride, you both win.',
+          giveAmount: giveAmt,
+          giveCurrency: giveCur,
+          getPoints: getPts,
+        },
       },
     });
   } catch (error: any) {

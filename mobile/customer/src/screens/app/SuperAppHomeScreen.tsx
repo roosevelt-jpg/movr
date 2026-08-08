@@ -1,610 +1,791 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ScrollView,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 import ShopHomeScreen from './ShopHomeScreen';
 import ParcelHomeScreen from './ParcelHomeScreen';
+import ParcelTrackingScreen from './ParcelTrackingScreen';
 import RentalHomeScreen from './RentalHomeScreen';
+import RentalConfirmScreen from './RentalConfirmScreen';
+import ActiveRentalScreen from './ActiveRentalScreen';
+import HomeScreen from './HomeScreen';
+import WalletScreen from './WalletScreen';
+import ProfileSettingsScreen from './ProfileSettingsScreen';
+import InboxScreen from './InboxScreen';
+import ClaimScreen from './ClaimScreen';
+import WalletTopUpScreen from './WalletTopUpScreen';
+import RewardsScreen from './RewardsScreen';
+import SafetyCenterScreen from './SafetyCenterScreen';
 import TripHistoryScreen from './TripHistoryScreen';
+import ReferralScreen from './ReferralScreen';
+import AppSettingsScreen from './AppSettingsScreen';
+import ExploreScreen from './ExploreScreen';
+import PaymentMethodsScreen from './PaymentMethodsScreen';
+import DealsScreen from './DealsScreen';
+import StakingScreen from './StakingScreen';
+import HelpCentreScreen from './HelpCentreScreen';
+import WithdrawScreen from './WithdrawScreen';
+import ProductDetailScreen from './ProductDetailScreen';
+import StoreProfileScreen from './StoreProfileScreen';
+import SupportChatScreen from './SupportChatScreen';
+import TokenScreen from './TokenScreen';
+import TransactionReceiptScreen from './TransactionReceiptScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
+const ZINGER_ID = 'd0000000-0000-4000-8000-000000000141';
 
-const MODULES = ['Ride', 'Shop', 'Deliver', 'Parcel', 'Rentals'] as const;
-type Module = (typeof MODULES)[number];
-
-type SavedAddress = { id?: string; label: string; address: string; lat: number; lng: number };
-type RideOption = {
-  code: string;
-  name: string;
-  price?: number;
-  etaMinutes?: number;
-  isRecommended?: boolean;
-};
+type Tab = 'home' | 'shop' | 'wallet' | 'profile';
+type Service =
+  | 'hub'
+  | 'ride'
+  | 'shop'
+  | 'deliver'
+  | 'parcel_track'
+  | 'rental'
+  | 'rental_confirm'
+  | 'rental_active'
+  | 'notifications'
+  | 'claim'
+  | 'topup'
+  | 'withdraw'
+  | 'rewards'
+  | 'safety'
+  | 'history'
+  | 'refer'
+  | 'settings'
+  | 'explore'
+  | 'payments'
+  | 'deals'
+  | 'staking'
+  | 'help'
+  | 'support'
+  | 'store'
+  | 'product'
+  | 'redeem'
+  | 'receipt';
 
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  return token
-    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    : { 'Content-Type': 'application/json' };
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function relativeTime(iso: string) {
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  if (diff < 3600000) return 'Today · ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (diff < 86400000 * 2) return 'Yesterday · ' + new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 /**
- * Super-app home — matches customer home mockup:
- * shortcuts → module tabs → map → pickup/dest → Confirm pickup (wired to rides/request).
+ * Super-app home — greeting, map pin, services, wallet card, recent, bottom nav.
+ * Service taps open Ride / Shop / Deliver / Rental modules.
  */
 export default function SuperAppHomeScreen({
-  onOpenVoice,
-  onOpenAi,
   onOpenStore,
-  onOpenRecent,
+  onOpenWallet,
+  onOpenProfile,
+  onTopUp,
+  onSend,
 }: {
   onOpenVoice?: () => void;
   onOpenAi?: () => void;
   onOpenWhatsApp?: () => void;
   onOpenStore?: (storeId: string) => void;
   onOpenRecent?: () => void;
+  onOpenWallet?: () => void;
+  onOpenProfile?: () => void;
+  onTopUp?: () => void;
+  onSend?: () => void;
 }) {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
+  const [service, setService] = useState<Service>('hub');
+  const [tab, setTab] = useState<Tab>('home');
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+  const [storeId, setStoreId] = useState(CHICKEN_ID);
+  const [productId, setProductId] = useState(ZINGER_ID);
+  const [rentalVehicleId, setRentalVehicleId] = useState('e0000000-0000-4000-8000-000000000002');
+  const [rentalMode, setRentalMode] = useState<'self_drive' | 'chauffeur'>('self_drive');
+  const [parcelRef, setParcelRef] = useState('MVR-P-8821');
+  const [receiptRideId, setReceiptRideId] = useState('f3000000-0000-4000-8000-000000004821');
 
-  const [active, setActive] = useState<Module>('Ride');
-  const [mounted, setMounted] = useState<Record<string, boolean>>({ Ride: true });
-  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
-  const [pickupLabel, setPickupLabel] = useState('12 Oxford St');
-  const [pickup, setPickup] = useState({ lat: 5.5557, lng: -0.182, address: '12 Oxford St' });
-  const [destination, setDestination] = useState('');
-  const [dropoff, setDropoff] = useState<{ lat: number; lng: number; address: string } | null>(
-    null
-  );
-  const [showRecent, setShowRecent] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [options, setOptions] = useState<RideOption[]>([]);
-  const [currency, setCurrency] = useState('GHS');
-  const [selected, setSelected] = useState<string | null>(null);
-  const [bookingMsg, setBookingMsg] = useState('');
-  const [showOptions, setShowOptions] = useState(false);
-
-  const loadAddresses = useCallback(async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API}/wallet/addresses`, { headers: authHeaders() });
+      const res = await fetch(`${API}/me/home-dashboard`, { headers: authHeaders() });
       const j = await res.json();
-      if (Array.isArray(j?.data)) {
-        setAddresses(j.data);
-        const home = j.data.find((a: SavedAddress) => /home/i.test(a.label));
-        if (home) {
-          setPickup({ lat: Number(home.lat), lng: Number(home.lng), address: home.address });
-          setPickupLabel(home.address);
-        }
-      }
+      if (j?.data) setData(j.data);
+      else throw new Error('empty');
     } catch {
-      /* offline */
+      setData({
+        greeting: 'Good morning',
+        name: 'Kwame Asante',
+        initials: 'KA',
+        location: { label: 'Victoria Island, Lagos', lat: 6.4281, lng: 3.4219 },
+        wallet: { balance: 24500, currency: 'NGN', tokens: 2400, points: 850 },
+        services: [
+          { id: 'ride', label: 'Ride' },
+          { id: 'shop', label: 'Shop' },
+          { id: 'deliver', label: 'Deliver' },
+          { id: 'rental', label: 'Rental' },
+        ],
+        recent: [
+          { id: '1', kind: 'ride', title: 'Ride to Lekki', amount: 1200, at: new Date().toISOString() },
+          {
+            id: '2',
+            kind: 'deliver',
+            title: 'Package Delivery',
+            amount: 800,
+            at: new Date(Date.now() - 86400000).toISOString(),
+          },
+        ],
+      });
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadAddresses();
-  }, [loadAddresses]);
+    load();
+  }, [load]);
 
-  const selectModule = (m: Module) => {
-    setActive(m);
-    setShowRecent(false);
-    setMounted((prev) => (prev[m] ? prev : { ...prev, [m]: true }));
-  };
-
-  const applyAddress = (label: string, as: 'pickup' | 'destination' = 'destination') => {
-    const row = addresses.find((a) => a.label.toLowerCase() === label.toLowerCase());
-    if (row) {
-      if (as === 'pickup') {
-        setPickup({ lat: Number(row.lat), lng: Number(row.lng), address: row.address });
-        setPickupLabel(row.address);
-      } else {
-        setDestination(row.address);
-        setDropoff({ lat: Number(row.lat), lng: Number(row.lng), address: row.address });
-      }
-      selectModule('Ride');
-      return;
-    }
-    if (as === 'destination') setDestination(label);
-    selectModule('Ride');
-  };
-
-  const shortcuts = useMemo(
-    () => [
-      { id: 'home', label: 'Home', icon: '⌂', onPress: () => applyAddress('Home') },
-      { id: 'work', label: 'Work', icon: '▣', onPress: () => applyAddress('Work') },
-      {
-        id: 'recent',
-        label: 'Recent',
-        icon: '◷',
-        onPress: () => {
-          setShowRecent(true);
-          onOpenRecent?.();
-        },
-      },
-      {
-        id: 'saved',
-        label: 'Saved',
-        icon: '★',
-        onPress: () => {
-          const fav =
-            addresses.find((a) => /fav|saved|star/i.test(a.label)) || addresses[0];
-          if (fav) {
-            setDestination(fav.address);
-            setDropoff({ lat: Number(fav.lat), lng: Number(fav.lng), address: fav.address });
-            selectModule('Ride');
-          }
-        },
-      },
-    ],
-    [addresses]
+  const tabBar = (
+    <View style={styles.tabBar}>
+      {(
+        [
+          { id: 'home' as Tab, label: 'Home', icon: '⌂' },
+          { id: 'shop' as Tab, label: 'Shop', icon: '🛍' },
+          { id: 'wallet' as Tab, label: 'Wallet', icon: '💳' },
+          { id: 'profile' as Tab, label: 'Profile', icon: '👤' },
+        ] as const
+      ).map((t) => {
+        const on = tab === t.id;
+        return (
+          <Pressable
+            key={t.id}
+            style={styles.tabItem}
+            onPress={() => {
+              setTab(t.id);
+              if (t.id === 'shop') setService('shop');
+              if (t.id === 'home') setService('hub');
+              if (t.id === 'wallet') {
+                setService('hub');
+                onOpenWallet?.();
+              }
+              if (t.id === 'profile') {
+                setService('hub');
+                onOpenProfile?.();
+              }
+            }}
+          >
+            <Text style={styles.tabIcon}>{t.icon}</Text>
+            <Text style={[styles.tabLabel, on && styles.tabOn]}>{t.label}</Text>
+            {on ? <View style={styles.tabDot} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 
-  const resolveDropoff = async () => {
-    if (dropoff && dropoff.address === destination) return dropoff;
-    const text = destination.trim();
-    if (!text) throw new Error('Enter a destination');
-
-    const saved = addresses.find(
-      (a) => a.address.toLowerCase() === text.toLowerCase() || a.label.toLowerCase() === text.toLowerCase()
-    );
-    if (saved) {
-      const geo = { lat: Number(saved.lat), lng: Number(saved.lng), address: saved.address };
-      setDropoff(geo);
-      return geo;
-    }
-
-    const res = await fetch(`${API}/voice/parse-intent`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        text: `from ${pickup.address} to ${text}`,
-        currentLat: pickup.lat,
-        currentLng: pickup.lng,
-        countryCode: 'GH',
-      }),
-    });
-    const json = await res.json();
-    if (json.data?.destination?.lat != null) {
-      const geo = {
-        lat: Number(json.data.destination.lat),
-        lng: Number(json.data.destination.lng),
-        address: json.data.destination.address || text,
-      };
-      setDropoff(geo);
-      return geo;
-    }
-
-    // Accra-centric fallback so booking still works offline of geocode
-    const known: Record<string, { lat: number; lng: number }> = {
-      airport: { lat: 5.6052, lng: -0.1668 },
-      kotoka: { lat: 5.6052, lng: -0.1668 },
-      osu: { lat: 5.5557, lng: -0.182 },
-      accra: { lat: 5.6037, lng: -0.187 },
-    };
-    const key = Object.keys(known).find((k) => text.toLowerCase().includes(k));
-    const geo = {
-      lat: key ? known[key].lat : pickup.lat + 0.02,
-      lng: key ? known[key].lng : pickup.lng + 0.02,
-      address: text,
-    };
-    setDropoff(geo);
-    return geo;
-  };
-
-  const confirmPickup = async () => {
-    setBookingMsg('');
-    setConfirming(true);
-    try {
-      const dest = await resolveDropoff();
-      const est = await fetch(`${API}/rides/estimate`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          pickupLat: pickup.lat,
-          pickupLng: pickup.lng,
-          dropoffLat: dest.lat,
-          dropoffLng: dest.lng,
-          countryCode: 'GH',
-        }),
-      });
-      const ej = await est.json();
-      const opts: RideOption[] = ej.data?.options || [];
-      if (!opts.length) {
-        const vt = await fetch(
-          `${API}/vehicle-types?region=GH&pickupLat=${pickup.lat}&pickupLng=${pickup.lng}&dropoffLat=${dest.lat}&dropoffLng=${dest.lng}`
-        );
-        const vj = await vt.json();
-        const fromEst = vj.data?.estimates?.options || [];
-        setOptions(fromEst);
-        setCurrency(vj.data?.estimates?.currency || 'GHS');
-        setSelected(fromEst[0]?.code || null);
-      } else {
-        setOptions(opts);
-        setCurrency(ej.data?.currency || 'GHS');
-        setSelected(opts[0]?.code || null);
-      }
-      setShowOptions(true);
-    } catch (e: any) {
-      setBookingMsg(e?.message || 'Could not confirm pickup');
-    } finally {
-      setConfirming(false);
-    }
-  };
-
-  const requestRide = async () => {
-    if (!dropoff || !selected) return;
-    setConfirming(true);
-    setBookingMsg('');
-    try {
-      const res = await fetch(`${API}/rides/request`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          pickupLat: pickup.lat,
-          pickupLng: pickup.lng,
-          dropoffLat: dropoff.lat,
-          dropoffLng: dropoff.lng,
-          pickupAddress: pickup.address,
-          dropoffAddress: dropoff.address,
-          rideType: selected,
-          vehicleTypeCode: selected,
-          countryCode: 'GH',
-        }),
-      });
-      const json = await res.json();
-      if (json.status === 'error') {
-        setBookingMsg(json.message || 'Ride request failed');
-      } else {
-        setBookingMsg(`Ride requested · ${json.data?.id || json.data?.rideId || 'matching drivers'}`);
-      }
-    } catch (e: any) {
-      setBookingMsg(e?.message || 'Ride request failed');
-    } finally {
-      setConfirming(false);
-    }
-  };
-
-  if (showRecent) {
+  if (tab === 'wallet' && service === 'hub') {
     return (
       <View style={styles.root}>
-        <Pressable onPress={() => setShowRecent(false)} style={styles.backRow}>
-          <Text style={styles.backText}>← Back</Text>
+        <WalletScreen
+          onTopUp={() => setService('topup')}
+          onWithdraw={() => setService('withdraw')}
+          onTransfer={onSend}
+          onClaimDvt={() => setService('claim')}
+          onPaymentMethods={() => setService('payments')}
+          onRedeem={() => setService('redeem')}
+        />
+        {tabBar}
+      </View>
+    );
+  }
+
+  if (tab === 'profile' && service === 'hub') {
+    return (
+      <View style={styles.root}>
+        <ProfileSettingsScreen
+          onLeaderboard={() => setService('rewards')}
+          onDvtDashboard={() => setService('staking')}
+          onNotifications={() => setService('notifications')}
+          onRewards={() => setService('rewards')}
+          onSafety={() => setService('safety')}
+          onHistory={() => setService('history')}
+          onRefer={() => setService('refer')}
+          onSettings={() => setService('settings')}
+          onDeals={() => setService('deals')}
+          onPrivacy={() => setService('settings')}
+          onHelp={() => setService('help')}
+        />
+        {tabBar}
+      </View>
+    );
+  }
+
+  if (service === 'settings') {
+    return (
+      <View style={styles.root}>
+        <AppSettingsScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'explore') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
         </Pressable>
+        <ExploreScreen
+          onOpenStore={onOpenStore}
+          onRide={() => setService('ride')}
+          onParcel={() => setService('deliver')}
+          onRental={() => setService('rental')}
+        />
+      </View>
+    );
+  }
+  if (service === 'payments') {
+    return (
+      <View style={styles.root}>
+        <PaymentMethodsScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'deals') {
+    return (
+      <View style={styles.root}>
+        <DealsScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'staking') {
+    return (
+      <View style={styles.root}>
+        <StakingScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+
+  if (service === 'rewards') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Profile</Text>
+        </Pressable>
+        <RewardsScreen onRefer={() => setService('refer')} />
+      </View>
+    );
+  }
+  if (service === 'safety') {
+    return (
+      <View style={styles.root}>
+        <SafetyCenterScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'history') {
+    return (
+      <View style={styles.root}>
         <TripHistoryScreen
-          onBookRide={() => {
-            setShowRecent(false);
-            setActive('Ride');
-            setMounted((m) => ({ ...m, Ride: true }));
+          onBack={() => setService('hub')}
+          onBookRide={() => setService('ride')}
+          onBrowseStores={() => setService('shop')}
+          onDeliver={() => setService('deliver')}
+          onReceipt={(id) => {
+            setReceiptRideId(id || 'f3000000-0000-4000-8000-000000004821');
+            setService('receipt');
+          }}
+        />
+        {tabBar}
+      </View>
+    );
+  }
+  if (service === 'redeem') {
+    return (
+      <View style={styles.root}>
+        <TokenScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'receipt') {
+    return (
+      <View style={styles.root}>
+        <TransactionReceiptScreen
+          rideId={receiptRideId}
+          onBack={() => setService('history')}
+          onDone={() => setService('hub')}
+        />
+      </View>
+    );
+  }
+  if (service === 'help') {
+    return (
+      <View style={styles.root}>
+        <HelpCentreScreen
+          onBack={() => setService('hub')}
+          onOpenSupport={() => setService('support')}
+        />
+      </View>
+    );
+  }
+  if (service === 'support') {
+    return (
+      <View style={styles.root}>
+        <SupportChatScreen onBack={() => setService('help')} />
+      </View>
+    );
+  }
+  if (service === 'withdraw') {
+    return (
+      <View style={styles.root}>
+        <WithdrawScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'store') {
+    return (
+      <View style={styles.root}>
+        <StoreProfileScreen
+          storeId={storeId}
+          onBack={() => setService('shop')}
+          onOpenProduct={(id) => {
+            setProductId(id);
+            setService('product');
           }}
         />
       </View>
     );
   }
+  if (service === 'product') {
+    return (
+      <View style={styles.root}>
+        <ProductDetailScreen
+          productId={productId}
+          storeId={storeId}
+          onBack={() => setService('store')}
+          onAdded={() => setService('store')}
+        />
+      </View>
+    );
+  }
+  if (service === 'refer') {
+    return (
+      <View style={styles.root}>
+        <ReferralScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+
+  if (service === 'notifications') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
+        </Pressable>
+        <InboxScreen onOpenClaim={() => setService('claim')} />
+      </View>
+    );
+  }
+  if (service === 'claim') {
+    return (
+      <View style={styles.root}>
+        <ClaimScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'topup') {
+    return (
+      <View style={styles.root}>
+        <WalletTopUpScreen onBack={() => setService('hub')} onDone={() => setService('hub')} />
+      </View>
+    );
+  }
+
+  if (service === 'ride') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
+        </Pressable>
+        <HomeScreen
+          pickupLabel={data?.location?.label}
+          pickupLat={data?.location?.lat}
+          pickupLng={data?.location?.lng}
+        />
+      </View>
+    );
+  }
+  if (service === 'shop') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
+        </Pressable>
+        <ShopHomeScreen
+          onOpenStore={(id) => {
+            setStoreId(id || CHICKEN_ID);
+            setService('store');
+            onOpenStore?.(id);
+          }}
+          userLat={data?.location?.lat}
+          userLng={data?.location?.lng}
+        />
+      </View>
+    );
+  }
+  if (service === 'deliver') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
+        </Pressable>
+        <ParcelHomeScreen
+          onScheduled={(id) => {
+            setParcelRef(id || 'MVR-P-8821');
+            setService('parcel_track');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'parcel_track') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('deliver')} style={styles.back}>
+          <Text style={styles.backText}>← Deliver</Text>
+        </Pressable>
+        <ParcelTrackingScreen parcelRef={parcelRef} onBack={() => setService('deliver')} />
+      </View>
+    );
+  }
+  if (service === 'rental') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('hub')} style={styles.back}>
+          <Text style={styles.backText}>← Home</Text>
+        </Pressable>
+        <RentalHomeScreen
+          onConfirm={({ vehicleId, mode }) => {
+            setRentalVehicleId(vehicleId);
+            setRentalMode(mode);
+            setService('rental_confirm');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'rental_confirm') {
+    return (
+      <View style={styles.root}>
+        <RentalConfirmScreen
+          vehicleId={rentalVehicleId}
+          mode={rentalMode}
+          onBack={() => setService('rental')}
+          onPaid={() => setService('rental_active')}
+        />
+      </View>
+    );
+  }
+  if (service === 'rental_active') {
+    return (
+      <View style={styles.root}>
+        <ActiveRentalScreen
+          onBack={() => setService('hub')}
+          onSupport={() => setService('help')}
+        />
+      </View>
+    );
+  }
+
+  const w = data?.wallet || {};
+  const recent = data?.recent || [];
 
   return (
     <View style={styles.root}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.shortcuts}
-      >
-        {shortcuts.map((s) => (
-          <Pressable key={s.id} style={styles.chip} onPress={s.onPress}>
-            <Text style={styles.chipIcon}>{s.icon}</Text>
-            <Text style={styles.chipText}>{s.label}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{data?.initials || 'KA'}</Text>
+            </View>
+            <View>
+              <Text style={styles.greet}>
+                {data?.greeting || 'Good morning'} 👋
+              </Text>
+              <Text style={styles.name}>{data?.name || 'Traveler'}</Text>
+            </View>
+          </View>
+          <Pressable onPress={() => setService('notifications')}>
+            <Text style={styles.bell}>🔔</Text>
           </Pressable>
-        ))}
-      </ScrollView>
+        </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabs}
-      >
-        {MODULES.map((m) => (
-          <Pressable key={m} onPress={() => selectModule(m)} style={styles.tab}>
-            <Text style={[styles.tabText, active === m && styles.tabActive]}>{m}</Text>
-            {active === m ? <View style={styles.underline} /> : null}
-          </Pressable>
-        ))}
-      </ScrollView>
+        <Pressable style={styles.searchBar} onPress={() => setService('explore')}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchPlaceholder}>Search rides, stores, parcels...</Text>
+        </Pressable>
 
-      <View style={styles.moduleBody}>
-        {mounted.Ride ? (
-          <ScrollView
-            style={{ display: active === 'Ride' ? 'flex' : 'none', flex: 1 }}
-            contentContainerStyle={{ paddingBottom: spacing[8] }}
-            keyboardShouldPersistTaps="handled"
-          >
+        {loading && !data ? (
+          <ActivityIndicator color="#8E2DE2" style={{ marginTop: 40 }} />
+        ) : (
+          <>
             <View style={styles.map}>
-              <View style={styles.mapGrid} />
-              <View style={styles.pulseOuter}>
-                <View style={styles.pulseInner} />
-              </View>
-              <Pressable
-                style={styles.recenter}
-                onPress={() => {
-                  setPickupLabel(pickup.address);
-                }}
-                accessibilityLabel="Re-center map"
-              >
-                <Text style={styles.recenterGlyph}>⌖</Text>
-              </Pressable>
-              {onOpenAi || onOpenVoice ? (
-                <View style={styles.mapActions}>
-                  {onOpenAi ? (
-                    <Pressable style={styles.micHint} onPress={onOpenAi}>
-                      <Text style={{ color: colors.pureWhite, fontSize: 12 }}>Movr AI</Text>
-                    </Pressable>
-                  ) : null}
-                  {onOpenVoice ? (
-                    <Pressable style={styles.micHint} onPress={onOpenVoice}>
-                      <Text style={{ color: colors.pureWhite, fontSize: 12 }}>Voice</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-
-            <View style={styles.fields}>
-              <View style={styles.field}>
-                <View style={styles.dotFilled} />
-                <Text style={styles.fieldText} numberOfLines={1}>
-                  Pickup: {pickupLabel}
+              <View style={styles.mapGlow} />
+              <View style={styles.mapPin} />
+              <View style={styles.locBar}>
+                <View style={styles.locDot} />
+                <Text style={styles.locText} numberOfLines={1}>
+                  {data?.location?.label || 'Victoria Island, Lagos'}
                 </Text>
-              </View>
-              <View style={styles.field}>
-                <View style={styles.dotOutline} />
-                <TextInput
-                  style={styles.fieldInput}
-                  placeholder="Enter destination"
-                  placeholderTextColor={colors.textSecondary}
-                  value={destination}
-                  onChangeText={(t) => {
-                    setDestination(t);
-                    setDropoff(null);
-                    setShowOptions(false);
-                    setBookingMsg('');
-                  }}
-                />
-              </View>
-            </View>
-
-            {!showOptions ? (
-              <Pressable
-                style={[styles.cta, (!destination.trim() || confirming) && styles.ctaDisabled]}
-                disabled={!destination.trim() || confirming}
-                onPress={() => confirmPickup().catch(() => undefined)}
-              >
-                <View style={styles.ctaGlow} />
-                <Text style={styles.ctaText}>
-                  {confirming ? 'Confirming…' : 'Confirm pickup'}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.optionsWrap}>
-                <Text style={styles.optionsTitle}>Choose ride</Text>
-                {options.map((item) => {
-                  const on = selected === item.code;
-                  return (
-                    <Pressable
-                      key={item.code}
-                      style={[styles.option, on && styles.optionActive]}
-                      onPress={() => setSelected(item.code)}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.optionName}>
-                          {item.name}
-                          {item.isRecommended ? ' · Best value' : ''}
-                        </Text>
-                        <Text style={styles.optionMeta}>
-                          {item.etaMinutes != null ? `${item.etaMinutes} min away` : 'Nearby'}
-                        </Text>
-                      </View>
-                      <Text style={styles.optionPrice}>
-                        {item.price != null ? formatCurrency(item.price, currency) : '—'}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-                <Pressable
-                  style={[styles.cta, confirming && styles.ctaDisabled]}
-                  disabled={confirming || !selected}
-                  onPress={() => requestRide().catch(() => undefined)}
-                >
-                  <View style={styles.ctaGlow} />
-                  <Text style={styles.ctaText}>
-                    {confirming ? 'Requesting…' : 'Request ride'}
-                  </Text>
+                <Pressable onPress={() => setService('ride')}>
+                  <Text style={styles.change}>Change</Text>
                 </Pressable>
               </View>
-            )}
-            {bookingMsg ? <Text style={styles.msg}>{bookingMsg}</Text> : null}
-          </ScrollView>
-        ) : null}
+            </View>
 
-        {mounted.Shop ? (
-          <View style={{ display: active === 'Shop' ? 'flex' : 'none', flex: 1 }}>
-            <ShopHomeScreen onOpenStore={onOpenStore} />
-          </View>
-        ) : null}
+            <Text style={styles.section}>SERVICES</Text>
+            <View style={styles.services}>
+              {[
+                { id: 'ride' as Service, label: 'Ride', icon: '🚗' },
+                { id: 'shop' as Service, label: 'Shop', icon: '🛍️' },
+                { id: 'deliver' as Service, label: 'Deliver', icon: '📦' },
+                { id: 'rental' as Service, label: 'Rental', icon: '🔑' },
+              ].map((s) => (
+                <Pressable key={s.id} style={styles.service} onPress={() => setService(s.id)}>
+                  <Text style={styles.serviceIcon}>{s.icon}</Text>
+                  <Text style={styles.serviceLabel}>{s.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
-        {mounted.Deliver ? (
-          <View style={{ display: active === 'Deliver' ? 'flex' : 'none', flex: 1 }}>
-            <ShopHomeScreen onOpenStore={onOpenStore} />
-          </View>
-        ) : null}
+            <View style={styles.wallet}>
+              <View style={styles.walletA} />
+              <View style={styles.walletB} />
+              <Text style={styles.walletLabel}>TOTAL BALANCE</Text>
+              <Text style={styles.walletBal}>
+                {formatCurrency(Number(w.balance || 0), w.currency || 'NGN')}
+              </Text>
+              <Text style={styles.walletMeta}>
+                {Number(w.tokens || 0).toLocaleString()} DVT Tokens · {Number(w.points || 0).toLocaleString()} pts
+              </Text>
+              <View style={styles.walletActions}>
+                <Pressable style={styles.ghostBtn} onPress={onTopUp || onOpenWallet}>
+                  <Text style={styles.ghostText}>Top Up</Text>
+                </Pressable>
+                <Pressable style={styles.ghostBtn} onPress={onSend || onOpenWallet}>
+                  <Text style={styles.ghostText}>Send</Text>
+                </Pressable>
+              </View>
+            </View>
 
-        {mounted.Parcel ? (
-          <View style={{ display: active === 'Parcel' ? 'flex' : 'none', flex: 1 }}>
-            <ParcelHomeScreen
-              activeTab="Parcel"
-              onTabChange={(t) => {
-                if (t === 'Ride' || t === 'Shop') selectModule(t as Module);
-                else if (t === 'Rentals' || t === 'Rental') selectModule('Rentals');
-              }}
-            />
-          </View>
-        ) : null}
+            <Text style={styles.section}>RECENT</Text>
+            {recent.map((r: any) => (
+              <View key={r.id} style={styles.recentRow}>
+                <View style={styles.recentIcon}>
+                  <Text>{r.kind === 'deliver' ? '📦' : '🚗'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.recentTitle}>{r.title}</Text>
+                  <Text style={styles.recentSub}>{relativeTime(r.at)}</Text>
+                </View>
+                <Text style={styles.recentAmt}>
+                  {formatCurrency(Number(r.amount || 0), w.currency || 'NGN')}
+                </Text>
+              </View>
+            ))}
+          </>
+        )}
+      </ScrollView>
 
-        {mounted.Rentals ? (
-          <View style={{ display: active === 'Rentals' ? 'flex' : 'none', flex: 1 }}>
-            <RentalHomeScreen />
-          </View>
-        ) : null}
-
-        {!mounted[active] ? <ActivityIndicator color={colors.motionBlue} /> : null}
-      </View>
+      {tabBar}
     </View>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: colors.jetBlack,
-      paddingHorizontal: spacing[4],
-      paddingTop: spacing[3],
-    },
-    backRow: { paddingVertical: spacing[2] },
-    backText: { color: colors.motionBlue, fontWeight: '600' },
-    shortcuts: { gap: spacing[2], paddingBottom: spacing[3] },
-    chip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.pill,
-      paddingHorizontal: spacing[4],
-      paddingVertical: spacing[2],
-    },
-    chipIcon: { color: colors.pureWhite, fontSize: 13 },
-    chipText: { color: colors.pureWhite, fontSize: 13, fontWeight: '500' },
-    tabs: { gap: spacing[5], paddingBottom: spacing[3], borderBottomWidth: 1, borderBottomColor: colors.border },
-    tab: { paddingBottom: spacing[2] },
-    tabText: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
-    tabActive: { color: colors.pureWhite },
-    underline: { marginTop: 6, height: 3, borderRadius: 2, backgroundColor: colors.motionBlue },
-    moduleBody: { flex: 1, marginTop: spacing[3] },
-    map: {
-      height: 220,
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.lg,
-      overflow: 'hidden',
-      marginBottom: spacing[4],
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    mapGrid: {
-      ...StyleSheet.absoluteFillObject,
-      opacity: 0.4,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    pulseOuter: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: 'rgba(0,85,255,0.25)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    pulseInner: {
-      width: 16,
-      height: 16,
-      borderRadius: 8,
-      backgroundColor: colors.motionBlue,
-    },
-    recenter: {
-      position: 'absolute',
-      top: spacing[3],
-      right: spacing[3],
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: colors.surfaceElevated,
-      borderWidth: 1,
-      borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    recenterGlyph: { color: colors.pureWhite, fontSize: 18 },
-    mapActions: {
-      position: 'absolute',
-      bottom: spacing[3],
-      right: spacing[3],
-      flexDirection: 'row',
-      gap: 8,
-    },
-    micHint: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: radius.pill,
-      backgroundColor: colors.electricViolet,
-    },
-    fields: { gap: spacing[2], marginBottom: spacing[4] },
-    field: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing[3],
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.lg,
-      paddingHorizontal: spacing[4],
-      paddingVertical: spacing[4],
-    },
-    dotFilled: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.pureWhite },
-    dotOutline: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-      borderWidth: 2,
-      borderColor: colors.textSecondary,
-    },
-    fieldText: { color: colors.pureWhite, fontSize: 15, flex: 1 },
-    fieldInput: { color: colors.pureWhite, fontSize: 15, flex: 1, padding: 0 },
-    cta: {
-      borderRadius: radius.lg,
-      minHeight: 52,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.electricViolet,
-      overflow: 'hidden',
-    },
-    ctaDisabled: { opacity: 0.5 },
-    ctaGlow: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: colors.motionBlue,
-      opacity: 0.45,
-    },
-    ctaText: { color: colors.pureWhite, fontWeight: '700', fontSize: 16, zIndex: 1 },
-    optionsWrap: { gap: spacing[2] },
-    optionsTitle: { color: colors.pureWhite, fontWeight: '700', marginBottom: spacing[2] },
-    option: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: spacing[4],
-      borderRadius: radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surfaceElevated,
-      marginBottom: spacing[2],
-    },
-    optionActive: { borderColor: colors.motionBlue },
-    optionName: { color: colors.pureWhite, fontWeight: '700' },
-    optionMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-    optionPrice: { color: colors.pureWhite, fontWeight: '700' },
-    msg: { color: colors.success, marginTop: spacing[3], textAlign: 'center' },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000' },
+  back: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+  backText: { color: '#a78bfa', fontWeight: '700' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    marginBottom: 14,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#8E2DE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: '#fff', fontWeight: '800' },
+  greet: { color: '#aaa', fontSize: 13 },
+  name: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  bell: { fontSize: 20 },
+  searchBar: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#8E2DE2',
+    backgroundColor: '#0A0A0A',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchPlaceholder: { color: '#71717A', fontSize: 14 },
+  map: {
+    marginHorizontal: 16,
+    height: 160,
+    borderRadius: 18,
+    backgroundColor: '#0c0c12',
+    borderWidth: 1,
+    borderColor: '#1f1f28',
+    marginBottom: 18,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  mapGlow: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(142,45,226,0.25)',
+  },
+  mapPin: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 58,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 4,
+    borderColor: '#8E2DE2',
+  },
+  locBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 12,
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  locDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#8E2DE2' },
+  locText: { flex: 1, color: '#fff', fontWeight: '600', fontSize: 13 },
+  change: { color: '#c4b5fd', fontWeight: '700', fontSize: 13 },
+  section: {
+    color: '#666',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
+  services: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  service: {
+    flex: 1,
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  serviceIcon: { fontSize: 22 },
+  serviceLabel: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  wallet: {
+    marginHorizontal: 16,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 20,
+    overflow: 'hidden',
+    backgroundColor: '#4A00E0',
+  },
+  walletA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#8E2DE2', opacity: 0.85 },
+  walletB: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#3B5CFF',
+    opacity: 0.55,
+    left: '35%',
+  },
+  walletLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', letterSpacing: 1, zIndex: 1 },
+  walletBal: { color: '#fff', fontSize: 32, fontWeight: '800', marginTop: 6, zIndex: 1 },
+  walletMeta: { color: 'rgba(255,255,255,0.85)', marginTop: 4, fontSize: 13, zIndex: 1 },
+  walletActions: { flexDirection: 'row', gap: 10, marginTop: 16, zIndex: 1 },
+  ghostBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  ghostText: { color: '#fff', fontWeight: '700' },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  recentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#141414',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recentTitle: { color: '#fff', fontWeight: '700' },
+  recentSub: { color: '#888', fontSize: 12, marginTop: 2 },
+  recentAmt: { color: '#fff', fontWeight: '700' },
+  tabBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    backgroundColor: '#0a0a0a',
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
+    paddingVertical: 10,
+    paddingBottom: 18,
+  },
+  tabItem: { flex: 1, alignItems: 'center', gap: 2 },
+  tabIcon: { fontSize: 16 },
+  tabLabel: { color: '#666', fontSize: 11, fontWeight: '600' },
+  tabOn: { color: '#fff' },
+  tabDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#8E2DE2',
+    marginTop: 2,
+  },
+});

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import AdminShell from '../layouts/AdminShell';
+import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 const headers = () => ({
@@ -78,20 +79,7 @@ export default function AirdropsPage() {
             Label
             <input value={label} onChange={(e) => setLabel(e.target.value)} style={inputStyle} />
           </label>
-          <button
-            type="submit"
-            disabled={busy}
-            style={{
-              marginTop: 8,
-              border: 0,
-              borderRadius: 12,
-              padding: '12px 16px',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #7C3AED, #2563EB)',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
+          <button type="submit" disabled={busy} style={{ ...adminBtn.block, marginTop: 8 }}>
             {busy ? 'Creating…' : 'Create snapshot'}
           </button>
         </form>

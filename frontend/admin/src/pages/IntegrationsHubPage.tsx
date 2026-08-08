@@ -275,7 +275,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 12px',
   },
   primary: {
-    background: 'linear-gradient(90deg, var(--electric-violet), var(--motion-blue))',
+    background: 'var(--movr-gradient)',
     color: 'var(--pure-white)',
     border: 'none',
     borderRadius: 8,

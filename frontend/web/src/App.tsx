@@ -12,6 +12,8 @@ import AuthLayout from './layouts/AuthLayout';
 import AppLayout from './layouts/AppLayout';
 
 import LoginPage from './pages/auth/LoginPage';
+import PhoneEntryPage from './pages/auth/PhoneEntryPage';
+import ProfileSetupPage from './pages/auth/ProfileSetupPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import OtpVerifyPage from './pages/auth/OtpVerifyPage';
@@ -24,25 +26,42 @@ import MarketplacePage from './pages/app/MarketplacePage';
 import StorePage from './pages/app/StorePage';
 import CartPage from './pages/app/CartPage';
 import WalletPage from './pages/app/WalletPage';
+import OrderConfirmedPage from './pages/app/OrderConfirmedPage';
+import OrderTrackingPage from './pages/app/OrderTrackingPage';
 import TokenPage from './pages/app/TokenPage';
 import StakingPage from './pages/app/StakingPage';
 import ClaimPage from './pages/app/ClaimPage';
+import RentalsPage from './pages/app/RentalsPage';
+import RentalConfirmPage from './pages/app/RentalConfirmPage';
+import ActiveRentalPage from './pages/app/ActiveRentalPage';
+import ParcelTrackingPage from './pages/app/ParcelTrackingPage';
+import NotificationsPage from './pages/app/NotificationsPage';
+import RewardsPage from './pages/app/RewardsPage';
+import SafetyCenterPage from './pages/app/SafetyCenterPage';
+import ReferPage from './pages/app/ReferPage';
+import ExplorePage from './pages/app/ExplorePage';
+import PaymentMethodsPage from './pages/app/PaymentMethodsPage';
+import DealsPage from './pages/app/DealsPage';
+import RideChatPage from './pages/app/RideChatPage';
 import HistoryPage from './pages/app/HistoryPage';
 import ProfilePage from './pages/app/ProfilePage';
 import SettingsPage from './pages/app/SettingsPage';
 import EditProfilePage from './pages/app/EditProfilePage';
 import RideRatingPage from './pages/app/RideRatingPage';
+import RideReceiptPage from './pages/app/RideReceiptPage';
 
 import LandingPage from './pages/public/LandingPage';
 import NotFoundPage from './pages/public/NotFoundPage';
 
 import MerchantLoginPage from './pages/merchant/MerchantLoginPage';
 import MerchantOnboardingPage from './pages/merchant/MerchantOnboardingPage';
+import MerchantStoreSetupPage from './pages/merchant/MerchantStoreSetupPage';
 import MerchantDashboardPage from './pages/merchant/MerchantDashboardPage';
 import MerchantStoreEditorPage from './pages/merchant/MerchantStoreEditorPage';
 import MerchantProductsPage from './pages/merchant/MerchantProductsPage';
 import MerchantAnalyticsPage from './pages/merchant/MerchantAnalyticsPage';
 import MerchantPayoutsPage from './pages/merchant/MerchantPayoutsPage';
+import MerchantCouponsPage from './pages/merchant/MerchantCouponsPage';
 import MerchantStakingPage from './pages/merchant/MerchantStakingPage';
 import MerchantLandingPage from './pages/public/MerchantLandingPage';
 import DriverLandingPage from './pages/public/DriverLandingPage';
@@ -63,6 +82,8 @@ import RedeemPointsPage from './pages/app/RedeemPointsPage';
 import NotificationPrefsPage from './pages/app/NotificationPrefsPage';
 import SupportChatPage from './pages/app/SupportChatPage';
 import MovrAiPage from './pages/public/MovrAiPage';
+import WithdrawPage from './pages/app/WithdrawPage';
+import ProductDetailPage from './pages/app/ProductDetailPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -144,6 +165,8 @@ const App: React.FC = () => {
 
               <Route element={<AuthLayout />}>
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/phone" element={<PhoneEntryPage />} />
+                <Route path="/profile-setup" element={<ProfileSetupPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/verify-otp" element={<OtpVerifyPage />} />
@@ -160,15 +183,34 @@ const App: React.FC = () => {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/ride/:id" element={<RideDetailPage />} />
                 <Route path="/ride/active/:id" element={<ActiveRidePage />} />
+                <Route path="/ride/:id/chat" element={<RideChatPage />} />
                 <Route path="/marketplace" element={<MarketplacePage />} />
                 <Route path="/store/:id" element={<StorePage />} />
+                <Route path="/store/:storeId/product/:productId" element={<ProductDetailPage />} />
                 <Route path="/cart" element={<CartPage />} />
+                <Route path="/orders/:id/confirmed" element={<OrderConfirmedPage />} />
+                <Route path="/orders/:id" element={<OrderTrackingPage />} />
                 <Route path="/wallet" element={<WalletPage />} />
                 <Route path="/wallet/topup" element={<WalletTopUpPage />} />
+                <Route path="/wallet/withdraw" element={<WithdrawPage />} />
+                <Route path="/wallet/payment-methods" element={<PaymentMethodsPage />} />
+                <Route path="/explore" element={<ExplorePage />} />
+                <Route path="/deals" element={<DealsPage />} />
                 <Route path="/wallet/redeem" element={<RedeemPointsPage />} />
                 <Route path="/points/redeem" element={<RedeemPointsPage />} />
                 <Route path="/token" element={<TokenPage />} />
+                <Route path="/token/redeem" element={<TokenPage />} />
+                <Route path="/ride/:id/receipt" element={<RideReceiptPage />} />
                 <Route path="/staking" element={<StakingPage />} />
+                <Route path="/rentals" element={<RentalsPage />} />
+                <Route path="/rentals/confirm" element={<RentalConfirmPage />} />
+                <Route path="/rentals/active" element={<ActiveRentalPage />} />
+                <Route path="/parcel/:ref" element={<ParcelTrackingPage />} />
+                <Route path="/track/:ref" element={<ParcelTrackingPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/rewards" element={<RewardsPage />} />
+                <Route path="/safety" element={<SafetyCenterPage />} />
+                <Route path="/refer" element={<ReferPage />} />
                 <Route path="/claim" element={<ClaimPage />} />
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/ride/:id/rate" element={<RideRatingPage />} />
@@ -181,6 +223,7 @@ const App: React.FC = () => {
 
               <Route path="/merchant/login" element={<MerchantLoginPage />} />
               <Route path="/merchant/onboarding" element={<MerchantOnboardingPage />} />
+              <Route path="/merchant/setup" element={<MerchantStoreSetupPage />} />
               <Route path="/merchant/dashboard" element={<MerchantDashboardPage />} />
               <Route path="/merchant/orders/:id" element={<MerchantOrderDetailPage />} />
               <Route path="/merchant/store" element={<MerchantStoreEditorPage />} />
@@ -188,6 +231,7 @@ const App: React.FC = () => {
               <Route path="/merchant/products" element={<MerchantProductsPage />} />
               <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
               <Route path="/merchant/payouts" element={<MerchantPayoutsPage />} />
+              <Route path="/merchant/coupons" element={<MerchantCouponsPage />} />
               <Route path="/merchant/staking" element={<MerchantStakingPage />} />
 
               <Route path="*" element={<NotFoundPage />} />

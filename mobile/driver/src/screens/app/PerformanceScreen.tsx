@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
-import { useThemeColors } from '@movr/design-system/ThemeProvider';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -12,200 +11,226 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function Ring({
-  value,
-  label,
-  color,
-  trackColor,
-}: {
-  value: number;
-  label: string;
-  color: string;
-  trackColor: string;
-}) {
-  const pct = Math.max(0, Math.min(100, Number(value) || 0));
-  // Approximate arc with thick ring; low values show a thin colored tip via opacity
-  const ringOpacity = pct < 8 ? 0.35 : 1;
-  return (
-    <View style={ringStyles.col}>
-      <View style={[ringStyles.outer, { borderColor: trackColor }]}>
-        <View
-          style={[
-            ringStyles.fill,
-            {
-              borderColor: color,
-              opacity: ringOpacity,
-              // rotate so progress starts at top; for low cancel rates show small arc feel
-              transform: [{ rotate: `${-90 + (100 - pct) * 1.8}deg` }],
-            },
-          ]}
-        />
-        <Text style={ringStyles.value}>{Math.round(pct)}%</Text>
-      </View>
-      <Text style={ringStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const ringStyles = StyleSheet.create({
-  col: { flex: 1, alignItems: 'center' },
-  outer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fill: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 36,
-    borderWidth: 6,
-    borderTopColor: 'transparent',
-    borderRightColor: 'transparent',
-  },
-  value: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  label: { color: '#9CA3AF', fontSize: 12, marginTop: 10, textAlign: 'center' },
-});
-
-/** Driver performance — tier badge, metric rings, progress to next tier. */
-export default function PerformanceScreen() {
-  const colors = useThemeColors();
-  const styles = makeStyles(colors);
-
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+/** Driver Profile & Ratings — avatar, GOLD badge, stats, breakdown bars, reviews. */
+export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
+  const [data, setData] = useState<any>({
+    name: 'Emeka Okafor',
+    initials: 'EO',
+    role: 'Driver',
+    location: 'Lagos, Nigeria',
+    sinceYear: 2023,
+    loyaltyBadge: 'GOLD',
+    stats: { trips: 312, rating: 4.9, dvt: 18200, dvtLabel: '18.2K', acceptance: 98 },
+    ratingBreakdown: [
+      { stars: 5, percent: 82 },
+      { stars: 4, percent: 14 },
+      { stars: 3, percent: 3 },
+      { stars: 2, percent: 1 },
+    ],
+    recentReviews: [
+      {
+        name: 'Kofi A.',
+        initials: 'KA',
+        rating: 5,
+        comment: 'Very professional and friendly. Smooth ride the whole way.',
+        when: 'Today',
+      },
+      {
+        name: 'Chioma F.',
+        initials: 'CF',
+        rating: 5,
+        comment: 'Car was very clean and the AC worked perfectly.',
+        when: 'Yesterday',
+      },
+    ],
+  });
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`${API}/driver/performance`, { headers: authHeaders() })
+    fetch(`${API}/driver/profile/ratings`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((j) => setData(j.data || null))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
+      .then((j) => {
+        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+      })
+      .catch(() => undefined);
   }, []);
 
-  const m = data?.metrics;
-  const tier = String(m?.current_tier || 'lite').toLowerCase();
-  const acceptance = Number(m?.acceptance_rate ?? 0);
-  const cancellation = Number(m?.cancellation_rate ?? 0);
-  const onTime = Number(m?.on_time_rate ?? 0);
-  const rides = Number(m?.rides_completed ?? 0);
-  const next = data?.nextTier;
-
-  const ridesTarget = Number(next?.min_rides || rides || 1);
-  const barPct = Math.min(100, (rides / Math.max(1, ridesTarget)) * 100);
-
-  const tierLabel = loading
-    ? '…'
-    : `${tier.charAt(0).toUpperCase() + tier.slice(1)} tier`;
-
-  const benefit = useMemo(() => {
-    if (!next) return 'You are at the top tier. Keep up the quality.';
-    if (String(next.tier) === 'premium') {
-      return 'Premium unlocks priority matching and a lower subscription rate.';
-    }
-    return `${String(next.tier).charAt(0).toUpperCase()}${String(next.tier).slice(1)} unlocks priority matching and subscription discounts.`;
-  }, [next]);
+  const s = data.stats || {};
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[8] }}>
-      <Text style={styles.title}>Performance</Text>
-      <View style={styles.tierRow}>
-        <Text style={styles.tierIcon}>🏅</Text>
-        <Text style={styles.tierText}>{tierLabel}</Text>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 48 }}>
+      {onBack ? (
+        <Pressable onPress={onBack} style={styles.backBtn}>
+          <Text style={styles.back}>←</Text>
+        </Pressable>
+      ) : null}
+
+      <View style={styles.profile}>
+        <View style={styles.avatarWrap}>
+          <View style={styles.avatar}>
+            <View style={styles.avatarGlowA} />
+            <View style={styles.avatarGlowB} />
+            <Text style={styles.avatarText}>{data.initials || 'EO'}</Text>
+          </View>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{data.loyaltyBadge || 'GOLD'}</Text>
+          </View>
+        </View>
+        <Text style={styles.name}>{data.name}</Text>
+        <Text style={styles.meta}>
+          {data.role || 'Driver'} · {data.location} · Since {data.sinceYear}
+        </Text>
       </View>
 
-      <View style={styles.metricsCard}>
-        <Ring
-          value={acceptance}
-          label="Acceptance"
-          color={colors.success}
-          trackColor={colors.surface}
-        />
-        <Ring
-          value={cancellation}
-          label="Cancellation"
-          color="#F5A9A0"
-          trackColor={colors.surface}
-        />
-        <Ring
-          value={onTime}
-          label="On-time"
-          color={colors.motionBlue}
-          trackColor={colors.surface}
-        />
+      <View style={styles.stats}>
+        {[
+          { label: 'Trips', value: String(s.trips ?? 312), color: '#FFFFFF' },
+          { label: 'Rating', value: Number(s.rating ?? 4.9).toFixed(1), color: '#F5C542' },
+          { label: 'DVT', value: s.dvtLabel || '18.2K', color: '#A78BFA' },
+          { label: 'Accept', value: `${Math.round(Number(s.acceptance ?? 98))}%`, color: '#FFFFFF' },
+        ].map((m) => (
+          <View key={m.label} style={styles.stat}>
+            <Text style={[styles.statVal, { color: m.color }]}>{m.value}</Text>
+            <Text style={styles.statLab}>{m.label.toUpperCase()}</Text>
+          </View>
+        ))}
       </View>
 
-      <View style={styles.progressCard}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressTitle}>
-            {next ? `Progress to ${String(next.tier).charAt(0).toUpperCase()}${String(next.tier).slice(1)}` : 'Top tier'}
-          </Text>
-          <Text style={styles.progressCount}>
-            {rides} / {ridesTarget} trips
-          </Text>
+      <Text style={styles.section}>RATING BREAKDOWN</Text>
+      {(data.ratingBreakdown || []).map((row: any) => (
+        <View key={row.stars} style={styles.barRow}>
+          <Text style={styles.barStars}>{row.stars}★</Text>
+          <View style={styles.barTrack}>
+            <View
+              style={[
+                styles.barFill,
+                Number(row.stars) === 5 && styles.barFillHot,
+                { width: `${Math.max(2, Number(row.percent) || 0)}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.barPct}>{row.percent}%</Text>
         </View>
-        <View style={styles.barTrack}>
-          <View style={[styles.barFill, { width: `${barPct}%` }]} />
+      ))}
+
+      <Text style={[styles.section, { marginTop: spacing[6] }]}>RECENT REVIEWS</Text>
+      {(data.recentReviews || []).map((r: any, i: number) => (
+        <View key={`${r.name}-${i}`} style={styles.review}>
+          <View style={styles.reviewTop}>
+            <View style={styles.reviewAvatar}>
+              <Text style={styles.reviewInit}>{r.initials}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reviewName}>{r.name}</Text>
+              <Text style={styles.reviewWhen}>{r.when}</Text>
+            </View>
+            <Text style={styles.stars}>{'★'.repeat(Number(r.rating) || 5)}</Text>
+          </View>
+          {r.comment ? <Text style={styles.reviewBody}>{r.comment}</Text> : null}
         </View>
-        <Text style={styles.progressHint}>{benefit}</Text>
-      </View>
+      ))}
     </ScrollView>
   );
 }
 
-function makeStyles(colors: any) {
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: colors.jetBlack, padding: spacing[4] },
-    title: { color: colors.pureWhite, fontSize: 28, fontWeight: '700' },
-    tierRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: spacing[2],
-      marginBottom: spacing[4],
-    },
-    tierIcon: { fontSize: 16 },
-    tierText: { color: colors.warning, fontWeight: '700', fontSize: 15 },
-    metricsCard: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.lg,
-      paddingVertical: spacing[5],
-      paddingHorizontal: spacing[2],
-      marginBottom: spacing[4],
-    },
-    progressCard: {
-      backgroundColor: colors.surfaceElevated,
-      borderRadius: radius.lg,
-      padding: spacing[4],
-    },
-    progressHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: spacing[3],
-    },
-    progressTitle: { color: colors.pureWhite, fontWeight: '700' },
-    progressCount: { color: colors.textSecondary, fontSize: 13 },
-    barTrack: {
-      height: 10,
-      borderRadius: radius.pill,
-      backgroundColor: colors.surface,
-      overflow: 'hidden',
-    },
-    barFill: {
-      height: '100%',
-      borderRadius: radius.pill,
-      // teal → purple → blue feel via layered opacity on violet base
-      backgroundColor: colors.motionBlue,
-    },
-    progressHint: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      marginTop: spacing[3],
-      lineHeight: 18,
-    },
-  });
-}
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#000000', paddingHorizontal: spacing[4] },
+  backBtn: { paddingVertical: spacing[3] },
+  back: { color: '#FFFFFF', fontSize: 22 },
+  profile: { alignItems: 'center', marginTop: spacing[2], marginBottom: spacing[5] },
+  avatarWrap: { position: 'relative', marginBottom: spacing[3] },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#5B21B6',
+  },
+  avatarGlowA: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#7C3AED',
+    opacity: 0.9,
+  },
+  avatarGlowB: {
+    position: 'absolute',
+    right: -10,
+    bottom: -10,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#3B82F6',
+    opacity: 0.85,
+  },
+  avatarText: { color: '#FFFFFF', fontSize: 32, fontWeight: '800', zIndex: 1 },
+  badge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -2,
+    backgroundColor: '#22C55E',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  badgeText: { color: '#052E16', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  name: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
+  meta: { color: 'rgba(255,255,255,0.45)', marginTop: 6, fontSize: 13 },
+  stats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing[6],
+    paddingHorizontal: 4,
+  },
+  stat: { alignItems: 'center', flex: 1 },
+  statVal: { fontSize: 22, fontWeight: '800' },
+  statLab: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 4,
+    letterSpacing: 0.6,
+  },
+  section: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: spacing[3],
+  },
+  barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  barStars: { color: 'rgba(255,255,255,0.7)', width: 36, fontSize: 13, fontWeight: '600' },
+  barTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: radius.pill,
+    backgroundColor: '#1A1A1A',
+    overflow: 'hidden',
+    marginHorizontal: 10,
+  },
+  barFill: { height: '100%', borderRadius: radius.pill, backgroundColor: '#2A2A2A' },
+  barFillHot: { backgroundColor: '#6366F1', shadowColor: '#8B5CF6', shadowOpacity: 0.8 },
+  barPct: { color: 'rgba(255,255,255,0.55)', width: 36, textAlign: 'right', fontSize: 12 },
+  review: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+  },
+  reviewTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  reviewAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  reviewInit: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  reviewName: { color: '#FFFFFF', fontWeight: '700' },
+  reviewWhen: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
+  stars: { color: '#F5A623', fontSize: 12, letterSpacing: 1 },
+  reviewBody: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 20 },
+});

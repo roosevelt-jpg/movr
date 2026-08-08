@@ -14,7 +14,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Profile / settings — ACCOUNT + SUPPORT + Sign out (mockup). */
+/** Profile — stats, ACCOUNT / REWARDS / SUPPORT, unread badge (mockup). */
 export default function ProfileSettingsScreen({
   onSignOut,
   onEditProfile,
@@ -22,6 +22,14 @@ export default function ProfileSettingsScreen({
   onOpenAi,
   onPrivacy,
   onNotifications,
+  onDvtDashboard,
+  onLeaderboard,
+  onRewards,
+  onSafety,
+  onHistory,
+  onRefer,
+  onSettings,
+  onDeals,
 }: {
   onSignOut?: () => void;
   onEditProfile?: () => void;
@@ -29,67 +37,68 @@ export default function ProfileSettingsScreen({
   onOpenAi?: () => void;
   onPrivacy?: () => void;
   onNotifications?: () => void;
+  onDvtDashboard?: () => void;
+  onLeaderboard?: () => void;
+  onRewards?: () => void;
+  onSafety?: () => void;
+  onHistory?: () => void;
+  onRefer?: () => void;
+  onSettings?: () => void;
+  onDeals?: () => void;
 }) {
-  const [name, setName] = useState('Ama Konadu');
-  const [phone, setPhone] = useState('+233 24 000 0000');
+  const [name, setName] = useState('Kwame Asante');
+  const [initials, setInitials] = useState('KA');
+  const [phone, setPhone] = useState('+234 801 234 5678');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState('On');
-  const [region, setRegion] = useState('English, Ghana');
+  const [rides, setRides] = useState(47);
+  const [rating, setRating] = useState(4.9);
+  const [points, setPoints] = useState(850);
+  const [unread, setUnread] = useState(3);
 
   useEffect(() => {
-    fetch(`${API}/users/me`, { headers: authHeaders() })
+    fetch(`${API}/users/me/profile`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const u = j.data || j;
-        if (u.firstName || u.name) {
-          setName(u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim());
-        }
-        if (u.phone) {
-          const p = String(u.phone);
-          setPhone(p.replace(/^\+233(\d{2})(\d{3})(\d{4})$/, '+233 $1 $2 $3') || p);
-        }
+        if (u.name) setName(u.name);
+        if (u.initials) setInitials(u.initials);
+        if (u.phone) setPhone(u.phone);
         if (u.avatarUrl) setAvatarUrl(u.avatarUrl);
-        if (u.languageRegion) setRegion(u.languageRegion);
-        else if (u.language || u.region) {
-          setRegion(`${u.language || 'English'}, ${u.region || 'Ghana'}`);
+        if (u.stats) {
+          setRides(Number(u.stats.rides ?? 47));
+          setRating(Number(u.stats.rating ?? 4.9));
+          setPoints(Number(u.stats.points ?? 850));
         }
-        if (typeof u.notificationsEnabled === 'boolean') {
-          setNotifications(u.notificationsEnabled ? 'On' : 'Off');
-        }
+        if (u.unreadNotifications != null) setUnread(Number(u.unreadNotifications));
       })
       .catch(() => undefined);
   }, []);
 
-  const toggleNotifications = async () => {
-    const nextOn = notifications !== 'On';
-    setNotifications(nextOn ? 'On' : 'Off');
-    onNotifications?.();
-    await fetch(`${API}/users/me/settings`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        notificationsEnabled: nextOn,
-        language: 'English',
-        region: 'Ghana',
-      }),
-    }).catch(() => undefined);
-  };
-
   const Row = ({
     icon,
+    iconColor,
     label,
-    value,
+    badge,
+    danger,
     onPress,
   }: {
     icon: string;
+    iconColor?: string;
     label: string;
-    value?: string;
+    badge?: number;
+    danger?: boolean;
     onPress?: () => void;
   }) => (
     <Pressable style={styles.row} onPress={onPress}>
-      <Text style={styles.rowIcon}>{icon}</Text>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {value ? <Text style={styles.rowValue}>{value}</Text> : <Text style={styles.chev}>›</Text>}
+      <Text style={[styles.rowIcon, iconColor ? { color: iconColor } : null]}>{icon}</Text>
+      <Text style={[styles.rowLabel, danger && styles.danger]}>{label}</Text>
+      {badge != null && badge > 0 ? (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      ) : (
+        <Text style={styles.chev}>›</Text>
+      )}
     </Pressable>
   );
 
@@ -104,43 +113,75 @@ export default function ProfileSettingsScreen({
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 48 }}>
       <View style={styles.header}>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
-          <View style={styles.avatar} />
+          <View style={styles.avatarFallback}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
         )}
-        <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{name}</Text>
-          <Text style={styles.phone}>{phone}</Text>
+        <Text style={styles.name}>{name}</Text>
+        <Text style={styles.phone}>{phone}</Text>
+      </View>
+
+      <View style={styles.stats}>
+        <View style={styles.stat}>
+          <Text style={styles.statVal}>{rides}</Text>
+          <Text style={styles.statLabel}>Rides</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.stat}>
+          <Text style={styles.statVal}>{rating.toFixed(1)}</Text>
+          <Text style={styles.statLabel}>Rating</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.stat}>
+          <Text style={styles.statVal}>{points}</Text>
+          <Text style={styles.statLabel}>Points</Text>
         </View>
       </View>
 
       <Text style={styles.section}>ACCOUNT</Text>
-      <View style={styles.divider} />
       <View style={styles.group}>
-        <Row icon="✎" label="Edit profile" onPress={onEditProfile} />
-        <Row icon="🔔" label="Notifications" value={notifications} onPress={toggleNotifications} />
+        <Row icon="👤" iconColor="#5B8AFF" label="Personal Info" onPress={onEditProfile} />
+        <Row icon="⚙️" iconColor="#A1A1AA" label="Settings" onPress={onSettings || onPrivacy} />
+        <Row icon="🔒" iconColor="#EAB308" label="Privacy & Security" onPress={onPrivacy} />
         <Row
-          icon="🗺"
-          label="Language & region"
-          value={region}
-          onPress={() => setRegion('English, Ghana')}
+          icon="🔔"
+          iconColor="#EAB308"
+          label="Notifications"
+          badge={unread}
+          onPress={onNotifications}
         />
       </View>
 
-      <Text style={styles.section}>SUPPORT</Text>
-      <View style={styles.divider} />
+      <Text style={styles.section}>REWARDS</Text>
       <View style={styles.group}>
-        {onOpenAi ? <Row icon="✦" label="Talk to Movr AI" onPress={onOpenAi} /> : null}
-        <Row icon="?" label="Help centre" onPress={onHelp} />
-        <Row icon="🛡" label="Privacy & security" onPress={onPrivacy} />
+        <Row icon="◎" iconColor="#A1A1AA" label="DVT Staking" onPress={onDvtDashboard} />
+        <Row
+          icon="🏆"
+          iconColor="#EAB308"
+          label="Rewards & Leaderboard"
+          onPress={onLeaderboard || onRewards}
+        />
+        <Row icon="🏷" iconColor="#22C55E" label="Deals & Promos" onPress={onDeals} />
+        <Row icon="🎁" iconColor="#A78BFA" label="Refer & Earn" onPress={onRefer} />
       </View>
 
-      <Pressable onPress={signOut} style={styles.signOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
-      </Pressable>
+      <Text style={styles.section}>ACTIVITY</Text>
+      <View style={styles.group}>
+        <Row icon="📋" iconColor="#60A5FA" label="Activity History" onPress={onHistory} />
+        <Row icon="🛡" iconColor="#EF4444" label="Safety Center" onPress={onSafety} />
+      </View>
+
+      <Text style={styles.section}>SUPPORT</Text>
+      <View style={styles.group}>
+        {onOpenAi ? <Row icon="✦" label="Talk to Movr AI" onPress={onOpenAi} /> : null}
+        <Row icon="💬" label="Help Center" onPress={onHelp} />
+        <Row icon="🚪" iconColor="#B45309" label="Sign Out" danger onPress={signOut} />
+      </View>
     </ScrollView>
   );
 }
@@ -148,34 +189,42 @@ export default function ProfileSettingsScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000', paddingHorizontal: spacing[5] },
   header: {
+    alignItems: 'center',
+    paddingTop: spacing[6],
+    paddingBottom: spacing[4],
+  },
+  avatar: { width: 80, height: 80, borderRadius: 40 },
+  avatarFallback: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8E2DE2',
+  },
+  avatarText: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' },
+  name: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginTop: 14 },
+  phone: { color: '#A1A1AA', marginTop: 4, fontSize: 14 },
+  stats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    paddingTop: spacing[6],
-    paddingBottom: spacing[6],
+    justifyContent: 'center',
+    marginBottom: spacing[6],
+    marginTop: spacing[2],
   },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#2A2A2A',
-  },
-  name: { color: '#FFFFFF', fontSize: 22, fontWeight: '700' },
-  phone: { color: '#A1A1AA', marginTop: 4, fontSize: 14 },
+  stat: { flex: 1, alignItems: 'center' },
+  statVal: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  statLabel: { color: '#71717A', fontSize: 12, marginTop: 4 },
+  statDivider: { width: 1, height: 28, backgroundColor: '#2A2A2A' },
   section: {
     color: '#71717A',
     fontSize: 12,
     letterSpacing: 1.2,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 4,
     marginTop: 8,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#2A2A2A',
-    marginBottom: 4,
-  },
-  group: { marginBottom: spacing[5] },
+  group: { marginBottom: spacing[4] },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -185,8 +234,16 @@ const styles = StyleSheet.create({
   },
   rowIcon: { width: 28, fontSize: 16, color: '#A1A1AA' },
   rowLabel: { flex: 1, color: '#FFFFFF', fontSize: 16 },
-  rowValue: { color: '#A1A1AA', fontSize: 14 },
+  danger: { color: '#EF4444' },
   chev: { color: '#71717A', fontSize: 22, fontWeight: '300' },
-  signOut: { alignItems: 'center', marginTop: spacing[6] },
-  signOutText: { color: '#F07178', fontSize: 16, fontWeight: '600' },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#8E2DE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 });
