@@ -18,7 +18,13 @@ function authHeaders(): Record<string, string> {
 }
 
 /** Driver withdraw earnings — MoMo cash-out with editable destination. */
-export default function WithdrawEarningsScreen() {
+export default function WithdrawEarningsScreen({
+  onBack,
+  onVerify,
+}: {
+  onBack?: () => void;
+  onVerify?: () => void;
+}) {
   const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState('GHS');
   const [amount, setAmount] = useState('');
@@ -211,9 +217,11 @@ export default function WithdrawEarningsScreen() {
 
       {kycMsg ? <Text style={[styles.msg, { color: '#fbbf24' }]}>{kycMsg}</Text> : null}
       {kycMsg ? (
-        <Text style={{ color: '#a78bfa', marginBottom: 8, fontSize: 12 }}>
-          Complete driver verification to unlock large payouts.
-        </Text>
+        <Pressable onPress={onVerify}>
+          <Text style={{ color: '#a78bfa', marginBottom: 8, fontSize: 12 }}>
+            Complete driver verification to unlock large payouts →
+          </Text>
+        </Pressable>
       ) : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 

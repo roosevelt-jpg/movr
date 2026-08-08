@@ -92,7 +92,8 @@ export function HeroBackgroundField({
         label="Upload or replace background"
         value={current}
         disabled={disabled}
-        hint="Image or short looping video. Remove media to clear the photo (gradient only)."
+        purpose="hero"
+        hint="Image or short looping video — auto-resized to /assets. Remove media to clear the photo (gradient only)."
         onChange={(url) => {
           if (!url) {
             onChange({

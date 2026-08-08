@@ -127,6 +127,8 @@ export class TrustSettlementService {
       accountNumber?: string;
       accountMask?: string;
       isDefault?: boolean;
+      bankCode?: string;
+      metadata?: Record<string, unknown>;
     }
   ) {
     const railType = data.railType;
@@ -143,17 +145,35 @@ export class TrustSettlementService {
         userId,
       ]);
     }
+    const provider =
+      data.provider ||
+      (railType === 'momo' ? 'MTN MoMo' : railType === 'bank' ? 'Bank' : 'Cash agent');
+    const inferredCode = (() => {
+      const p = String(provider).toLowerCase();
+      if (data.bankCode) return String(data.bankCode).trim();
+      if (p.includes('mtn')) return 'MTN';
+      if (p.includes('vodafone') || p.includes('telecel')) return 'VOD';
+      if (p.includes('airtel') || p.includes('tigo')) return 'ATL';
+      if (railType === 'momo') return 'MTN';
+      return undefined;
+    })();
+    const metadata = {
+      ...(data.metadata || {}),
+      ...(inferredCode ? { bankCode: inferredCode } : {}),
+    };
     const row = await this.db.query(
-      `INSERT INTO wallet_rail_methods (user_id, rail_type, provider, account_mask, account_number, is_default, updated_at)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,TRUE),NOW())
+      `INSERT INTO wallet_rail_methods
+         (user_id, rail_type, provider, account_mask, account_number, is_default, metadata, updated_at)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,TRUE),$7::jsonb,NOW())
        RETURNING *`,
       [
         userId,
         railType,
-        data.provider || (railType === 'momo' ? 'MTN MoMo' : railType === 'bank' ? 'Bank' : 'Cash agent'),
+        provider,
         mask,
         data.accountNumber || null,
         data.isDefault !== false,
+        JSON.stringify(metadata),
       ]
     );
     return row.rows[0];
@@ -426,7 +446,11 @@ export class TrustSettlementService {
     );
   }
 
-  async assertKycForPayout(userId: string, amount: number, role: 'driver' | 'merchant') {
+  async assertKycForPayout(
+    userId: string,
+    amount: number,
+    role: 'driver' | 'merchant' | 'customer'
+  ) {
     const threshold = Number(await this.setting('trust_kyc_payout_threshold', '2000'));
     if (amount < threshold) return { required: false, approved: true, threshold };
 
@@ -437,12 +461,18 @@ export class TrustSettlementService {
         [userId]
       );
       status = String(m.rows[0]?.kyc_status || 'pending').toLowerCase();
-    } else {
+    } else if (role === 'driver') {
       const d = await this.db.query(
         `SELECT kyc_status FROM drivers WHERE user_id = $1 LIMIT 1`,
         [userId]
       );
       status = String(d.rows[0]?.kyc_status || 'pending').toLowerCase();
+    } else {
+      const u = await this.db.query(
+        `SELECT COALESCE(is_verified, FALSE) AS is_verified FROM users WHERE id = $1`,
+        [userId]
+      );
+      status = u.rows[0]?.is_verified ? 'verified' : 'pending';
     }
     const approved = ['approved', 'verified', 'active'].includes(status);
     if (!approved) {
@@ -451,6 +481,142 @@ export class TrustSettlementService {
       );
     }
     return { required: true, approved: true, threshold, status };
+  }
+
+  /** Retry pending wallet/driver/merchant payouts that still have rail details. */
+  async retryPendingPayouts(payments: {
+    initializeTransfer: (input: any) => Promise<any>;
+  }) {
+    const results: any[] = [];
+    const pendingWallet = await this.db
+      .query(
+        `SELECT * FROM wallet_withdrawals WHERE status = 'pending' ORDER BY created_at ASC LIMIT 20`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    for (const w of pendingWallet.rows) {
+      const rail = await this.db
+        .query(
+          `SELECT * FROM wallet_rail_methods WHERE user_id = $1
+           ORDER BY is_default DESC, updated_at DESC LIMIT 1`,
+          [w.user_id]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      const accountNumber = rail.rows[0]?.account_number;
+      if (!accountNumber) {
+        results.push({ id: w.id, kind: 'wallet', skipped: true, reason: 'no_rail' });
+        continue;
+      }
+      const reference = w.reference || `WD-RETRY-${w.id}`;
+      try {
+        const transfer = await payments.initializeTransfer({
+          amount: Number(w.amount),
+          currency: w.currency || 'GHS',
+          recipient: {
+            accountNumber: String(accountNumber),
+            bankCode: rail.rows[0]?.metadata?.bankCode || 'MTN',
+            accountBank: rail.rows[0]?.metadata?.bankCode || 'MTN',
+          },
+          reference,
+          narration: 'Movr wallet withdraw retry',
+          countryCode: 'GH',
+        });
+        if (transfer?.success) {
+          await this.db.query(
+            `UPDATE wallet_withdrawals SET status = 'processing', reference = COALESCE(reference, $2) WHERE id = $1`,
+            [w.id, reference]
+          );
+          results.push({ id: w.id, kind: 'wallet', success: true });
+        } else {
+          results.push({ id: w.id, kind: 'wallet', success: false, error: transfer?.error });
+        }
+      } catch (e: any) {
+        results.push({ id: w.id, kind: 'wallet', success: false, error: e.message });
+      }
+    }
+
+    const pendingDriver = await this.db
+      .query(`SELECT * FROM payouts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 20`)
+      .catch(() => ({ rows: [] as any[] }));
+    for (const p of pendingDriver.rows) {
+      const rail = await this.db
+        .query(
+          `SELECT * FROM wallet_rail_methods WHERE user_id = $1
+           ORDER BY is_default DESC LIMIT 1`,
+          [p.driver_id]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      const accountNumber = rail.rows[0]?.account_number;
+      if (!accountNumber) {
+        results.push({ id: p.id, kind: 'driver', skipped: true, reason: 'no_rail' });
+        continue;
+      }
+      try {
+        const transfer = await payments.initializeTransfer({
+          amount: Number(p.amount),
+          currency: p.currency || 'GHS',
+          recipient: {
+            accountNumber: String(accountNumber),
+            bankCode: rail.rows[0]?.metadata?.bankCode || 'MTN',
+            accountBank: rail.rows[0]?.metadata?.bankCode || 'MTN',
+          },
+          reference: p.reference_id || `DRV-RETRY-${p.id}`,
+          narration: 'Movr driver payout retry',
+          countryCode: 'GH',
+        });
+        if (transfer?.success) {
+          await this.db.query(`UPDATE payouts SET status = 'processing' WHERE id = $1`, [p.id]);
+          results.push({ id: p.id, kind: 'driver', success: true });
+        } else {
+          results.push({ id: p.id, kind: 'driver', success: false });
+        }
+      } catch (e: any) {
+        results.push({ id: p.id, kind: 'driver', success: false, error: e.message });
+      }
+    }
+
+    const pendingMerchant = await this.db
+      .query(
+        `SELECT * FROM merchant_payouts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 20`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    for (const m of pendingMerchant.rows) {
+      const bank =
+        typeof m.bank_account === 'string' ? JSON.parse(m.bank_account || '{}') : m.bank_account || {};
+      if (!bank.accountNumber) {
+        results.push({ id: m.id, kind: 'merchant', skipped: true, reason: 'no_account' });
+        continue;
+      }
+      try {
+        const transfer = await payments.initializeTransfer({
+          amount: Number(m.amount),
+          currency: m.currency || 'GHS',
+          recipient: {
+            accountNumber: String(bank.accountNumber),
+            bankCode: bank.bankCode || bank.bank_code || undefined,
+            accountBank: bank.bankCode || bank.bank_code || undefined,
+          },
+          reference: m.reference_id || `MER-RETRY-${m.id}`,
+          narration: 'Movr merchant payout retry',
+          countryCode: 'GH',
+        });
+        if (transfer?.success) {
+          await this.db.query(`UPDATE merchant_payouts SET status = 'processing' WHERE id = $1`, [
+            m.id,
+          ]);
+          results.push({ id: m.id, kind: 'merchant', success: true });
+        } else {
+          results.push({ id: m.id, kind: 'merchant', success: false });
+        }
+      } catch (e: any) {
+        results.push({ id: m.id, kind: 'merchant', success: false, error: e.message });
+      }
+    }
+
+    return {
+      attempted: results.length,
+      succeeded: results.filter((r) => r.success).length,
+      results,
+    };
   }
 
   async compensateNoShow(userId: string, rideId?: string, note?: string) {

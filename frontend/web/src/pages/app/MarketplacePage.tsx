@@ -23,6 +23,31 @@ const MarketplacePage: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [forYou, setForYou] = useState<{ stores: any[]; reason?: string }>({ stores: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('movr_token') || '';
+        const res = await axios.get(`${API}/ai/recommendations`, {
+          params: { limit: 6 },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!cancelled) {
+          setForYou({
+            stores: res.data?.data?.stores || [],
+            reason: res.data?.data?.reason,
+          });
+        }
+      } catch {
+        if (!cancelled) setForYou({ stores: [] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +119,48 @@ const MarketplacePage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {forYou.stores.length ? (
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">For you</h2>
+            {forYou.reason ? (
+              <p className="text-sm text-text-secondary mt-0.5">{forYou.reason}</p>
+            ) : null}
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {forYou.stores.slice(0, 6).map((s: any) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => navigate(`/store/${s.id}`)}
+                className="min-w-[160px] max-w-[180px] text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors shrink-0"
+              >
+                <div className="aspect-[16/9] bg-surface-elevated overflow-hidden">
+                  {s.banner_url ? (
+                    <img
+                      src={mediaUrl(s.banner_url)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-2xl opacity-40">
+                      🏪
+                    </div>
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="font-semibold text-sm truncate">{s.name}</p>
+                  <p className="text-xs text-text-secondary mt-0.5 line-clamp-2">
+                    {s.reason || s.category || 'Recommended'}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="flex gap-2 mb-4">
@@ -194,12 +261,13 @@ const MarketplacePage: React.FC = () => {
                 className="text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors"
                 onClick={() => navigate(`/store/${store.id}`)}
               >
-                <div className="h-40 bg-surface-elevated flex items-center justify-center overflow-hidden">
+                <div className="aspect-[16/9] bg-surface-elevated flex items-center justify-center overflow-hidden">
                   {store.banner_url ? (
                     <img
                       src={mediaUrl(store.banner_url)}
                       alt={store.name}
                       className="h-full w-full object-cover"
+                      loading="lazy"
                     />
                   ) : (
                     <span className="text-4xl opacity-40">🏪</span>

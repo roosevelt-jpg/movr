@@ -306,54 +306,17 @@ deliveriesRouter.get(
         )
         .catch(() => ({ rows: [] as any[] }));
 
-      let d = row.rows[0];
+      const d = row.rows[0];
       if (!d) {
-        const fallback = await db
-          .query(
-            `SELECT * FROM deliveries
-             WHERE public_ref = 'MVR-P-8821' OR status = 'en_route'
-             ORDER BY created_at DESC LIMIT 1`
-          )
-          .catch(() => ({ rows: [] as any[] }));
-        d = fallback.rows[0];
+        return res.status(404).json({ status: 'error', message: 'Parcel not found' });
       }
 
-      if (!d) {
-        return res.json({
-          status: 'success',
-          data: {
-            id: 'demo',
-            publicRef: 'MVR-P-8821',
-            label: 'Parcel #MVR-P-8821',
-            status: 'en_route',
-            statusLabel: 'En Route',
-            scheduledLabel: 'Scheduled · 2 min ago',
-            etaMinutes: 12,
-            etaLabel: 'Courier is 12 min away',
-            courier: {
-              name: 'Tunde Adeyemi',
-              title: 'Movr Courier',
-              rating: 4.7,
-              phone: '+2348010008821',
-            },
-            pickup: '24 Admiralty Way, Lekki',
-            dropoff: 'Marina Square, Lagos Island',
-            timeline: [
-              { id: 'picked_up', label: 'Parcel picked up', state: 'done' },
-              { id: 'in_transit', label: 'In transit · 12 min away', state: 'active' },
-              { id: 'delivered', label: 'Delivered & signed', state: 'pending' },
-            ],
-            shareUrl: 'https://movr.app/track/MVR-P-8821',
-          },
-        });
-      }
-
-      const eta = Number(d.eta_minutes ?? 12);
+      const eta = Number(d.eta_minutes ?? 0);
       const minsAgo = Math.max(
         1,
         Math.round((Date.now() - new Date(d.scheduled_at || d.created_at).getTime()) / 60000)
       );
-      const name = d.courier_name || 'Tunde Adeyemi';
+      const name = d.courier_name || 'Courier';
       const timeline = [
         {
           id: 'picked_up',
@@ -381,8 +344,8 @@ deliveriesRouter.get(
         status: 'success',
         data: {
           id: d.id,
-          publicRef: d.public_ref || 'MVR-P-8821',
-          label: `Parcel #${d.public_ref || 'MVR-P-8821'}`,
+          publicRef: d.public_ref || '',
+          label: `Parcel #${d.public_ref || ''}`,
           status: d.status,
           statusLabel: d.status_label || (d.status === 'en_route' ? 'En Route' : d.status),
           scheduledLabel: `Scheduled · ${minsAgo} min ago`,
@@ -391,7 +354,7 @@ deliveriesRouter.get(
           courier: {
             name,
             title: 'Movr Courier',
-            rating: Number(d.courier_rating || 4.7),
+            rating: Number(d.courier_rating || 0),
             phone: d.courier_phone || null,
             initials: name
               .split(/\s+/)
@@ -425,29 +388,12 @@ deliveriesRouter.post(
           `INSERT INTO delivery_share_links (delivery_id, token, share_url, expires_at)
            VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
            ON CONFLICT (token) DO NOTHING`,
-          [deliveryId === 'demo' ? null : deliveryId, token, shareUrl]
+          [deliveryId, token, shareUrl]
         )
-        .catch(async () => {
-          const d = await db.query(
-            `SELECT id FROM deliveries WHERE public_ref = 'MVR-P-8821' LIMIT 1`
-          );
-          if (d.rows[0]) {
-            await db.query(
-              `INSERT INTO delivery_share_links (delivery_id, token, share_url, expires_at)
-               VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
-              [d.rows[0].id, token, shareUrl]
-            );
-          }
-        });
+        .catch(() => undefined);
       res.json({ status: 'success', data: { token, shareUrl, label: 'Share tracking link' } });
     } catch (error: any) {
-      res.status(400).json({
-        status: 'success',
-        data: {
-          shareUrl: 'https://movr.app/track/MVR-P-8821',
-          label: 'Share tracking link',
-        },
-      });
+      res.status(400).json({ status: 'error', message: error.message });
     }
   }
 );

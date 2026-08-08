@@ -16,22 +16,27 @@ interface Integration {
   last_error?: string;
 }
 
-/** Mockup section order + category subtitle overrides. */
+/** Integration catalog sections — cards still render any DB extras under OTHER. */
 const SECTIONS: { title: string; keys: string[] }[] = [
   {
     title: 'PAYMENTS',
-    keys: ['paystack', 'flutterwave', 'stripe', 'twilio'],
+    keys: ['paystack', 'flutterwave', 'stripe'],
   },
   {
-    title: 'AI & VOICE / MAPS / IDENTITY',
-    keys: [
-      'openai',
-      'google_maps',
-      'nia_ghana_card',
-      'dvla_ghana',
-      'openweathermap',
-      'africastalking_ussd',
-    ],
+    title: 'MESSAGING',
+    keys: ['twilio', 'whatsapp', 'telegram_bot', 'sendgrid', 'africastalking_ussd'],
+  },
+  {
+    title: 'AI & VOICE / MAPS',
+    keys: ['openai', 'google_maps', 'mapbox', 'openweathermap'],
+  },
+  {
+    title: 'IDENTITY',
+    keys: ['nia_ghana_card', 'dvla_ghana'],
+  },
+  {
+    title: 'INFRASTRUCTURE',
+    keys: ['aws_s3', 'sentry'],
   },
 ];
 
@@ -39,13 +44,71 @@ const SUBTITLE: Record<string, string> = {
   paystack: 'Payments',
   flutterwave: 'Payments',
   stripe: 'Payments',
-  twilio: 'Messaging',
+  twilio: 'SMS / Voice',
+  whatsapp: 'WhatsApp Business',
+  telegram_bot: 'Telegram',
+  sendgrid: 'Transactional email',
+  africastalking_ussd: 'USSD',
   openai: 'AI & voice',
-  google_maps: 'Maps & location',
+  google_maps: 'Maps & places',
+  mapbox: 'Maps',
+  openweathermap: 'Pricing signals',
   nia_ghana_card: 'Identity verification',
   dvla_ghana: 'Identity verification',
-  openweathermap: 'Pricing signals',
-  africastalking_ussd: 'Messaging (USSD)',
+  aws_s3: 'Asset storage',
+  sentry: 'Error monitoring',
+};
+
+const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
+  paystack: [
+    { key: 'secret_key', label: 'secret_key' },
+    { key: 'public_key', label: 'public_key' },
+  ],
+  flutterwave: [
+    { key: 'secret_key', label: 'secret_key' },
+    { key: 'public_key', label: 'public_key' },
+    { key: 'secret_hash', label: 'secret_hash (webhooks)' },
+  ],
+  stripe: [
+    { key: 'secret_key', label: 'secret_key' },
+    { key: 'public_key', label: 'publishable_key' },
+    { key: 'webhook_secret', label: 'webhook_secret' },
+  ],
+  twilio: [
+    { key: 'account_sid', label: 'account_sid' },
+    { key: 'auth_token', label: 'auth_token' },
+  ],
+  whatsapp: [
+    { key: 'account_sid', label: 'Twilio account_sid' },
+    { key: 'auth_token', label: 'Twilio auth_token' },
+    { key: 'from_number', label: 'WhatsApp from number' },
+  ],
+  telegram_bot: [{ key: 'bot_token', label: 'bot_token' }],
+  sendgrid: [{ key: 'api_key', label: 'api_key' }],
+  openai: [
+    { key: 'api_key', label: 'api_key' },
+    { key: 'model', label: 'model (optional)' },
+  ],
+  google_maps: [{ key: 'api_key', label: 'api_key' }],
+  mapbox: [{ key: 'access_token', label: 'access_token' }],
+  openweathermap: [{ key: 'api_key', label: 'api_key' }],
+  africastalking_ussd: [
+    { key: 'api_key', label: 'api_key' },
+    { key: 'username', label: 'username' },
+  ],
+  nia_ghana_card: [
+    { key: 'api_key', label: 'api_key' },
+    { key: 'client_id', label: 'client_id' },
+  ],
+  dvla_ghana: [
+    { key: 'api_key', label: 'api_key' },
+    { key: 'client_id', label: 'client_id' },
+  ],
+  aws_s3: [
+    { key: 'access_key_id', label: 'access_key_id' },
+    { key: 'secret_access_key', label: 'secret_access_key' },
+  ],
+  sentry: [{ key: 'dsn', label: 'dsn' }],
 };
 
 function statusBadge(status: string) {
@@ -176,49 +239,30 @@ export default function IntegrationsHubPage() {
       {selected && detail ? (
         <div style={styles.panel}>
           <h3 style={{ marginTop: 0 }}>{detail.display_name}</h3>
-          <p style={styles.cardCat}>Secrets are masked after save. Re-enter to rotate.</p>
-          <label style={styles.label}>
-            secret_key / api_key
-            <input
-              style={styles.input}
-              type="password"
-              value={creds.secret_key || creds.api_key || ''}
-              onChange={(e) =>
-                setCreds({ ...creds, secret_key: e.target.value, api_key: e.target.value })
-              }
-            />
-          </label>
-          <label style={styles.label}>
-            public_key
-            <input
-              style={styles.input}
-              type="password"
-              value={creds.public_key || ''}
-              onChange={(e) => setCreds({ ...creds, public_key: e.target.value })}
-            />
-          </label>
-          {selected === 'stripe' || selected === 'flutterwave' ? (
-            <label style={styles.label}>
-              {selected === 'stripe' ? 'webhook_secret' : 'secret_hash'}
+          <p style={styles.cardCat}>
+            Paste API keys only — runtime reads the Integrations Hub (env is fallback). Secrets are
+            masked after save.
+          </p>
+          {(CREDENTIAL_FIELDS[selected] || [
+            { key: 'secret_key', label: 'secret_key / api_key' },
+            { key: 'public_key', label: 'public_key' },
+          ]).map((field) => (
+            <label key={field.key} style={styles.label}>
+              {field.label}
               <input
                 style={styles.input}
                 type="password"
-                value={
-                  selected === 'stripe'
-                    ? creds.webhook_secret || ''
-                    : creds.secret_hash || ''
-                }
-                onChange={(e) =>
-                  setCreds({
-                    ...creds,
-                    ...(selected === 'stripe'
-                      ? { webhook_secret: e.target.value }
-                      : { secret_hash: e.target.value }),
-                  })
+                autoComplete="off"
+                value={creds[field.key] || ''}
+                onChange={(e) => setCreds({ ...creds, [field.key]: e.target.value })}
+                placeholder={
+                  detail.credentials?.find((c: any) => c.key === field.key)?.preview
+                    ? '•••• saved — enter to rotate'
+                    : 'Paste key'
                 }
               />
             </label>
-          ) : null}
+          ))}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button style={styles.primary} onClick={save}>
               Save

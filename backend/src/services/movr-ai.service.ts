@@ -7,6 +7,7 @@ import { MarketplaceService } from './marketplace.service';
 import { PaymentService } from './payment.service';
 import { MatchingEngineService } from './matching-engine.service';
 import { RankingService } from './ranking.service';
+import { RedisService } from './redis.service';
 import getLogger from '../utils/logger';
 
 export type AiChatCard = {
@@ -48,19 +49,21 @@ type SessionState = {
   updatedAt: number;
 };
 
+/** In-memory fallback. Prefer Redis when available (multi-instance safe). TTL = 1h. */
 const sessions = new Map<string, SessionState>();
 const SESSION_TTL_MS = 1000 * 60 * 60;
+const SESSION_TTL_SEC = Math.floor(SESSION_TTL_MS / 1000);
 
 const SYSTEM_PROMPT = `You are Movr AI, the intelligent assistant for Movr — a mobility and commerce platform (rides, shop, deliver, rentals, wallet).
 Return JSON only with this shape:
 {
-  "intent": "estimate_ride" | "book_ride" | "search_stores" | "explain_pricing" | "help_lookup" | "navigate" | "escalate" | "rank_leaders" | "chat",
+  "intent": "estimate_ride" | "book_ride" | "search_stores" | "explain_pricing" | "help_lookup" | "navigate" | "escalate" | "rank_leaders" | "recommend" | "track_ride" | "track_order" | "wallet_balance" | "safety_sos_info" | "dispute_help" | "merchant_hours" | "chat",
   "reply": "short helpful message to the user",
   "origin": "pickup place or null",
   "destination": "dropoff place or null",
   "rideType": "economy|comfort|standard|null",
   "storeQuery": "search string or null",
-  "navigateTo": "ride|shop|deliver|wallet|help|drivers|merchants|download|ai|null",
+  "navigateTo": "ride|shop|deliver|wallet|help|drivers|merchants|download|ai|safety|null",
   "helpTopic": "short topic or null",
   "rankType": "stores|drivers|riders|null"
 }
@@ -68,10 +71,17 @@ Rules:
 - For fare/price/how much / airport / from X to Y → estimate_ride
 - For book / confirm / yes book it → book_ride
 - For shops, groceries, stores, buy → search_stores
+- For recommend / for me / suggestions / what should I → recommend
 - For top stores / best merchants / rank drivers / best riders → rank_leaders
+- For where is my ride / track ride / driver eta → track_ride
+- For where is my order / package status → track_order
+- For wallet balance / how much money → wallet_balance
+- For SOS / emergency / safety centre → safety_sos_info
+- For dispute / refund / no-show credit → dispute_help
+- For store hours / is X open → merchant_hours
 - For speak to human / agent / real person / escalate / complaint beyond AI → escalate
 - For driver commission, subscription, how pricing works → explain_pricing
-- For help/support/safety → help_lookup
+- For help/support → help_lookup
 - For "take me to marketplace" etc → navigate
 - Otherwise chat with a brief Movr-oriented answer
 Keep reply under 2 sentences.`;
@@ -85,6 +95,7 @@ export class MovrAiService {
   private booking: RideBookingService;
   private marketplace: MarketplaceService;
   private ranking: RankingService;
+  private redis: RedisService | null = null;
 
   constructor(private db: DatabaseService) {
     this.voice = new VoiceIntentService(db);
@@ -94,6 +105,12 @@ export class MovrAiService {
     this.booking = new RideBookingService(db, matching);
     this.marketplace = new MarketplaceService(db, new PaymentService(db));
     this.ranking = new RankingService(db);
+    try {
+      this.redis = new RedisService();
+    } catch {
+      this.redis = null;
+      this.logger.warn('AI sessions: Redis unavailable — using in-memory Map (TTL 1h, not multi-instance safe)');
+    }
   }
 
   async chat(input: {
@@ -105,7 +122,7 @@ export class MovrAiService {
     lng?: number;
   }): Promise<AiChatResult> {
     const sessionId = input.sessionId || randomUUID();
-    const session = this.getSession(sessionId);
+    const session = await this.getSession(sessionId);
     const message = (input.message || '').trim();
     if (!message) {
       return {
@@ -140,10 +157,31 @@ export class MovrAiService {
         result = await this.bookRide(sessionId, session, plan, input.userId, countryCode);
         break;
       case 'search_stores':
-        result = await this.searchStores(sessionId, plan);
+        result = await this.searchStores(sessionId, plan, input.userId, gps);
+        break;
+      case 'recommend':
+        result = await this.recommend(sessionId, plan, input.userId, gps);
         break;
       case 'rank_leaders':
-        result = await this.rankLeaders(sessionId, plan);
+        result = await this.rankLeaders(sessionId, plan, input.userId, gps);
+        break;
+      case 'track_ride':
+        result = await this.trackRide(sessionId, input.userId);
+        break;
+      case 'track_order':
+        result = await this.trackOrder(sessionId, input.userId);
+        break;
+      case 'wallet_balance':
+        result = await this.walletBalance(sessionId, input.userId);
+        break;
+      case 'safety_sos_info':
+        result = await this.safetyInfo(sessionId, input.userId);
+        break;
+      case 'dispute_help':
+        result = this.disputeHelp(sessionId, plan);
+        break;
+      case 'merchant_hours':
+        result = await this.merchantHours(sessionId, plan);
         break;
       case 'escalate':
         result = await this.escalate(sessionId, session, plan, input.userId);
@@ -162,30 +200,59 @@ export class MovrAiService {
           sessionId,
           reply:
             plan.reply ||
-            'I can quote rides, book trips when you’re signed in, find top stores, or connect you to a live agent. What do you need?',
+            'I can quote rides, recommend stores, check your wallet, or connect you to a live agent. What do you need?',
           cards: [],
           actions: [
             { label: 'Get a fare', action: 'suggest', payload: { text: 'How much from Osu to the airport?' } },
-            { label: 'Top stores', action: 'suggest', payload: { text: 'Show me the top rated stores' } },
+            { label: 'For you', action: 'suggest', payload: { text: 'Recommend something for me' } },
             { label: 'Talk to a human', action: 'escalate' },
           ],
         };
     }
 
     session.messages.push({ role: 'assistant', content: result.reply });
-    sessions.set(sessionId, session);
+    await this.saveSession(sessionId, session);
     return result;
   }
 
-  private getSession(id: string): SessionState {
+  private sessionKey(id: string) {
+    return `movr-ai:session:${id}`;
+  }
+
+  /** Load session from memory, then Redis; create fresh if expired/missing. */
+  private async getSession(id: string): Promise<SessionState> {
     const existing = sessions.get(id);
     if (existing && Date.now() - existing.updatedAt < SESSION_TTL_MS) {
       existing.updatedAt = Date.now();
       return existing;
     }
+    if (this.redis?.get) {
+      try {
+        const cached = await this.redis.get<SessionState>(this.sessionKey(id));
+        if (cached?.messages && Date.now() - Number(cached.updatedAt || 0) < SESSION_TTL_MS) {
+          cached.updatedAt = Date.now();
+          sessions.set(id, cached);
+          return cached;
+        }
+      } catch {
+        /* fall through to memory */
+      }
+    }
     const fresh: SessionState = { messages: [], updatedAt: Date.now() };
     sessions.set(id, fresh);
     return fresh;
+  }
+
+  private async saveSession(id: string, session: SessionState) {
+    session.updatedAt = Date.now();
+    sessions.set(id, session);
+    if (this.redis?.set) {
+      try {
+        await this.redis.set(this.sessionKey(id), session, SESSION_TTL_SEC);
+      } catch {
+        /* memory already updated */
+      }
+    }
   }
 
   private prune(session: SessionState) {
@@ -196,13 +263,15 @@ export class MovrAiService {
   }
 
   private async plan(message: string, session: SessionState) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const { resolveOpenAiApiKey, resolveOpenAiModel } = require('../utils/openai-credentials');
+    const apiKey = await resolveOpenAiApiKey(this.db);
+    const model = await resolveOpenAiModel(this.db);
     if (apiKey) {
       try {
         const response = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
-            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model,
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
@@ -242,6 +311,97 @@ export class MovrAiService {
         destination: null,
         rideType: null,
         storeQuery: null,
+        navigateTo: null,
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(recommend|for me|suggestion|what should i|personalize)\b/.test(t)) {
+      return {
+        intent: 'recommend',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: null,
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(track (my )?ride|where('s| is) my (driver|ride)|ride status|eta)\b/.test(t)) {
+      return {
+        intent: 'track_ride',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: null,
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(track (my )?order|where('s| is) my (order|package|parcel)|order status)\b/.test(t)) {
+      return {
+        intent: 'track_order',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: null,
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(wallet|balance|how much (do i|money)|top.?up)\b/.test(t) && !/\b(fare|ride|from|to)\b/.test(t)) {
+      return {
+        intent: 'wallet_balance',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: 'wallet',
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(sos|emergency|safety centre|safety center|share trip)\b/.test(t)) {
+      return {
+        intent: 'safety_sos_info',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: 'safety',
+        helpTopic: null,
+        rankType: null,
+      };
+    }
+    if (/\b(dispute|refund|no-?show|compensation|trust)\b/.test(t)) {
+      return {
+        intent: 'dispute_help',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: null,
+        navigateTo: null,
+        helpTopic: 'dispute',
+        rankType: null,
+      };
+    }
+    if (/\b(open|hours|closing|when does).*(store|shop|restaurant)|\b(store|shop) hours\b/.test(t)) {
+      return {
+        intent: 'merchant_hours',
+        reply: '',
+        origin: null,
+        destination: null,
+        rideType: null,
+        storeQuery: message,
         navigateTo: null,
         helpTopic: null,
         rankType: null,
@@ -537,13 +697,251 @@ export class MovrAiService {
     }
   }
 
-  private async searchStores(sessionId: string, plan: any): Promise<AiChatResult> {
+  private async recommend(
+    sessionId: string,
+    plan: any,
+    userId?: string,
+    gps?: { lat: number; lng: number }
+  ): Promise<AiChatResult> {
+    const { RecommendService } = require('./recommend.service');
+    const data = await new RecommendService(this.db).forUser({
+      userId,
+      lat: gps?.lat,
+      lng: gps?.lng,
+      limit: 6,
+    });
+    return {
+      sessionId,
+      reply: plan.reply || data.reason || 'Here are personalized picks for you.',
+      cards: data.cards || [],
+      actions: [
+        { label: 'Browse marketplace', href: '/marketplace' },
+        { label: 'Book a ride', href: userId ? '/dashboard' : '/login' },
+      ],
+    };
+  }
+
+  private async trackRide(sessionId: string, userId?: string): Promise<AiChatResult> {
+    if (!userId) {
+      return {
+        sessionId,
+        reply: 'Sign in to track your active ride.',
+        cards: [],
+        actions: [{ label: 'Log in', href: '/login' }],
+        needsAuth: true,
+      };
+    }
+    const ride = await this.db
+      .query(
+        `SELECT id, status, pickup_address, dropoff_address, eta_minutes
+         FROM rides
+         WHERE customer_id = $1 AND status IN ('requested','searching','matched','accepted','arrived','in_progress','ongoing')
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    if (!ride.rows[0]) {
+      return {
+        sessionId,
+        reply: 'No active ride right now. Want a fare estimate?',
+        cards: [],
+        actions: [
+          { label: 'Get a fare', action: 'suggest', payload: { text: 'How much from Osu to the airport?' } },
+        ],
+      };
+    }
+    const r = ride.rows[0];
+    return {
+      sessionId,
+      reply: `Your ride is ${r.status}${r.eta_minutes != null ? ` · ETA ${r.eta_minutes} min` : ''}.`,
+      cards: [
+        {
+          kind: 'info',
+          title: `${r.pickup_address || 'Pickup'} → ${r.dropoff_address || 'Destination'}`,
+          subtitle: String(r.status),
+          href: `/ride/${r.id}`,
+        },
+      ],
+      actions: [{ label: 'Open ride', href: `/ride/${r.id}` }, { label: 'Safety Centre', href: '/safety' }],
+    };
+  }
+
+  private async trackOrder(sessionId: string, userId?: string): Promise<AiChatResult> {
+    if (!userId) {
+      return {
+        sessionId,
+        reply: 'Sign in to track your latest order.',
+        cards: [],
+        actions: [{ label: 'Log in', href: '/login' }],
+        needsAuth: true,
+      };
+    }
+    const order = await this.db
+      .query(
+        `SELECT o.id, o.status, o.total, s.name AS store_name
+         FROM marketplace_orders o
+         LEFT JOIN stores s ON s.id = o.store_id
+         WHERE o.user_id = $1
+         ORDER BY o.created_at DESC LIMIT 1`,
+        [userId]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    if (!order.rows[0]) {
+      return {
+        sessionId,
+        reply: 'No recent orders found. Browse stores?',
+        cards: [],
+        actions: [{ label: 'Marketplace', href: '/marketplace' }],
+      };
+    }
+    const o = order.rows[0];
+    return {
+      sessionId,
+      reply: `Latest order from ${o.store_name || 'store'} is ${o.status}.`,
+      cards: [
+        {
+          kind: 'info',
+          title: o.store_name || 'Order',
+          subtitle: String(o.status),
+          price: o.total,
+          href: `/orders/${o.id}`,
+        },
+      ],
+      actions: [{ label: 'Track order', href: `/orders/${o.id}` }],
+    };
+  }
+
+  private async walletBalance(sessionId: string, userId?: string): Promise<AiChatResult> {
+    if (!userId) {
+      return {
+        sessionId,
+        reply: 'Sign in to see your wallet balance.',
+        cards: [],
+        actions: [{ label: 'Log in', href: '/login' }],
+        needsAuth: true,
+      };
+    }
+    const w = await this.db
+      .query(
+        `SELECT COALESCE(balance_fiat, 0)::float AS balance, COALESCE(currency, 'GHS') AS currency
+         FROM wallets WHERE user_id = $1 LIMIT 1`,
+        [userId]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    const bal = w.rows[0]?.balance ?? 0;
+    const cur = w.rows[0]?.currency || 'GHS';
+    return {
+      sessionId,
+      reply: `Your wallet has ${bal} ${cur}.`,
+      cards: [{ kind: 'info', title: 'Wallet', subtitle: `${bal} ${cur}`, href: '/wallet' }],
+      actions: [
+        { label: 'Top up', href: '/wallet/topup' },
+        { label: 'Withdraw', href: '/wallet/withdraw' },
+      ],
+    };
+  }
+
+  private async safetyInfo(sessionId: string, userId?: string): Promise<AiChatResult> {
+    let contactNote = 'Add emergency contacts in Safety Centre.';
+    if (userId) {
+      const c = await this.db
+        .query(
+          `SELECT COUNT(*)::int AS n FROM emergency_contacts WHERE user_id = $1`,
+          [userId]
+        )
+        .catch(() => ({ rows: [{ n: 0 }] }));
+      const n = c.rows[0]?.n || 0;
+      contactNote = n
+        ? `You have ${n} emergency contact${n === 1 ? '' : 's'} on file.`
+        : contactNote;
+    }
+    return {
+      sessionId,
+      reply: `Safety tools are in Safety Centre — SOS, trip share, and trusted contacts. ${contactNote}`,
+      cards: [],
+      actions: [
+        { label: 'Open Safety Centre', href: '/safety' },
+        { label: 'Share trip', href: '/trust/share-trip' },
+      ],
+    };
+  }
+
+  private disputeHelp(sessionId: string, plan: any): AiChatResult {
+    return {
+      sessionId,
+      reply:
+        plan.reply ||
+        'For no-show credits, refunds, or disputes, open Trust & Settlement or escalate to a live agent.',
+      cards: [],
+      actions: [
+        { label: 'Settlement hub', href: '/wallet/settlement' },
+        { label: 'Talk to a human', action: 'escalate' },
+      ],
+    };
+  }
+
+  private async merchantHours(sessionId: string, plan: any): Promise<AiChatResult> {
+    const q = String(plan.storeQuery || plan.reply || '').replace(/hours|open|closing|when does/gi, '').trim();
+    const rows = await this.db
+      .query(
+        `SELECT id, name, hours_json, category FROM stores
+         WHERE COALESCE(is_active, TRUE) = TRUE
+           AND ($1 = '' OR name ILIKE '%' || $1 || '%')
+         ORDER BY rating DESC NULLS LAST LIMIT 5`,
+        [q.slice(0, 80)]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    if (!rows.rows.length) {
+      return {
+        sessionId,
+        reply: 'I couldn’t find that store. Try searching the marketplace.',
+        cards: [],
+        actions: [{ label: 'Marketplace', href: '/marketplace' }],
+      };
+    }
+    const cards: AiChatCard[] = rows.rows.map((s: any) => ({
+      kind: 'store' as const,
+      title: s.name,
+      subtitle: s.hours_json?.label || s.hours_json?.mon_sun || s.category || 'See store',
+      href: `/store/${s.id}`,
+    }));
+    return {
+      sessionId,
+      reply: plan.reply || `Hours for ${cards[0].title}: ${cards[0].subtitle}`,
+      cards,
+      actions: cards.slice(0, 2).map((c) => ({ label: c.title, href: c.href })),
+    };
+  }
+
+  private async searchStores(
+    sessionId: string,
+    plan: any,
+    userId?: string,
+    gps?: { lat: number; lng: number }
+  ): Promise<AiChatResult> {
     const q = (plan.storeQuery || '').trim();
+    // Empty / browse query while logged in → personalized recommendations
+    if (userId && (!q || q === 'all')) {
+      return this.recommend(sessionId, plan, userId, gps);
+    }
     try {
       const result = await this.marketplace.listStores({
         search: q && q !== 'all' ? q : undefined,
       });
-      const rows = (result.rows || []).slice(0, 5);
+      let rows = (result.rows || []).slice(0, 5);
+      if (userId && rows.length) {
+        try {
+          const { RecommendService } = require('./recommend.service');
+          const rec = await new RecommendService(this.db).forUser({ userId, ...gps, limit: 3 });
+          const preferred = new Set((rec.stores || []).map((s: any) => s.id));
+          rows = [
+            ...rows.filter((s: any) => preferred.has(s.id)),
+            ...rows.filter((s: any) => !preferred.has(s.id)),
+          ].slice(0, 5);
+        } catch {
+          /* keep search order */
+        }
+      }
       if (!rows.length) {
         return {
           sessionId,
@@ -655,6 +1053,7 @@ export class MovrAiService {
       merchants: { href: '/merchants', label: 'For merchants' },
       download: { href: '/download', label: 'Get the app' },
       ai: { href: '/ai', label: 'Movr AI' },
+      safety: { href: '/safety', label: 'Safety Centre' },
     };
     const target = map[String(plan.navigateTo || 'shop')] || map.shop;
     return {
@@ -665,9 +1064,23 @@ export class MovrAiService {
     };
   }
 
-  private async rankLeaders(sessionId: string, plan: any): Promise<AiChatResult> {
+  private async rankLeaders(
+    sessionId: string,
+    plan: any,
+    userId?: string,
+    gps?: { lat: number; lng: number }
+  ): Promise<AiChatResult> {
     const kind = String(plan.rankType || 'stores').toLowerCase();
     const type = kind.startsWith('driver') ? 'driver' : kind.startsWith('rider') ? 'rider' : 'store';
+    if (type === 'store' && userId) {
+      const personalized = await this.recommend(sessionId, { ...plan, reply: plan.reply }, userId, gps);
+      if (personalized.cards?.length) {
+        return {
+          ...personalized,
+          reply: plan.reply || 'Top stores for you, ranked by your history and quality scores:',
+        };
+      }
+    }
     const leaders = await this.ranking.top(type as any, 5);
     if (!leaders.length) {
       return {

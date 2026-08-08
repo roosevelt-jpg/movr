@@ -44,10 +44,11 @@ import WishlistScreen from './WishlistScreen';
 import CartScreen from './CartScreen';
 import OrderConfirmedScreen from './OrderConfirmedScreen';
 import OrderTrackingScreen from './OrderTrackingScreen';
+import MovrBotConversationScreen from './MovrBotConversationScreen';
+import VoiceBookingScreen from './VoiceBookingScreen';
+import WhatsAppConversationScreen from './WhatsAppConversationScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
-const ZINGER_ID = 'd0000000-0000-4000-8000-000000000141';
 
 type Tab = 'home' | 'shop' | 'wallet' | 'profile';
 type Service =
@@ -85,7 +86,10 @@ type Service =
   | 'order_confirmed'
   | 'order_tracking'
   | 'redeem'
-  | 'receipt';
+  | 'receipt'
+  | 'ai'
+  | 'voice'
+  | 'whatsapp_ai';
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -127,13 +131,15 @@ export default function SuperAppHomeScreen({
   const [tab, setTab] = useState<Tab>('home');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
-  const [storeId, setStoreId] = useState(CHICKEN_ID);
-  const [productId, setProductId] = useState(ZINGER_ID);
+  const [storeId, setStoreId] = useState('');
+  const [productId, setProductId] = useState('');
   const [orderId, setOrderId] = useState('');
-  const [rentalVehicleId, setRentalVehicleId] = useState('e0000000-0000-4000-8000-000000000002');
+  const [rentalVehicleId, setRentalVehicleId] = useState('');
   const [rentalMode, setRentalMode] = useState<'self_drive' | 'chauffeur'>('self_drive');
-  const [parcelRef, setParcelRef] = useState('MVR-P-8821');
-  const [receiptRideId, setReceiptRideId] = useState('f3000000-0000-4000-8000-000000004821');
+  const [parcelRef, setParcelRef] = useState('');
+  const [receiptRideId, setReceiptRideId] = useState('');
+  const [voiceBooking, setVoiceBooking] = useState(true);
+  const [forYou, setForYou] = useState<any[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,29 +149,7 @@ export default function SuperAppHomeScreen({
       if (j?.data) setData(j.data);
       else throw new Error('empty');
     } catch {
-      setData({
-        greeting: 'Good morning',
-        name: 'Kwame Asante',
-        initials: 'KA',
-        location: { label: 'Victoria Island, Lagos', lat: 6.4281, lng: 3.4219 },
-        wallet: { balance: 24500, currency: 'NGN', tokens: 2400, points: 850 },
-        services: [
-          { id: 'ride', label: 'Ride' },
-          { id: 'shop', label: 'Shop' },
-          { id: 'deliver', label: 'Deliver' },
-          { id: 'rental', label: 'Rental' },
-        ],
-        recent: [
-          { id: '1', kind: 'ride', title: 'Ride to Lekki', amount: 1200, at: new Date().toISOString() },
-          {
-            id: '2',
-            kind: 'deliver',
-            title: 'Package Delivery',
-            amount: 800,
-            at: new Date(Date.now() - 86400000).toISOString(),
-          },
-        ],
-      });
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -173,6 +157,20 @@ export default function SuperAppHomeScreen({
 
   useEffect(() => {
     load();
+    (async () => {
+      try {
+        const [flagRes, recRes] = await Promise.all([
+          fetch(`${API}/ai/features/voice_booking`, { headers: authHeaders() }),
+          fetch(`${API}/ai/recommendations?limit=4`, { headers: authHeaders() }),
+        ]);
+        const flagJ = await flagRes.json().catch(() => null);
+        if (flagJ?.data && flagJ.data.configured) setVoiceBooking(Boolean(flagJ.data.enabled));
+        const recJ = await recRes.json().catch(() => null);
+        if (Array.isArray(recJ?.data?.stores)) setForYou(recJ.data.stores.slice(0, 4));
+      } catch {
+        /* optional */
+      }
+    })();
   }, [load]);
 
   const tabBar = (
@@ -247,6 +245,7 @@ export default function SuperAppHomeScreen({
           onHelp={() => setService('help')}
           onWishlist={() => setService('wishlist')}
           onMerchantPayouts={() => setService('merchant_payouts')}
+          onOpenAi={() => setService('ai')}
         />
         {tabBar}
       </View>
@@ -355,7 +354,60 @@ export default function SuperAppHomeScreen({
         <HelpCentreScreen
           onBack={() => setService('hub')}
           onOpenSupport={() => setService('support')}
+          onOpenAi={() => setService('ai')}
         />
+      </View>
+    );
+  }
+  if (service === 'ai') {
+    return (
+      <View style={styles.root}>
+        <MovrBotConversationScreen
+          onBack={() => setService('hub')}
+          onOpenSupport={() => setService('support')}
+          onNavigate={(target) => {
+            const map: Record<string, Service> = {
+              ride: 'ride',
+              shop: 'shop',
+              deliver: 'deliver',
+              wallet: 'hub',
+              help: 'help',
+              safety: 'safety',
+              voice: 'voice',
+            };
+            setService(map[target] || 'hub');
+            if (target === 'wallet') setTab('wallet');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'voice') {
+    if (!voiceBooking) {
+      return (
+        <View style={styles.root}>
+          <Pressable onPress={() => setService('hub')} style={{ padding: 16 }}>
+            <Text style={{ color: '#a78bfa', fontWeight: '700' }}>← Back</Text>
+          </Pressable>
+          <Text style={{ color: '#ccc', padding: 16 }}>
+            Voice booking is not enabled for your account yet. Try Movr AI chat instead.
+          </Text>
+          <Pressable style={[styles.aiChip, { marginHorizontal: 16 }]} onPress={() => setService('ai')}>
+            <Text style={styles.aiChipText}>✦ Open Movr AI</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.root}>
+        <VoiceBookingScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'whatsapp_ai') {
+    return (
+      <View style={styles.root}>
+        <WhatsAppConversationScreen onBack={() => setService('hub')} />
       </View>
     );
   }
@@ -369,7 +421,10 @@ export default function SuperAppHomeScreen({
   if (service === 'withdraw') {
     return (
       <View style={styles.root}>
-        <WithdrawScreen onBack={() => setService('hub')} />
+        <WithdrawScreen
+          onBack={() => setService('hub')}
+          onVerify={() => setService('safety')}
+        />
       </View>
     );
   }
@@ -550,7 +605,7 @@ export default function SuperAppHomeScreen({
         </Pressable>
         <ShopHomeScreen
           onOpenStore={(id) => {
-            setStoreId(id || CHICKEN_ID);
+            setStoreId(id || '');
             setService('store');
             onOpenStore?.(id);
           }}
@@ -639,7 +694,7 @@ export default function SuperAppHomeScreen({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{data?.initials || 'KA'}</Text>
+              <Text style={styles.avatarText}>{data?.initials || '?'}</Text>
             </View>
             <View>
               <Text style={styles.greet}>
@@ -690,6 +745,50 @@ export default function SuperAppHomeScreen({
                 </Pressable>
               ))}
             </View>
+
+            <View style={styles.aiRow}>
+              <Pressable style={styles.aiChip} onPress={() => setService('ai')}>
+                <Text style={styles.aiChipText}>✦ Movr AI</Text>
+              </Pressable>
+              {voiceBooking ? (
+                <Pressable style={styles.aiChip} onPress={() => setService('voice')}>
+                  <Text style={styles.aiChipText}>🎤 Voice book</Text>
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.aiChip} onPress={() => setService('whatsapp_ai')}>
+                <Text style={styles.aiChipText}>💬 Channels</Text>
+              </Pressable>
+            </View>
+
+            {forYou.length ? (
+              <>
+                <Text style={styles.section}>FOR YOU</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 14 }}
+                >
+                  {forYou.map((s) => (
+                    <Pressable
+                      key={s.id}
+                      style={styles.forYouCard}
+                      onPress={() => {
+                        setStoreId(s.id);
+                        setService('store');
+                        onOpenStore?.(s.id);
+                      }}
+                    >
+                      <Text style={styles.forYouTitle} numberOfLines={1}>
+                        {s.name}
+                      </Text>
+                      <Text style={styles.forYouSub} numberOfLines={2}>
+                        {s.reason || s.category || 'Recommended'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
 
             <Pressable style={styles.fairStrip} onPress={() => setService('ride')}>
               <Text style={styles.fairStripText}>
@@ -862,6 +961,32 @@ const styles = StyleSheet.create({
   },
   serviceIcon: { fontSize: 22 },
   serviceLabel: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  aiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  aiChip: {
+    backgroundColor: '#1a1228',
+    borderWidth: 1,
+    borderColor: '#4c1d95',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  aiChipText: { color: '#e9d5ff', fontWeight: '700', fontSize: 13 },
+  forYouCard: {
+    width: 160,
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  forYouTitle: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  forYouSub: { color: '#888', fontSize: 11, marginTop: 4 },
   fairStrip: {
     marginHorizontal: 16,
     marginBottom: 14,

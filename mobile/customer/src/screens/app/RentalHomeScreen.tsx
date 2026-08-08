@@ -54,42 +54,8 @@ export default function RentalHomeScreen({
         if (rows[0]?.id) setSelected(rows.find((c: any) => c.popular)?.id || rows[0].id);
       })
       .catch(() => {
-        setCars([
-          {
-            id: '1',
-            name: 'Toyota Corolla',
-            meta: 'Economy · 5 seats · Auto',
-            rating: 4.8,
-            available: true,
-            popular: false,
-            dailyRate: 25000,
-            currency: 'NGN',
-            emoji: '🚗',
-          },
-          {
-            id: '2',
-            name: 'Honda CR-V',
-            meta: 'SUV · 5 seats · Auto',
-            rating: 4.9,
-            available: true,
-            popular: true,
-            dailyRate: 45000,
-            currency: 'NGN',
-            emoji: '🚙',
-          },
-          {
-            id: '3',
-            name: 'BMW 3 Series',
-            meta: 'Luxury · 5 seats · Auto',
-            rating: 4.9,
-            available: true,
-            popular: false,
-            dailyRate: 85000,
-            currency: 'NGN',
-            emoji: '🚘',
-          },
-        ]);
-        setSelected('2');
+        setCars([]);
+        setSelected('');
       });
   }, [mode]);
 

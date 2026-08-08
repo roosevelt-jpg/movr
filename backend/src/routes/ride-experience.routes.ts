@@ -345,33 +345,7 @@ rideExperienceRouter.get(
           ],
         }));
 
-      let rows = messages.rows;
-      if (!rows.length) {
-        const now = Date.now();
-        rows = [
-          {
-            id: 'demo-1',
-            sender_id: ride.rows[0]?.driver_id || 'driver',
-            body: "✅ I'm on my way!",
-            created_at: new Date(now - 120000).toISOString(),
-            status: 'read',
-          },
-          {
-            id: 'demo-2',
-            sender_id: req.user!.id,
-            body: '🏠 Meet me at the gate',
-            created_at: new Date(now - 60000).toISOString(),
-            status: 'read',
-          },
-          {
-            id: 'demo-3',
-            sender_id: ride.rows[0]?.driver_id || 'driver',
-            body: '👍 Got it',
-            created_at: new Date(now - 30000).toISOString(),
-            status: 'delivered',
-          },
-        ];
-      }
+      const rows = messages.rows;
 
       const driverOnline = ['accepted', 'arrived', 'in_progress', 'en_route'].includes(
         String(ride.rows[0]?.status || 'accepted')

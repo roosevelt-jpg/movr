@@ -200,13 +200,13 @@ cartRouter.post('/quote', async (req: AuthRequest, res: Response) => {
         status: 'success',
         data: {
           subtotal: 0,
-          deliveryFee: 500,
+          deliveryFee: 0,
           discount: 0,
-          dvtDiscount: 100,
+          dvtDiscount: 0,
           total: 0,
           currency: 'NGN',
-          storeName: 'Chicken Republic',
-          eta: '20-35 min',
+          storeName: '',
+          eta: '',
         },
       });
     }

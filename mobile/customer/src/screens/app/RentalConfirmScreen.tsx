@@ -36,36 +36,7 @@ export default function RentalConfirmScreen({
   onChangeLocation?: () => void;
   onPaid?: (rentalId: string) => void;
 }) {
-  const [quote, setQuote] = useState<any>({
-    vehicle: {
-      name: 'Honda CR-V',
-      meta: 'SUV · 5 seats · Auto · Silver',
-      rating: 4.9,
-      mode: 'Self-drive',
-      emoji: '🚙',
-    },
-    period: {
-      pickupDate: 'Apr 10, 2026',
-      pickupTime: '9:00 AM',
-      returnDate: 'Apr 11, 2026',
-      returnTime: '9:00 AM',
-      label: '1 day rental',
-      days: 1,
-    },
-    location: { address: 'Movr Hub, Victoria Island, Lagos' },
-    pricing: {
-      dailyRate: 45000,
-      insurance: 3000,
-      dvtDiscount: 2000,
-      total: 46000,
-      currency: 'NGN',
-      lines: [
-        { label: 'Daily rate', amount: 45000 },
-        { label: 'Insurance', amount: 3000 },
-        { label: 'DVT discount', amount: -2000 },
-      ],
-    },
-  });
+  const [quote, setQuote] = useState<any>(null);
   const [hubs, setHubs] = useState<any[]>([]);
   const [hubId, setHubId] = useState<string | null>(null);
   const [showHubs, setShowHubs] = useState(false);
@@ -123,19 +94,33 @@ export default function RentalConfirmScreen({
       setMsg(j?.data?.message || 'Rental confirmed & paid');
       onPaid?.(String(j.data?.id || vehicleId));
     } catch (e: any) {
-      setMsg(e.message || 'Confirmed (demo)');
-      onPaid?.(vehicleId);
+      setMsg(e.message || 'Could not confirm rental');
     } finally {
       setBusy(false);
     }
   };
+
+  if (!quote) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.header}>
+          <Pressable onPress={onBack} style={styles.backBtn}>
+            <Text style={styles.backTxt}>←</Text>
+          </Pressable>
+          <Text style={styles.title}>Confirm Rental</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <Text style={{ color: '#aaa', padding: 16 }}>{msg || 'Loading quote…'}</Text>
+      </View>
+    );
+  }
 
   const v = quote.vehicle || {};
   const p = quote.period || {};
   const loc = quote.location || {};
   const pricing = quote.pricing || {};
   const currency = pricing.currency || 'NGN';
-  const total = Number(pricing.total || 46000);
+  const total = Number(pricing.total || 0);
 
   return (
     <View style={styles.root}>
@@ -153,10 +138,10 @@ export default function RentalConfirmScreen({
             <Text style={{ fontSize: 32 }}>{v.emoji || '🚙'}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.carName}>{v.name || 'Honda CR-V'}</Text>
+            <Text style={styles.carName}>{v.name || 'Vehicle'}</Text>
             <Text style={styles.carMeta}>{v.meta}</Text>
             <Text style={styles.rating}>
-              ★ {Number(v.rating || 4.9).toFixed(1)} · {v.mode || 'Self-drive'}
+              ★ {Number(v.rating || 0).toFixed(1)} · {v.mode || 'Self-drive'}
             </Text>
           </View>
         </View>
@@ -177,7 +162,7 @@ export default function RentalConfirmScreen({
             </View>
           </View>
           <View style={styles.badge}>
-            <Text style={styles.badgeTxt}>{p.label || '1 day rental'}</Text>
+            <Text style={styles.badgeTxt}>{p.label || `${days} day rental`}</Text>
           </View>
         </View>
 
@@ -185,7 +170,7 @@ export default function RentalConfirmScreen({
           <Text style={styles.pin}>📍</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.locTitle}>Pickup Location</Text>
-            <Text style={styles.locAddr}>{loc.address}</Text>
+            <Text style={styles.locAddr}>{loc.address || '—'}</Text>
           </View>
           <Pressable
             onPress={() => {

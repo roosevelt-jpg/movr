@@ -29,6 +29,7 @@ import {
 } from './marketing-sections';
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
 import { resolveCmsHeroMedia } from '../brand/assets';
+import ResponsiveMedia from '../components/ResponsiveMedia';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -303,20 +304,13 @@ export function CmsStories({ payload }: { payload: any }) {
       {(payload.cards || []).map((card: any) => {
         const media = (
           <div className="relative min-h-[260px] md:min-h-full overflow-hidden bg-surface">
-            {card.videoUrl ? (
-              <video
-                className="absolute inset-0 w-full h-full object-cover"
-                src={card.videoUrl}
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-            ) : card.imageUrl ? (
-              <img
-                src={card.imageUrl}
-                alt={card.title}
-                className="absolute inset-0 w-full h-full object-cover"
+            {card.videoUrl || card.imageUrl ? (
+              <ResponsiveMedia
+                src={card.videoUrl || card.imageUrl}
+                alt={card.title || ''}
+                aspect="auto"
+                className="absolute inset-0 h-full min-h-[260px]"
+                priority
               />
             ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />

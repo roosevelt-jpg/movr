@@ -25,21 +25,10 @@ export default function IncomingRideRequestScreen({
   onAccepted?: (rideId: string) => void;
   onDeclined?: () => void;
 }) {
-  const [offer, setOffer] = useState<any>({
-    id: offerId || 'demo',
-    secondsLeft: 12,
-    pickupKm: 0.8,
-    pickup: 'Victoria Island, Lagos',
-    dropoff: 'Lekki Phase 1, Lagos',
-    distanceKm: 8.4,
-    etaMinutes: 22,
-    earnings: 1400,
-    surgeMultiplier: 1.8,
-    surgeBonus: 630,
-    currency: 'NGN',
-  });
-  const [seconds, setSeconds] = useState(12);
+  const [offer, setOffer] = useState<any>(null);
+  const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/driver/offers/pending`, { headers: authHeaders() })
@@ -47,22 +36,40 @@ export default function IncomingRideRequestScreen({
       .then((j) => {
         if (j?.data) {
           setOffer(j.data);
-          setSeconds(Number(j.data.secondsLeft || 12));
+          setSeconds(Number(j.data.secondsLeft || j.data.ttl_seconds || 0));
+          setError('');
+        } else {
+          setOffer(null);
+          setError('No pending offers');
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setOffer(null);
+        setError('Could not load offer');
+      });
   }, [offerId]);
 
   useEffect(() => {
-    if (seconds <= 0) {
-      onDeclined?.();
+    if (!offer || seconds <= 0) {
+      if (offer && seconds <= 0) onDeclined?.();
       return;
     }
     const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [seconds]);
+  }, [seconds, offer]);
 
-  const progress = Math.max(0.05, seconds / 12);
+  const progress = Math.max(0.05, seconds / Math.max(1, Number(offer?.secondsLeft || 12)));
+
+  if (!offer) {
+    return (
+      <View style={styles.root}>
+        <Text style={{ color: '#aaa', padding: 16 }}>{error || 'No pending offers'}</Text>
+        <Pressable onPress={onDeclined} style={{ padding: 16 }}>
+          <Text style={{ color: '#a78bfa', fontWeight: '700' }}>Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const accept = async () => {
     setBusy(true);

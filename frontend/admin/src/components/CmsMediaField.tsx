@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { mediaUrl, uploadCatalogImage } from '../lib/media';
 
-/** Upload image or video for CMS sections — stores under backend/assets. */
+/** Upload image or video for CMS sections — stores under backend/assets (auto-resized). */
 export function MediaField({
   label,
   value,
@@ -9,6 +9,7 @@ export function MediaField({
   disabled,
   accept = 'image/*,video/mp4,video/webm,video/quicktime',
   hint,
+  purpose = 'banner',
 }: {
   label: string;
   value?: string;
@@ -16,6 +17,7 @@ export function MediaField({
   disabled?: boolean;
   accept?: string;
   hint?: string;
+  purpose?: 'banner' | 'hero' | 'card' | 'product' | 'avatar' | 'default';
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -26,9 +28,10 @@ export function MediaField({
       <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
         {label}
       </label>
-      {hint ? (
-        <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--text-secondary)' }}>{hint}</p>
-      ) : null}
+      <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--text-secondary)' }}>
+        {hint ||
+          'Uploads auto-resize and save under /assets. No need to crop before uploading.'}
+      </p>
       <input
         type="file"
         accept={accept}
@@ -41,7 +44,7 @@ export function MediaField({
           setErr('');
           try {
             const token = localStorage.getItem('movr_admin_token') || '';
-            const url = await uploadCatalogImage(file, token);
+            const url = await uploadCatalogImage(file, token, purpose);
             onChange(url);
           } catch (ex: any) {
             setErr(ex.message || 'Upload failed');
@@ -50,7 +53,9 @@ export function MediaField({
           }
         }}
       />
-      {busy ? <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Uploading…</p> : null}
+      {busy ? (
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Uploading & resizing…</p>
+      ) : null}
       {err ? <p style={{ fontSize: 12, color: 'var(--error)' }}>{err}</p> : null}
       {value ? (
         <div style={{ marginTop: 8 }}>

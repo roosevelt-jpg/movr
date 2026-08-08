@@ -210,57 +210,6 @@ export class StakingService {
     return { claimed: Math.round(total * 100) / 100, count: rows.rows.length };
   }
 
-  async demoPositions(wallet?: string) {
-    const w = (wallet || '0x3a4f…9d2c').toLowerCase();
-    // Prefer real wallet stakes; otherwise return illustrative demo from pools
-    const existing = await this.portfolioSummary(undefined, wallet);
-    if (existing.stakes.length) return existing;
-
-    const pools = await this.db.query(
-      `SELECT id, COALESCE(display_name,name) AS display_name, base_apy_pct, lock_period_days
-       FROM staking_pools WHERE active = TRUE AND target_role = 'public'
-       ORDER BY lock_period_days NULLS FIRST LIMIT 3`
-    );
-    const demo = [
-      { amount: 500, earned: 72.5, daysAgo: 30, unlockDays: 28 },
-      { amount: 200, earned: 18.4, daysAgo: 45, unlockDays: 0 },
-    ];
-    const stakes = demo.map((d, i) => {
-      const p = pools.rows[i] || pools.rows[0] || {};
-      const lock = Number(p.lock_period_days ?? (i === 0 ? 30 : 0));
-      return {
-        id: `demo-${i}`,
-        poolName: p.display_name || (i === 0 ? '30-Day Lock' : 'Flexible Pool'),
-        apy: Number(p.base_apy_pct || (i === 0 ? 14.5 : 8.5)),
-        amount: d.amount,
-        earned: d.earned,
-        claimable: d.earned,
-        stakedAt: new Date(Date.now() - d.daysAgo * 86400000).toISOString(),
-        unlockAt: lock
-          ? new Date(Date.now() + d.unlockDays * 86400000).toISOString()
-          : null,
-        unlockLabel: lock ? `${d.unlockDays} days` : 'Anytime',
-        daysLeft: lock ? d.unlockDays : 0,
-        status: 'active',
-        demo: true,
-      };
-    });
-    const totalStaked = stakes.reduce((a, s) => a + s.amount, 0);
-    const totalEarned = stakes.reduce((a, s) => a + s.earned, 0);
-    return {
-      totalStaked,
-      totalEarned,
-      totalClaimable: totalEarned,
-      portfolioValueUsd: Math.round(totalStaked * 0.02 * 100) / 100,
-      nextUnlockDays: 28,
-      nextUnlockLabel: '28 days',
-      stakes,
-      wallet: w,
-      dvtPriceUsd: 0.02,
-      demo: true,
-    };
-  }
-
   async getActiveStakeTotal(userId: string, role?: string) {
     const params: any[] = [userId];
     let sql = `

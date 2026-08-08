@@ -90,7 +90,7 @@ export default function HomeScreen({
   const [selected, setSelected] = useState<string>('economy');
   const [currency, setCurrency] = useState('NGN');
   const [pickup, setPickup] = useState(pickupLabel);
-  const [destination, setDestination] = useState(destProp || 'Lekki Phase 1...');
+  const [destination, setDestination] = useState(destProp || '');
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState('');
   const [promise, setPromise] = useState<any>(null);

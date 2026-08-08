@@ -132,7 +132,7 @@ export default function MerchantProductsPage() {
   const onImage = async (file?: File | null) => {
     if (!file) return;
     try {
-      const url = await uploadCatalogImage(file, token());
+      const url = await uploadCatalogImage(file, token(), 'product');
       setForm((f) => ({ ...f, imageUrl: url }));
       if (editing?.id) {
         const r = await axios.post(

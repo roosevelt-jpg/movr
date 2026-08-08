@@ -46,7 +46,7 @@ export default function MerchantStoreSetupPage() {
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadCatalogImage(file, token());
+      const url = await uploadCatalogImage(file, token(), 'banner');
       setForm((f) => ({ ...f, imageUrl: url }));
       toast.success('Photo uploaded');
     } catch {

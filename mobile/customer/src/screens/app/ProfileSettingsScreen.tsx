@@ -50,14 +50,14 @@ export default function ProfileSettingsScreen({
   onWishlist?: () => void;
   onMerchantPayouts?: () => void;
 }) {
-  const [name, setName] = useState('Kwame Asante');
-  const [initials, setInitials] = useState('KA');
-  const [phone, setPhone] = useState('+234 801 234 5678');
+  const [name, setName] = useState('Traveler');
+  const [initials, setInitials] = useState('?');
+  const [phone, setPhone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [rides, setRides] = useState(47);
-  const [rating, setRating] = useState(4.9);
-  const [points, setPoints] = useState(850);
-  const [unread, setUnread] = useState(3);
+  const [rides, setRides] = useState(0);
+  const [rating, setRating] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     fetch(`${API}/users/me/profile`, { headers: authHeaders() })
@@ -69,9 +69,9 @@ export default function ProfileSettingsScreen({
         if (u.phone) setPhone(u.phone);
         if (u.avatarUrl) setAvatarUrl(u.avatarUrl);
         if (u.stats) {
-          setRides(Number(u.stats.rides ?? 47));
-          setRating(Number(u.stats.rating ?? 4.9));
-          setPoints(Number(u.stats.points ?? 850));
+          setRides(Number(u.stats.rides ?? 0));
+          setRating(Number(u.stats.rating ?? 0));
+          setPoints(Number(u.stats.points ?? 0));
         }
         if (u.unreadNotifications != null) setUnread(Number(u.unreadNotifications));
       })

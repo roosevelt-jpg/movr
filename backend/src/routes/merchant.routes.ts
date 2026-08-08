@@ -780,7 +780,7 @@ merchantRouter.patch(
         return res.status(404).json({ status: 'error', message: 'Store not found' });
       }
       const { title, imageUrl, linkUrl, sortOrder, isActive } = req.body;
-      assertDirectUploadUrl(imageUrl, 'imageUrl');
+      if (imageUrl) assertDirectUploadUrl(imageUrl, 'imageUrl');
       const banner = await db.query(
         `UPDATE store_banners SET
            title = COALESCE($1, title),
@@ -1450,7 +1450,7 @@ merchantRouter.get(
 
       const banks = await db
         .query(
-          `SELECT id, bank_name, account_number, account_mask, account_name, is_primary
+          `SELECT id, bank_name, account_number, account_mask, account_name, bank_code, is_primary
            FROM merchant_bank_accounts WHERE merchant_id = $1
            ORDER BY is_primary DESC, created_at ASC`,
           [merchant.id]
@@ -1478,6 +1478,7 @@ merchantRouter.get(
           bankName: primary.bank_name,
           accountNumber: primary.account_mask || primary.account_number,
           accountName: primary.account_name,
+          bankCode: primary.bank_code || null,
           selected: true,
         };
       }
@@ -1500,6 +1501,7 @@ merchantRouter.get(
             bankName: b.bank_name,
             accountNumber: b.account_mask || b.account_number,
             accountName: b.account_name,
+            bankCode: b.bank_code || null,
             isPrimary: b.is_primary,
           })),
         },
@@ -1808,6 +1810,7 @@ merchantRouter.post(
       const bankName = String(req.body.bankName || '').trim();
       const accountNumber = String(req.body.accountNumber || '').trim();
       const accountName = String(req.body.accountName || merchant.business_name || '').trim();
+      const bankCode = String(req.body.bankCode || req.body.bank_code || '').trim() || null;
       if (!bankName || !accountNumber) {
         return res.status(400).json({ status: 'error', message: 'bankName and accountNumber required' });
       }
@@ -1819,12 +1822,27 @@ merchantRouter.post(
         `UPDATE merchant_bank_accounts SET is_primary = FALSE WHERE merchant_id = $1`,
         [merchant.id]
       ).catch(() => undefined);
-      const row = await db.query(
-        `INSERT INTO merchant_bank_accounts (merchant_id, bank_name, account_number, account_mask, account_name, is_primary)
-         VALUES ($1,$2,$3,$4,$5,TRUE)
-         RETURNING *`,
-        [merchant.id, bankName, accountNumber, mask, accountName]
-      );
+      await db
+        .query(`ALTER TABLE merchant_bank_accounts ADD COLUMN IF NOT EXISTS bank_code VARCHAR(32)`)
+        .catch(() => undefined);
+      let row = await db
+        .query(
+          `INSERT INTO merchant_bank_accounts
+             (merchant_id, bank_name, account_number, account_mask, account_name, bank_code, is_primary)
+           VALUES ($1,$2,$3,$4,$5,$6,TRUE)
+           RETURNING *`,
+          [merchant.id, bankName, accountNumber, mask, accountName, bankCode]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      if (!row.rows[0]) {
+        row = await db.query(
+          `INSERT INTO merchant_bank_accounts
+             (merchant_id, bank_name, account_number, account_mask, account_name, is_primary)
+           VALUES ($1,$2,$3,$4,$5,TRUE)
+           RETURNING *`,
+          [merchant.id, bankName, accountNumber, mask, accountName]
+        );
+      }
       await db.query(
         `UPDATE merchants SET payout_account = $2::jsonb WHERE id = $1`,
         [
@@ -1833,6 +1851,7 @@ merchantRouter.post(
             bankName,
             accountNumber: mask,
             accountName,
+            bankCode,
           }),
         ]
       );
@@ -1854,24 +1873,68 @@ merchantRouter.post(
       const { TrustSettlementService } = require('../services/trust-settlement.service');
       const trust = new TrustSettlementService(db);
       await trust.assertKycForPayout(req.user!.id, Number(amount), 'merchant');
-      // TODO: wire to provider transfer once merchant settlement accounts are fully provisioned
+      const payCurrency = currency || (merchant.country === 'NG' ? 'NGN' : 'GHS');
+      const primaryBank = await db
+        .query(
+          `SELECT * FROM merchant_bank_accounts
+           WHERE merchant_id = $1
+           ORDER BY is_primary DESC, created_at DESC
+           LIMIT 1`,
+          [merchant.id]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      const stored = primaryBank.rows[0];
+      const incoming = bankAccount || {};
+      const looksMasked = /X/i.test(String(incoming.accountNumber || ''));
+      const bank = {
+        bankName: stored?.bank_name || incoming.bankName || incoming.bank_name,
+        accountNumber:
+          stored?.account_number ||
+          (!looksMasked ? incoming.accountNumber || incoming.account_number : null),
+        accountName: stored?.account_name || incoming.accountName || incoming.account_name,
+        bankCode:
+          stored?.bank_code ||
+          incoming.bankCode ||
+          incoming.bank_code ||
+          null,
+      };
+      if (!bank.accountNumber) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Add a payout account with account number (and bank code for bank transfers)',
+        });
+      }
       const reference = `MERCHANT-PAYOUT-${Date.now()}`;
-      let transfer: any = { success: false, reference, note: 'TODO provider transfer' };
+      let transfer: any = { success: false, reference };
       try {
         transfer = await payments.initializeTransfer({
           amount: Number(amount),
-          currency: currency || 'GHS',
+          currency: payCurrency,
           recipient: {
-            accountNumber: bankAccount?.accountNumber,
-            bankCode: bankAccount?.bankCode,
-            accountBank: bankAccount?.bankCode,
+            accountNumber: bank.accountNumber,
+            bankCode: bank.bankCode || bank.bank_code,
+            accountBank: bank.bankCode || bank.bank_code,
           },
           reference,
           narration: 'MOVR merchant payout',
           countryCode: merchant.country || 'GH',
         });
-      } catch {
-        // keep stub result
+      } catch (e: any) {
+        transfer = { success: false, reference, error: e.message };
+      }
+
+      const live = Boolean(
+        process.env.PAYSTACK_SECRET_KEY ||
+          process.env.FLUTTERWAVE_SECRET_KEY ||
+          process.env.PAYSTACK_SECRET ||
+          process.env.FLW_SECRET_KEY
+      );
+      if (!transfer.success && live) {
+        return res.status(400).json({
+          status: 'error',
+          message: transfer.error || 'Payout provider rejected transfer — balance not debited',
+          transfer,
+        });
       }
 
       const payout = await db.query(
@@ -1884,10 +1947,10 @@ merchantRouter.post(
         [
           merchant.id,
           amount,
-          currency || 'NGN',
+          payCurrency,
           transfer.success ? 'processing' : 'pending',
           reference,
-          JSON.stringify(bankAccount || {}),
+          JSON.stringify(bank),
           `Week of ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
         ]
       );
@@ -1905,15 +1968,24 @@ merchantRouter.post(
         .createReceipt(req.user!.id, {
           kind: 'merchant_payout',
           amount: Number(amount),
-          currency: currency || 'NGN',
+          currency: payCurrency,
           channel: 'bank',
-          counterparty: bankAccount?.bankName || 'Merchant bank',
+          counterparty: bank.bankName || 'Merchant bank',
           status: transfer.success ? 'processing' : 'pending',
-          metadata: { payoutId: payout.rows[0]?.id, reference },
+          metadata: { payoutId: payout.rows[0]?.id, reference, transferSuccess: Boolean(transfer.success) },
         })
         .catch(() => undefined);
 
-      res.status(201).json({ status: 'success', data: { payout: payout.rows[0], transfer } });
+      res.status(201).json({
+        status: 'success',
+        data: {
+          payout: payout.rows[0],
+          transfer,
+          message: transfer.success
+            ? 'Payout sent'
+            : 'Payout queued — ops can retry from Trust Ops',
+        },
+      });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
@@ -2060,42 +2132,9 @@ merchantRouter.get('/dashboard-board', authenticateToken, requireMerchant, async
     const PREP = ['accepted', 'preparing'];
     const DONE = ['ready_for_pickup', 'out_for_delivery', 'completed', 'delivered'];
 
-    let newCol = withItems.filter((o) => NEW.includes(String(o.status).toLowerCase()));
-    let prepCol = withItems.filter((o) => PREP.includes(String(o.status).toLowerCase()));
-    let doneCol = withItems.filter((o) => DONE.includes(String(o.status).toLowerCase()));
-
-    if (!withItems.length) {
-      const demoNew = [
-        {
-          id: 'demo-kwame',
-          ref: '#MVR-20480',
-          status: 'pending',
-          total: 7700,
-          createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
-          itemsLabel: 'Zinger Burger Meal × 1, Grilled Chicken Combo × 1',
-          items: [
-            { name: 'Zinger Burger Meal', quantity: 1 },
-            { name: 'Grilled Chicken Combo', quantity: 1 },
-          ],
-          customerName: 'Kwame A.',
-          fulfillment: 'Movr Courier',
-          prepMinutes: 15,
-        },
-        {
-          id: 'demo-amara',
-          ref: '#MVR-20475',
-          status: 'pending',
-          total: 3400,
-          createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-          itemsLabel: 'Snack Combo × 2',
-          items: [{ name: 'Snack Combo', quantity: 2 }],
-          customerName: 'Amara O.',
-          fulfillment: 'Movr Courier',
-          prepMinutes: 12,
-        },
-      ];
-      newCol = demoNew;
-    }
+    const newCol = withItems.filter((o) => NEW.includes(String(o.status).toLowerCase()));
+    const prepCol = withItems.filter((o) => PREP.includes(String(o.status).toLowerCase()));
+    const doneCol = withItems.filter((o) => DONE.includes(String(o.status).toLowerCase()));
 
     const pendingCount = newCol.length;
     const completedCount = doneCol.length || Math.max(0, ordersCount - pendingCount);
@@ -2110,16 +2149,16 @@ merchantRouter.get('/dashboard-board', authenticateToken, requireMerchant, async
               isOpen: Boolean(storeRow.is_open),
               rating: Number(storeRow.rating || 0),
             }
-          : { id: null, name: 'Store', isOpen: true, rating: 4.8 },
+          : { id: null, name: 'Store', isOpen: true, rating: 0 },
         kpis: {
           revenueToday: revenue || 0,
-          ordersToday: ordersCount || pendingCount + completedCount || 24,
-          pending: pendingCount || 3,
-          completed: completedCount || 21,
+          ordersToday: ordersCount,
+          pending: pendingCount,
+          completed: completedCount,
           avgOrder: ordersCount ? revenue / ordersCount : 0,
-          rating: Number(storeRow?.rating || 4.8),
-          revenueDelta: 18,
-          ordersDelta: 12,
+          rating: Number(storeRow?.rating || 0),
+          revenueDelta: 0,
+          ordersDelta: 0,
         },
         columns: {
           new: newCol,

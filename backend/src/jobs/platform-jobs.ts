@@ -3,6 +3,7 @@ import { DriverPerformanceService } from '../services/driver-performance.service
 import { SettlementService } from '../services/settlement.service';
 import { PaymentService } from '../services/payment.service';
 import { TripRecordingService } from '../services/trip-recording.service';
+import { RankingService } from '../services/ranking.service';
 
 /**
  * Scheduled jobs (Phase 13/18/28). Call startPlatformJobs() from composition root.
@@ -13,28 +14,30 @@ export function startPlatformJobs() {
   const performance = new DriverPerformanceService(db);
   const settlement = new SettlementService(db, payments);
   const recordings = new TripRecordingService(db);
+  const ranking = new RankingService(db);
 
   const HOUR = 60 * 60 * 1000;
   const DAY = 24 * HOUR;
 
-  // Recalculate driver metrics hourly
   setInterval(() => {
     performance.recalculateAllActiveDrivers().catch(() => undefined);
   }, HOUR);
 
-  // Nightly GMV rollup (~01:00 local drift is acceptable for MVP)
+  setInterval(() => {
+    ranking.refreshAll().catch(() => undefined);
+  }, 6 * HOUR);
+
   setInterval(() => {
     settlement.rollupGmv().catch(() => undefined);
   }, DAY);
 
-  // Purge expired trip recordings hourly (unless flagged for dispute)
   setInterval(() => {
     recordings.purgeExpired().catch(() => undefined);
   }, HOUR);
 
-  // Kick once shortly after boot
   setTimeout(() => {
     performance.recalculateAllActiveDrivers().catch(() => undefined);
+    ranking.refreshAll().catch(() => undefined);
     settlement.rollupGmv().catch(() => undefined);
     recordings.purgeExpired().catch(() => undefined);
   }, 15_000);

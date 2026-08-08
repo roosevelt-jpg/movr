@@ -57,7 +57,7 @@ function listenOnce(): Promise<string> {
 }
 
 /** Voice booking — Listening mic, transcript, Economy/Comfort card, Book CTA (Phase 23). */
-export default function VoiceBookingScreen() {
+export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
@@ -147,6 +147,11 @@ export default function VoiceBookingScreen() {
 
   return (
     <View style={styles.root}>
+      {onBack ? (
+        <Pressable onPress={onBack} style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+          <Text style={{ color: '#a78bfa', fontWeight: '700' }}>← Back</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.top}>
         <Pressable onPress={startListen} style={[styles.mic, listening && styles.micActive]}>
           <View style={styles.micGlowOuter} />

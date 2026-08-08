@@ -15,7 +15,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Merchant mobile payouts — balance, KYC gate, request payout. */
+/** Merchant mobile payouts — balance, KYC gate, account + request payout. */
 export default function MerchantPayoutScreen({
   onBack,
   onReturns,
@@ -30,6 +30,13 @@ export default function MerchantPayoutScreen({
   const [kycMsg, setKycMsg] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bankName: '',
+    accountNumber: '',
+    accountName: '',
+    bankCode: '',
+  });
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +51,7 @@ export default function MerchantPayoutScreen({
         });
         if (d.payoutAccount) setAccount(d.payoutAccount);
         else if (d.accounts?.[0]) setAccount(d.accounts[0]);
+        else setAccount(null);
       }
     } catch (e: any) {
       setMsg(e.message || 'Could not load payouts');
@@ -70,6 +78,31 @@ export default function MerchantPayoutScreen({
       .catch(() => setKycMsg(''));
   }, [summary.available]);
 
+  const addAccount = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await fetch(`${API}/merchant/payouts/accounts`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(bankForm),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setMsg(j.message || 'Could not add account');
+        return;
+      }
+      setShowAdd(false);
+      setBankForm({ bankName: '', accountNumber: '', accountName: '', bankCode: '' });
+      setMsg('Account saved');
+      await load();
+    } catch (e: any) {
+      setMsg(e.message || 'Network error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const request = async () => {
     if (kycMsg) {
       setMsg(kycMsg);
@@ -84,7 +117,12 @@ export default function MerchantPayoutScreen({
         body: JSON.stringify({
           amount: summary.available,
           currency: summary.currency,
-          bankAccount: account,
+          bankAccount: {
+            bankName: account?.bankName || account?.bank_name,
+            accountNumber: account?.accountNumber || account?.account_number,
+            accountName: account?.accountName || account?.account_name,
+            bankCode: account?.bankCode || account?.bank_code,
+          },
         }),
       });
       const j = await res.json();
@@ -106,14 +144,62 @@ export default function MerchantPayoutScreen({
       ) : null}
       <Text style={styles.title}>Merchant payout</Text>
       <Text style={styles.avail}>{formatCurrency(summary.available, summary.currency)}</Text>
-      <Text style={styles.muted}>Available · this week {formatCurrency(summary.thisWeek, summary.currency)}</Text>
+      <Text style={styles.muted}>
+        Available · this week {formatCurrency(summary.thisWeek, summary.currency)}
+      </Text>
       {account ? (
         <Text style={styles.account}>
           {account.bankName || account.bank_name} · {account.accountNumber || account.account_number}
+          {account.bankCode || account.bank_code
+            ? ` · ${account.bankCode || account.bank_code}`
+            : ''}
         </Text>
       ) : (
-        <Text style={styles.muted}>No payout account on file — add one on web merchant console.</Text>
+        <Text style={styles.muted}>No payout account on file.</Text>
       )}
+      <Pressable onPress={() => setShowAdd((v) => !v)} style={{ marginTop: 8 }}>
+        <Text style={styles.link}>{showAdd ? 'Cancel' : account ? 'Update account →' : 'Add payout account →'}</Text>
+      </Pressable>
+      {showAdd ? (
+        <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder="Bank / MoMo name"
+            placeholderTextColor="#71717a"
+            value={bankForm.bankName}
+            onChangeText={(t) => setBankForm((f) => ({ ...f, bankName: t }))}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Bank / MoMo code (e.g. MTN, 058)"
+            placeholderTextColor="#71717a"
+            value={bankForm.bankCode}
+            onChangeText={(t) => setBankForm((f) => ({ ...f, bankCode: t }))}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Account number"
+            placeholderTextColor="#71717a"
+            keyboardType="number-pad"
+            value={bankForm.accountNumber}
+            onChangeText={(t) => setBankForm((f) => ({ ...f, accountNumber: t }))}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Account name"
+            placeholderTextColor="#71717a"
+            value={bankForm.accountName}
+            onChangeText={(t) => setBankForm((f) => ({ ...f, accountName: t }))}
+          />
+          <Pressable
+            style={[styles.btn, busy && { opacity: 0.5 }]}
+            onPress={addAccount}
+            disabled={busy}
+          >
+            <Text style={styles.btnText}>{busy ? 'Saving…' : 'Save account'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {kycMsg ? <Text style={styles.warn}>{kycMsg}</Text> : null}
       {kycMsg && onKyc ? (
         <Pressable onPress={onKyc}>
@@ -122,9 +208,12 @@ export default function MerchantPayoutScreen({
       ) : null}
       {msg ? <Text style={styles.ok}>{msg}</Text> : null}
       <Pressable
-        style={[styles.btn, (busy || Boolean(kycMsg) || summary.available <= 0) && { opacity: 0.5 }]}
+        style={[
+          styles.btn,
+          (busy || Boolean(kycMsg) || summary.available <= 0 || !account) && { opacity: 0.5 },
+        ]}
         onPress={request}
-        disabled={busy || Boolean(kycMsg) || summary.available <= 0}
+        disabled={busy || Boolean(kycMsg) || summary.available <= 0 || !account}
       >
         <Text style={styles.btnText}>{busy ? 'Requesting…' : 'Request payout'}</Text>
       </Pressable>
@@ -147,6 +236,17 @@ const styles = StyleSheet.create({
   warn: { color: '#fbbf24', marginTop: 12 },
   ok: { color: '#34d399', marginTop: 8 },
   link: { color: '#a78bfa', fontWeight: '700', marginTop: 8 },
+  form: { marginTop: 12, gap: 8 },
+  input: {
+    backgroundColor: '#18181b',
+    borderWidth: 1,
+    borderColor: '#3f3f46',
+    borderRadius: 12,
+    color: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
   btn: {
     marginTop: 20,
     backgroundColor: '#4f46e5',

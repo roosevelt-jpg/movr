@@ -34,6 +34,7 @@ import TokensManagementPage from './pages/TokensManagementPage';
 import MarketplaceManagementPage from './pages/MarketplaceManagementPage';
 import DispatcherPanelPage from './pages/DispatcherPanelPage';
 import TrustOpsPage from './pages/TrustOpsPage';
+import AiSupportInboxPage from './pages/AiSupportInboxPage';
 import PromotionsPage from './pages/PromotionsPage';
 import BroadcastCenterPage from './pages/BroadcastCenterPage';
 import PlatformAnalyticsPage from './pages/PlatformAnalyticsPage';
@@ -159,6 +160,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <TrustOpsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/ai-support"
+          element={
+            <RequireAdmin>
+              <AiSupportInboxPage />
             </RequireAdmin>
           }
         />

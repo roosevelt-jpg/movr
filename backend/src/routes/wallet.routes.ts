@@ -164,51 +164,7 @@ walletRouter.get('/portfolio', async (req: AuthRequest, res: Response) => {
         dvtTokens: dvt,
         points,
         currency: wallet.rows[0].currency || 'NGN',
-        transactions:
-          transactions.length > 0
-            ? transactions
-            : [
-                {
-                  id: 'demo-1',
-                  title: 'Top Up via Card',
-                  type: 'topup',
-                  amount: 10000,
-                  unit: 'fiat',
-                  icon: 'topup',
-                  createdAt: new Date().toISOString(),
-                  credit: true,
-                },
-                {
-                  id: 'demo-2',
-                  title: 'Ride — Lekki to VI',
-                  type: 'ride',
-                  amount: -1200,
-                  unit: 'fiat',
-                  icon: 'ride',
-                  createdAt: new Date(Date.now() - 3600000).toISOString(),
-                  credit: false,
-                },
-                {
-                  id: 'demo-3',
-                  title: 'DVT Token Claim',
-                  type: 'claim',
-                  amount: 240,
-                  unit: 'dvt',
-                  icon: 'dvt',
-                  createdAt: new Date(Date.now() - 86400000).toISOString(),
-                  credit: true,
-                },
-                {
-                  id: 'demo-4',
-                  title: 'Parcel Delivery',
-                  type: 'delivery',
-                  amount: -800,
-                  unit: 'fiat',
-                  icon: 'parcel',
-                  createdAt: new Date(Date.now() - 90000000).toISOString(),
-                  credit: false,
-                },
-              ],
+        transactions,
       },
     });
   } catch (error: any) {
@@ -291,13 +247,13 @@ walletRouter.get('/withdraw/options', async (req: AuthRequest, res: Response) =>
          FROM wallets WHERE user_id = $1`,
         [uid]
       )
-      .catch(() => ({ rows: [{ balance: 18400, currency: 'NGN' }] }));
+      .catch(() => ({ rows: [{ balance: 0, currency: 'NGN' }] }));
 
     const settings = await db
       .query(`SELECT * FROM wallet_withdraw_settings WHERE id = 1`)
       .catch(() => ({ rows: [{ min_amount: 500, fee_amount: 0, fee_label: 'Free' }] }));
 
-    let methods = await db
+    const methods = await db
       .query(
         `SELECT id, provider, method_type, label, last_four, account_name, phone, is_default
          FROM customer_payment_methods WHERE user_id = $1
@@ -306,31 +262,7 @@ walletRouter.get('/withdraw/options', async (req: AuthRequest, res: Response) =>
       )
       .catch(() => ({ rows: [] as any[] }));
 
-    if (!methods.rows.length) {
-      methods = {
-        rows: [
-          {
-            id: 'visa-demo',
-            provider: 'VISA',
-            method_type: 'card',
-            label: 'VISA',
-            last_four: '4821',
-            account_name: 'Kwame Asante',
-            is_default: true,
-          },
-          {
-            id: 'momo-demo',
-            provider: 'MTN MoMo',
-            method_type: 'momo',
-            label: 'MTN MoMo',
-            phone: '+234 801 234 5678',
-            is_default: false,
-          },
-        ],
-      };
-    }
-
-    const balance = Number(wallet.rows[0]?.balance || 18400);
+    const balance = Number(wallet.rows[0]?.balance || 0);
     const currency = wallet.rows[0]?.currency || 'NGN';
     const min = Number(settings.rows[0]?.min_amount || 500);
     const fee = Number(settings.rows[0]?.fee_amount || 0);
@@ -338,7 +270,7 @@ walletRouter.get('/withdraw/options', async (req: AuthRequest, res: Response) =>
     res.json({
       status: 'success',
       data: {
-        available: balance || 18400,
+        available: balance,
         currency,
         minAmount: min,
         fee,
@@ -349,12 +281,12 @@ walletRouter.get('/withdraw/options', async (req: AuthRequest, res: Response) =>
           type: m.method_type || (String(m.provider || '').toLowerCase().includes('momo') ? 'momo' : 'card'),
           title:
             m.method_type === 'momo' || String(m.provider || '').includes('MoMo')
-              ? m.label || m.provider || 'MTN MoMo'
-              : `${m.label || m.provider || 'VISA'} •••• ${m.last_four || '4821'}`,
+              ? m.label || m.provider || 'MoMo'
+              : `${m.label || m.provider || 'Card'}${m.last_four ? ` •••• ${m.last_four}` : ''}`,
           subtitle:
             m.method_type === 'momo' || String(m.provider || '').includes('MoMo')
-              ? m.phone || '+234 801 234 5678'
-              : `Instant · ${m.account_name || 'Kwame Asante'}`,
+              ? m.phone || '—'
+              : `Instant · ${m.account_name || '—'}`,
           selected: !!m.is_default,
         })),
       },
@@ -363,6 +295,15 @@ walletRouter.get('/withdraw/options', async (req: AuthRequest, res: Response) =>
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+async function providersConfigured() {
+  return Boolean(
+    process.env.PAYSTACK_SECRET_KEY ||
+      process.env.FLUTTERWAVE_SECRET_KEY ||
+      process.env.PAYSTACK_SECRET ||
+      process.env.FLW_SECRET_KEY
+  );
+}
 
 async function handleWithdraw(req: AuthRequest, res: Response) {
   try {
@@ -384,6 +325,10 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
       });
     }
 
+    const { TrustSettlementService } = require('../services/trust-settlement.service');
+    const trust = new TrustSettlementService(db);
+    await trust.assertKycForPayout(uid, amount, 'customer');
+
     const wallet = await db.query(
       `SELECT id, COALESCE(balance_fiat, 0)::float AS balance, COALESCE(currency, 'NGN') AS currency
        FROM wallets WHERE user_id = $1`,
@@ -394,11 +339,11 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
     const currency = wallet.rows[0]?.currency || 'NGN';
     if (!wallet.rows[0]) {
       await db.query(
-        `INSERT INTO wallets (user_id, balance_fiat, currency) VALUES ($1, 18400, 'NGN')
+        `INSERT INTO wallets (user_id, balance_fiat, currency) VALUES ($1, 0, 'NGN')
          ON CONFLICT DO NOTHING`,
         [uid]
       ).catch(() => undefined);
-      balance = 18400;
+      balance = 0;
     }
     if (amount > balance) {
       return res.status(400).json({ status: 'error', message: 'Amount exceeds available balance' });
@@ -428,25 +373,39 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
       method.rows[0]?.bank_code ||
       (String(rail.rows[0]?.provider || methodLabel).toLowerCase().includes('mtn') ? 'MTN' : undefined);
 
+    if (!accountNumber) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Link a MoMo/bank rail in Wallet → Settle before withdrawing',
+      });
+    }
+
     const reference = `WD-${Date.now()}`;
     let transfer: any = { success: false, reference };
-    if (accountNumber) {
-      try {
-        transfer = await payments.initializeTransfer({
-          amount,
-          currency,
-          recipient: {
-            accountNumber: String(accountNumber),
-            bankCode: bankCode || undefined,
-            accountBank: bankCode || undefined,
-          },
-          reference,
-          narration: `Movr wallet withdraw · ${methodLabel}`,
-          countryCode: (await resolveUserCurrency(uid)).country,
-        });
-      } catch (e: any) {
-        transfer = { success: false, reference, error: e.message };
-      }
+    try {
+      transfer = await payments.initializeTransfer({
+        amount,
+        currency,
+        recipient: {
+          accountNumber: String(accountNumber),
+          bankCode: bankCode || undefined,
+          accountBank: bankCode || undefined,
+        },
+        reference,
+        narration: `Movr wallet withdraw · ${methodLabel}`,
+        countryCode: (await resolveUserCurrency(uid)).country,
+      });
+    } catch (e: any) {
+      transfer = { success: false, reference, error: e.message };
+    }
+
+    const live = await providersConfigured();
+    if (!transfer.success && live) {
+      return res.status(400).json({
+        status: 'error',
+        message: transfer.error || 'Payout provider rejected transfer — balance not debited',
+        transfer,
+      });
     }
 
     await db
@@ -456,7 +415,7 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
       ])
       .catch(() => undefined);
 
-    const row = await db
+    let row = await db
       .query(
         `INSERT INTO wallet_withdrawals (user_id, amount, fee, currency, method_id, method_label, status, reference)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -472,13 +431,30 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
           reference,
         ]
       )
-      .catch(() => ({
-        rows: [{ id: 'local', amount, status: transfer.success ? 'processing' : 'pending' }],
-      }));
+      .catch(() => ({ rows: [] as any[] }));
+    if (!row.rows[0]) {
+      row = await db
+        .query(
+          `INSERT INTO wallet_withdrawals (user_id, amount, fee, currency, method_id, method_label, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            uid,
+            amount,
+            fee,
+            currency,
+            methodId && String(methodId).includes('-') ? methodId : null,
+            methodLabel,
+            transfer.success ? 'processing' : 'pending',
+          ]
+        )
+        .catch(() => ({
+          rows: [{ id: 'local', amount, status: transfer.success ? 'processing' : 'pending' }],
+        }));
+    }
 
-    try {
-      const { TrustSettlementService } = require('../services/trust-settlement.service');
-      await new TrustSettlementService(db).createReceipt(uid, {
+    await trust
+      .createReceipt(uid, {
         kind: 'wallet_withdraw',
         amount,
         currency,
@@ -486,10 +462,8 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
         counterparty: methodLabel,
         status: transfer.success ? 'processing' : 'pending',
         metadata: { reference, transferSuccess: Boolean(transfer.success) },
-      });
-    } catch {
-      /* optional */
-    }
+      })
+      .catch(() => undefined);
 
     res.status(201).json({
       status: 'success',
@@ -502,12 +476,16 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
         transfer,
         message: transfer.success
           ? 'Withdrawal sent to MoMo/bank — usually arrives in minutes'
-          : 'Withdrawal queued — payout rail will retry',
+          : 'Withdrawal queued (demo/offline provider) — ops can retry from Trust Ops',
         available: Math.max(0, balance - amount),
       },
     });
   } catch (error: any) {
-    res.status(400).json({ status: 'error', message: error.message });
+    const msg = String(error.message || '');
+    res.status(msg.toLowerCase().includes('kyc') ? 400 : 400).json({
+      status: 'error',
+      message: error.message,
+    });
   }
 }
 

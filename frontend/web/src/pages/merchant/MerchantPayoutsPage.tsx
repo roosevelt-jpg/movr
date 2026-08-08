@@ -24,7 +24,12 @@ export default function MerchantPayoutsPage() {
   const [payouts, setPayouts] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [bankForm, setBankForm] = useState({ bankName: '', accountNumber: '', accountName: '' });
+  const [bankForm, setBankForm] = useState({
+    bankName: '',
+    accountNumber: '',
+    accountName: '',
+    bankCode: '',
+  });
   const [kycMsg, setKycMsg] = useState('');
   const [promise, setPromise] = useState<any>(null);
 
@@ -49,6 +54,7 @@ export default function MerchantPayoutsPage() {
             bankName: d.payoutAccount.bankName || '',
             accountNumber: d.payoutAccount.accountNumber || '',
             accountName: d.payoutAccount.accountName || '',
+            bankCode: d.payoutAccount.bankCode || d.payoutAccount.bank_code || '',
           });
         } else if (d.accounts?.[0]) {
           const a = d.accounts[0];
@@ -56,6 +62,7 @@ export default function MerchantPayoutsPage() {
             bankName: a.bankName,
             accountNumber: a.accountNumber,
             accountName: a.accountName,
+            bankCode: a.bankCode || a.bank_code || '',
           });
         }
       }
@@ -114,6 +121,7 @@ export default function MerchantPayoutsPage() {
             bankName: account?.bankName,
             accountNumber: account?.accountNumber,
             accountName: account?.accountName,
+            bankCode: account?.bankCode || account?.bank_code,
           },
           currency: summary.currency,
         },
@@ -134,7 +142,7 @@ export default function MerchantPayoutsPage() {
       await axios.post(`${API}/merchant/payouts/accounts`, bankForm, { headers: headers() });
       toast.success('Account added');
       setShowAdd(false);
-      setBankForm({ bankName: '', accountNumber: '', accountName: '' });
+      setBankForm({ bankName: '', accountNumber: '', accountName: '', bankCode: '' });
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Could not add account');
@@ -201,6 +209,12 @@ export default function MerchantPayoutsPage() {
               value={bankForm.bankName}
               onChange={(e) => setBankForm((f) => ({ ...f, bankName: e.target.value }))}
               required
+            />
+            <input
+              className="w-full rounded-xl border border-zinc-700 bg-black/40 px-4 py-3"
+              placeholder="Bank / MoMo code (e.g. MTN, 058)"
+              value={bankForm.bankCode}
+              onChange={(e) => setBankForm((f) => ({ ...f, bankCode: e.target.value }))}
             />
             <input
               className="w-full rounded-xl border border-zinc-700 bg-black/40 px-4 py-3"

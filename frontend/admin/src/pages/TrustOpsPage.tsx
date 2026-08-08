@@ -20,6 +20,7 @@ export default function TrustOpsPage() {
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [retryBusy, setRetryBusy] = useState(false);
 
   const load = async () => {
     try {
@@ -94,6 +95,23 @@ export default function TrustOpsPage() {
     }
   };
 
+  const retryPayouts = async () => {
+    setRetryBusy(true);
+    setError('');
+    try {
+      const res = await axios.post(`${API}/admin/trust/payouts/retry`, {}, { headers: headers() });
+      const d = res.data?.data;
+      setMsg(
+        `Retry done · attempted ${d?.attempted ?? 0}, succeeded ${d?.succeeded ?? 0}`
+      );
+      await load();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e.message || 'Retry failed');
+    } finally {
+      setRetryBusy(false);
+    }
+  };
+
   return (
     <AdminShell activeLabel="Trust & Settlement" hidePageTitle>
       <div style={styles.wrap}>
@@ -101,12 +119,23 @@ export default function TrustOpsPage() {
           <div>
             <h1 style={styles.h1}>Trust & Settlement</h1>
             <p style={styles.sub}>
-              SOS runbook · disputes/refunds · agent codes · SLA / no-show credits
+              SOS runbook · disputes/refunds · agent codes · SLA / no-show credits · payout retry
             </p>
           </div>
-          <Link to="/dispatch" style={styles.link}>
-            Open Dispatcher →
-          </Link>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button
+              type="button"
+              className="admin-btn"
+              style={adminBtn.primary}
+              disabled={retryBusy}
+              onClick={retryPayouts}
+            >
+              {retryBusy ? 'Retrying…' : 'Retry pending payouts'}
+            </button>
+            <Link to="/dispatch" style={styles.link}>
+              Open Dispatcher →
+            </Link>
+          </div>
         </div>
 
         {promise ? (
@@ -158,41 +187,59 @@ export default function TrustOpsPage() {
                   </tr>
                 ) : (
                   sos.map((s) => (
-                    <tr key={s.id}>
-                      <td style={styles.td}>
-                        {s.customer_name || '—'}
-                        <div style={styles.small}>{s.customer_phone}</div>
-                      </td>
-                      <td style={styles.td}>
-                        {s.driver_name || '—'}
-                        <div style={styles.small}>{s.driver_phone}</div>
-                      </td>
-                      <td style={styles.td}>
-                        {s.mapUrl ? (
-                          <a href={s.mapUrl} target="_blank" rel="noreferrer">
-                            Open map
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td style={styles.td}>
-                        {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
-                      </td>
-                      <td style={styles.td}>
-                        <button type="button" className="admin-btn" onClick={() => resolveSos(s.id)}>
-                          Resolve
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={s.id}>
+                      <tr>
+                        <td style={styles.td}>
+                          {s.customer_name || '—'}
+                          <div style={styles.small}>{s.customer_phone}</div>
+                        </td>
+                        <td style={styles.td}>
+                          {s.driver_name || '—'}
+                          <div style={styles.small}>{s.driver_phone}</div>
+                        </td>
+                        <td style={styles.td}>
+                          {s.mapUrl ? (
+                            <a href={s.mapUrl} target="_blank" rel="noreferrer">
+                              Open map
+                            </a>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                        </td>
+                        <td style={styles.td}>
+                          <button type="button" className="admin-btn" onClick={() => resolveSos(s.id)}>
+                            Resolve
+                          </button>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: '#a1a1aa' }}>
+                          <strong style={{ color: '#fca5a5' }}>Runbook:</strong>{' '}
+                          {(s.runbook || []).join(' · ')}
+                          {s.emergencyContacts?.length ? (
+                            <div style={{ marginTop: 4 }}>
+                              Contacts:{' '}
+                              {s.emergencyContacts
+                                .map(
+                                  (c: any) =>
+                                    `${c.contact_name || 'Contact'} ${c.phone_number || ''}`
+                                )
+                                .join(' · ')}
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: 4 }}>No emergency contacts on file</div>
+                          )}
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
             </table>
           </div>
-          {sos[0]?.runbook ? (
-            <p style={styles.small}>Runbook: {(sos[0].runbook || []).join(' · ')}</p>
-          ) : null}
         </section>
 
         <section style={styles.card}>

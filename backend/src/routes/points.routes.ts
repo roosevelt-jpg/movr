@@ -79,11 +79,11 @@ pointsRouter.get('/redeem-catalog', async (_req: AuthRequest, res: Response) => 
 pointsRouter.get('/rewards-hub', async (req: AuthRequest, res: Response) => {
   try {
     const uid = req.user!.id;
-    let balance = 850;
+    let balance = 0;
     try {
-      balance = Number(await points.getBalance(uid)) || 850;
+      balance = Number(await points.getBalance(uid)) || 0;
     } catch {
-      /* demo */
+      /* balance stays 0 */
     }
 
     const thresholds = await db
@@ -172,40 +172,14 @@ pointsRouter.get('/rewards-hub', async (req: AuthRequest, res: Response) => {
       )
       .catch(() => ({ rows: [] as any[] }));
 
-    let leaderboard = board.rows.map((r: any, i: number) => ({
+    const leaderboard = board.rows.map((r: any, i: number) => ({
       rank: i + 1,
       userId: r.id,
-      name: r.name,
-      initials: r.initials || 'RX',
+      name: r.id === uid ? 'You' : r.name,
+      initials: r.initials || '?',
       points: Number(r.points),
       isYou: r.id === uid,
     }));
-
-    if (leaderboard.length < 3) {
-      const demo = [
-        { rank: 1, userId: 'demo-1', name: 'Olumide Adebayo', initials: 'OA', points: 2340, isYou: false },
-        { rank: 2, userId: 'demo-2', name: 'Chioma Ferreira', initials: 'CF', points: 1980, isYou: false },
-        {
-          rank: 7,
-          userId: uid,
-          name: 'You',
-          initials: 'KA',
-          points: balance,
-          isYou: true,
-        },
-      ];
-      const youIdx = leaderboard.findIndex((r) => r.isYou);
-      if (youIdx >= 0) {
-        leaderboard = [
-          ...demo.filter((d) => !d.isYou),
-          { ...leaderboard[youIdx], name: 'You', rank: Math.max(youIdx + 1, 3) },
-        ].map((r, i) => ({ ...r, rank: r.isYou ? 7 : i + 1 }));
-      } else {
-        leaderboard = demo;
-      }
-    } else {
-      leaderboard = leaderboard.map((r) => (r.isYou ? { ...r, name: 'You' } : r));
-    }
 
     const you = leaderboard.find((r) => r.isYou);
 

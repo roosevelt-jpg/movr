@@ -285,7 +285,8 @@ function SectionEditor({
             value={p.logoUrl || ''}
             disabled={disabled}
             accept="image/*"
-            hint="Shown in the site header. PNG or SVG recommended. Clear to use the default Movr logo."
+            purpose="avatar"
+            hint="Shown in the site header. PNG or SVG recommended. Uploads auto-resize under /assets. Clear to use the default Movr logo."
             onChange={(v) => set({ logoUrl: v })}
           />
           <MediaField
@@ -293,7 +294,8 @@ function SectionEditor({
             value={p.faviconUrl || ''}
             disabled={disabled}
             accept="image/*"
-            hint="Browser tab icon. Square PNG or ICO works best. Clear to use the default favicon."
+            purpose="avatar"
+            hint="Browser tab icon. Square PNG works best. Uploads auto-resize under /assets. Clear to use the default favicon."
             onChange={(v) => set({ faviconUrl: v })}
           />
           <LinkRows items={p.links || []} disabled={disabled} onChange={(links) => set({ links })} title="Nav links" />
@@ -487,6 +489,7 @@ function SectionEditor({
                 label="Story image or video"
                 value={card.videoUrl || card.imageUrl || ''}
                 disabled={disabled}
+                purpose="banner"
                 onChange={(url) => {
                   const cards = [...(p.cards || [])];
                   if (/\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/')) {
@@ -879,6 +882,7 @@ function SectionEditor({
                 label="Slide image or video"
                 value={s.mediaUrl || s.imageUrl || ''}
                 disabled={disabled}
+                purpose="banner"
                 onChange={(url) => {
                   const slides = [...(p.slides || [])];
                   slides[i] = { ...s, mediaUrl: url, imageUrl: url };
@@ -994,6 +998,7 @@ function SectionEditor({
                 value={c.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                purpose="card"
                 onChange={(url) => {
                   const choices = [...(p.choices || [])];
                   choices[i] = { ...c, imageUrl: url };
@@ -1084,6 +1089,7 @@ function SectionEditor({
                 value={s.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                purpose="card"
                 onChange={(url) => {
                   const steps = [...(p.steps || [])];
                   steps[i] = { ...s, imageUrl: url };
@@ -1191,6 +1197,7 @@ function SectionEditor({
                 value={item.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                purpose="card"
                 hint="Small banner shown at the top of the card. Clear to fall back to the icon."
                 onChange={(url) => {
                   const items = [...(p.items || [])];
@@ -1257,6 +1264,7 @@ function SectionEditor({
                 value={q.avatarUrl || q.imageUrl || ''}
                 disabled={disabled}
                 accept="image/*"
+                purpose="avatar"
                 hint="Shown next to the name. Square photos work best."
                 onChange={(url) => {
                   const items = [...(p.items || p.quotes || [])];

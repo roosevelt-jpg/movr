@@ -22,7 +22,7 @@ export default function SettlementHubPage() {
   const [disputes, setDisputes] = useState<any[]>([]);
   const [agentId, setAgentId] = useState('');
   const [amount, setAmount] = useState('1000');
-  const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '' });
+  const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '', bankCode: '' });
   const [dispute, setDispute] = useState({ domain: 'wallet', reason: '' });
   const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
@@ -59,6 +59,7 @@ export default function SettlementHubPage() {
         railType: 'momo',
         provider: momo.provider,
         accountNumber: momo.accountNumber,
+        bankCode: momo.bankCode || undefined,
       }),
     });
     const j = await res.json();
@@ -149,6 +150,12 @@ export default function SettlementHubPage() {
           placeholder="Provider (MTN MoMo, Vodafone, Bank)"
           value={momo.provider}
           onChange={(e) => setMomo({ ...momo, provider: e.target.value })}
+        />
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          placeholder="Bank / MoMo code (optional, e.g. MTN)"
+          value={momo.bankCode}
+          onChange={(e) => setMomo({ ...momo, bankCode: e.target.value })}
         />
         <input
           className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"

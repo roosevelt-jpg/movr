@@ -1,7 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Image,
+  useWindowDimensions,
+  Platform,
+  Linking,
+} from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
-import { mediaUrl } from '../../lib/media';
+import { mediaUrl, isMediaVideo } from '../../lib/media';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 function authHeaders(): Record<string, string> {
@@ -76,6 +86,7 @@ export default function StoreProfileScreen({
         setStore({
           name: s.name || '',
           category: s.category || '',
+          description: s.description || '',
           hours: s.hours_text || s.hours_json?.label || '',
           rating: Number(s.rating || 0),
           eta:
@@ -86,6 +97,9 @@ export default function StoreProfileScreen({
           minOrder: Number(s.min_order_amount || 0),
           currency: s.currency_code || 'NGN',
           banner: s.banner_url || s.image_url || null,
+          banners: Array.isArray(s.banners)
+            ? s.banners.filter((b: any) => b.is_active !== false && b.image_url).map((b: any) => b.image_url)
+            : [],
         });
       })
       .catch((e) => {
@@ -149,18 +163,79 @@ export default function StoreProfileScreen({
     loadCart();
   };
 
+  const [bannerIdx, setBannerIdx] = useState(0);
+
+  const heroSlides = useMemo(() => {
+    if (store?.banners?.length) return store.banners as string[];
+    if (store?.banner) return [store.banner];
+    return [] as string[];
+  }, [store]);
+
+  useEffect(() => {
+    setBannerIdx(0);
+  }, [storeId, heroSlides.length]);
+
   const currency = store?.currency || 'NGN';
   const pad = Math.max(12, Math.min(20, width * 0.04));
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        <View style={[styles.header, { paddingHorizontal: pad }]}>
-          <Pressable style={styles.back} onPress={onBack}>
+        <View style={[styles.header, { paddingHorizontal: 0 }]}>
+          <Pressable style={[styles.back, { left: pad, zIndex: 2 }]} onPress={onBack}>
             <Text style={styles.backTxt}>←</Text>
           </Pressable>
-          {store?.banner ? (
-            <Image source={{ uri: mediaUrl(store.banner) }} style={styles.heroImg} />
+          {heroSlides.length ? (
+            <Pressable
+              onPress={() => {
+                const url = heroSlides[bannerIdx];
+                if (isMediaVideo(url) && Platform.OS !== 'web') {
+                  Linking.openURL(mediaUrl(url)).catch(() => undefined);
+                  return;
+                }
+                if (heroSlides.length > 1) setBannerIdx((i) => (i + 1) % heroSlides.length);
+              }}
+              style={{ width: '100%' }}
+            >
+              {isMediaVideo(heroSlides[bannerIdx]) && Platform.OS === 'web' ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  src={mediaUrl(heroSlides[bannerIdx])}
+                  style={{
+                    width: '100%',
+                    height: Math.min(220, width * 0.45),
+                    objectFit: 'cover',
+                    backgroundColor: '#111',
+                  }}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+              ) : isMediaVideo(heroSlides[bannerIdx]) ? (
+                <View
+                  style={[
+                    styles.heroImg,
+                    {
+                      width: '100%',
+                      height: Math.min(220, width * 0.45),
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#111',
+                    },
+                  ]}
+                >
+                  <Text style={{ color: '#fff', fontSize: 28 }}>▶</Text>
+                  <Text style={{ color: '#aaa', marginTop: 6, fontSize: 12 }}>Tap to play banner</Text>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: mediaUrl(heroSlides[bannerIdx]) }}
+                  style={[styles.heroImg, { width: '100%', height: Math.min(220, width * 0.45) }]}
+                  resizeMode="cover"
+                />
+              )}
+            </Pressable>
           ) : (
             <Text style={styles.heroEmoji}>🍔</Text>
           )}
@@ -171,6 +246,9 @@ export default function StoreProfileScreen({
         <Text style={[styles.sub, { paddingHorizontal: pad }]}>
           {[store?.category, store?.hours].filter(Boolean).join(' · ')}
         </Text>
+        {store?.description ? (
+          <Text style={[styles.sub, { paddingHorizontal: pad, marginTop: 8 }]}>{store.description}</Text>
+        ) : null}
         <Text style={[styles.stats, { paddingHorizontal: pad }]}>
           {store
             ? `★ ${Number(store.rating || 0).toFixed(1)}   ·   ${store.eta || ''}   ·   Min ${formatCurrency(store.minOrder || 0, currency)}`
@@ -257,22 +335,23 @@ export default function StoreProfileScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 8,
+    position: 'relative',
+    paddingTop: 0,
+    minHeight: 48,
   },
   back: {
+    position: 'absolute',
+    top: 12,
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   backTxt: { color: '#fff', fontSize: 18 },
-  heroEmoji: { fontSize: 48, opacity: 0.9 },
-  heroImg: { width: 64, height: 64, borderRadius: 14 },
+  heroEmoji: { fontSize: 48, opacity: 0.9, alignSelf: 'flex-end', margin: 16 },
+  heroImg: { width: '100%', height: 180, borderRadius: 0 },
   title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 8 },
   sub: { color: '#A1A1AA', marginTop: 6 },
   stats: { color: '#E4E4E7', marginTop: 10, fontWeight: '600' },

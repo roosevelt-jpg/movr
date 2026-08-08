@@ -33,40 +33,30 @@ export default function ActiveRentalScreen({
   onSupport?: () => void;
   onReceipt?: (id: string) => void;
 }) {
-  const [data, setData] = useState<any>({
-    id: 'demo',
-    statusLabel: 'Active',
-    vehicle: {
-      name: 'Honda CR-V',
-      meta: 'LAG-481-KJ · Silver',
-      rating: 4.9,
-      mode: 'Self-drive',
-      emoji: '🚙',
-    },
-    remainingMs: 14 * 3600000 + 32 * 60000 + 8000,
-    returnBy: 'Return by Apr 11 · 9:00 AM',
-    startedLabel: 'Started 9:00 AM',
-    elapsedPct: 38,
-    returnLocation: { address: 'Movr Hub, Victoria Island, Lagos' },
-    fuelReminder: 'Return with same fuel level. Charges apply otherwise.',
-    extendDailyRate: 22500,
-    currency: 'NGN',
-  });
-  const [remaining, setRemaining] = useState(data.remainingMs);
+  const [data, setData] = useState<any>(null);
+  const [remaining, setRemaining] = useState(0);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [showReceipt, setShowReceipt] = useState<any>(null);
+  const [error, setError] = useState('');
 
   const load = () => {
     fetch(`${API}/rentals/active`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data) {
-          setData((d: any) => ({ ...d, ...j.data }));
+          setData(j.data);
           if (j.data.remainingMs != null) setRemaining(Number(j.data.remainingMs));
+          setError('');
+        } else {
+          setData(null);
+          setError('No active rental');
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setData(null);
+        setError('Could not load rental');
+      });
   };
 
   useEffect(() => {
@@ -74,11 +64,13 @@ export default function ActiveRentalScreen({
   }, []);
 
   useEffect(() => {
+    if (!data) return;
     const t = setInterval(() => setRemaining((ms: number) => Math.max(0, ms - 1000)), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [data]);
 
   const extend = async () => {
+    if (!data?.id) return;
     setBusy(true);
     setMsg('');
     try {
@@ -88,34 +80,51 @@ export default function ActiveRentalScreen({
         body: JSON.stringify({ days: 1 }),
       });
       const j = await res.json();
+      if (!res.ok) throw new Error(j?.message || 'Extend failed');
       setMsg(j?.data?.message || 'Rental extended');
       load();
-    } catch {
-      setMsg('Extended (demo)');
+    } catch (e: any) {
+      setMsg(e?.message || 'Could not extend rental');
     } finally {
       setBusy(false);
     }
   };
 
   const openReceipt = async () => {
+    if (!data?.id) return;
     onReceipt?.(data.id);
     try {
       const res = await fetch(`${API}/rentals/${data.id}/receipt`, { headers: authHeaders() });
       const j = await res.json();
       if (j?.data) setShowReceipt(j.data);
     } catch {
-      setShowReceipt({ total: 46000, currency: 'NGN' });
+      setShowReceipt(null);
     }
   };
 
   const navigate = () => {
-    const q = encodeURIComponent(data.returnLocation?.address || 'Victoria Island Lagos');
+    const q = encodeURIComponent(data?.returnLocation?.address || '');
+    if (!q) return;
     Linking.openURL(`https://maps.google.com/?q=${q}`).catch(() => undefined);
   };
 
-  const v = data.vehicle || {};
-  const currency = data.currency || 'NGN';
-  const rate = Number(data.extendDailyRate || 22500);
+  const v = data?.vehicle || {};
+  const currency = data?.currency || 'NGN';
+  const rate = Number(data?.extendDailyRate || 0);
+
+  if (!data) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.top}>
+          <Pressable onPress={onBack} style={styles.backBtn}>
+            <Text style={styles.backTxt}>←</Text>
+          </Pressable>
+          <Text style={styles.title}>Active rental</Text>
+        </View>
+        <Text style={{ color: '#aaa', padding: 16 }}>{error || 'No active rental'}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>

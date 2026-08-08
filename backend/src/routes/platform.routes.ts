@@ -124,13 +124,6 @@ driverRouter.get(
           pctMap[stars] = Math.round((Number(r.cnt) / totalReviews) * 100);
         }
       }
-      if (totalReviews === 0) {
-        pctMap[5] = 82;
-        pctMap[4] = 14;
-        pctMap[3] = 3;
-        pctMap[2] = 1;
-      }
-
       const reviews = await db
         .query(
           `SELECT rr.rating, rr.comment, rr.created_at,
@@ -148,10 +141,10 @@ driverRouter.get(
       const loc =
         u.location_label ||
         [u.city, u.country === 'NG' ? 'Nigeria' : u.country].filter(Boolean).join(', ') ||
-        'Lagos, Nigeria';
-      const first = u.first_name || 'Emeka';
-      const last = u.last_name || 'Okafor';
-      const initials = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+        '';
+      const first = u.first_name || '';
+      const last = u.last_name || '';
+      const initials = (first || last) ? `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() : '?';
 
       const fmtDvt = (n: number) => {
         if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`.replace('.0K', 'K');
@@ -169,35 +162,17 @@ driverRouter.get(
           sinceYear: Number(u.joined_year || 2023),
           loyaltyBadge: String(u.loyalty_badge || 'GOLD').toUpperCase(),
           stats: {
-            trips: tripCount || 312,
+            trips: tripCount || 0,
             rating,
-            dvt: dvtTotal || 18200,
-            dvtLabel: fmtDvt(dvtTotal || 18200),
+            dvt: dvtTotal,
+            dvtLabel: fmtDvt(dvtTotal),
             acceptance: accept,
           },
           ratingBreakdown: [5, 4, 3, 2].map((stars) => ({
             stars,
             percent: pctMap[stars] || 0,
           })),
-          recentReviews: (reviews.rows.length
-            ? reviews.rows
-            : [
-                {
-                  rating: 5,
-                  comment: 'Very professional and friendly. Smooth ride the whole way.',
-                  created_at: new Date().toISOString(),
-                  first_name: 'Kofi',
-                  last_initial: 'A',
-                },
-                {
-                  rating: 5,
-                  comment: 'Car was very clean and the AC worked perfectly.',
-                  created_at: new Date(Date.now() - 86400000).toISOString(),
-                  first_name: 'Chioma',
-                  last_initial: 'F',
-                },
-              ]
-          ).map((r: any) => {
+          recentReviews: reviews.rows.map((r: any) => {
             const fn = r.first_name || 'Rider';
             const li = r.last_initial || '';
             const when = (() => {
@@ -275,7 +250,7 @@ driverRouter.get(
         .query(`SELECT is_online FROM drivers WHERE user_id = $1 LIMIT 1`, [driverId])
         .catch(() => ({ rows: [] as any[] }));
 
-      let activity = await db
+      const activity = await db
         .query(
           `SELECT id, activity_type, occurred_at, duration_minutes, dvt_earned
            FROM driver_earnings_activity
@@ -285,47 +260,10 @@ driverRouter.get(
         )
         .catch(() => ({ rows: [] as any[] }));
 
-      if (!activity.rows.length) {
-        activity = {
-          rows: [
-            {
-              id: '1',
-              activity_type: 'ride',
-              occurred_at: new Date().setHours(9, 12, 0, 0),
-              duration_minutes: 18,
-              dvt_earned: 60,
-            },
-            {
-              id: '2',
-              activity_type: 'ride',
-              occurred_at: new Date().setHours(10, 45, 0, 0),
-              duration_minutes: 42,
-              dvt_earned: 120,
-            },
-            {
-              id: '3',
-              activity_type: 'delivery',
-              occurred_at: new Date().setHours(12, 10, 0, 0),
-              duration_minutes: 25,
-              dvt_earned: 40,
-            },
-          ].map((r: any) => ({
-            ...r,
-            occurred_at: new Date(r.occurred_at).toISOString(),
-          })),
-        };
-      }
-
-      let amount = Number(agg.rows[0]?.amount || 0);
-      let trips = Number(agg.rows[0]?.trips || 0);
-      let hours = Number(agg.rows[0]?.hours || 0);
-      let dvtEarned = Number(dvt.rows[0]?.dvt || 0);
-      if (!amount && range === 'today') {
-        amount = 18400;
-        trips = 14;
-        hours = 6.5;
-        dvtEarned = dvtEarned || 840;
-      }
+      const amount = Number(agg.rows[0]?.amount || 0);
+      const trips = Number(agg.rows[0]?.trips || 0);
+      const hours = Number(agg.rows[0]?.hours || 0);
+      const dvtEarned = Number(dvt.rows[0]?.dvt || 0);
 
       res.json({
         status: 'success',
@@ -560,24 +498,43 @@ driverRouter.post(
         rail.rows[0]?.metadata?.bankCode ||
         (String(method.rows[0]?.provider || channel).toLowerCase().includes('mtn') ? 'MTN' : 'MTN');
 
+      if (!accountNumber) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Save a MoMo number first (Earnings → Settlement rails or Withdraw method)',
+        });
+      }
+
       let transfer: any = { success: false, reference };
-      if (accountNumber) {
-        try {
-          transfer = await payments.initializeTransfer({
-            amount,
-            currency,
-            recipient: {
-              accountNumber: String(accountNumber),
-              bankCode,
-              accountBank: bankCode,
-            },
-            reference,
-            narration: 'Movr driver payout',
-            countryCode: 'GH',
-          });
-        } catch (e: any) {
-          transfer = { success: false, reference, error: e.message };
-        }
+      try {
+        transfer = await payments.initializeTransfer({
+          amount,
+          currency,
+          recipient: {
+            accountNumber: String(accountNumber),
+            bankCode,
+            accountBank: bankCode,
+          },
+          reference,
+          narration: 'Movr driver payout',
+          countryCode: 'GH',
+        });
+      } catch (e: any) {
+        transfer = { success: false, reference, error: e.message };
+      }
+
+      const live = Boolean(
+        process.env.PAYSTACK_SECRET_KEY ||
+          process.env.FLUTTERWAVE_SECRET_KEY ||
+          process.env.PAYSTACK_SECRET ||
+          process.env.FLW_SECRET_KEY
+      );
+      if (!transfer.success && live) {
+        return res.status(400).json({
+          status: 'error',
+          message: transfer.error || 'Payout provider rejected transfer — balance not debited',
+          transfer,
+        });
       }
 
       const payout = await db.query(
@@ -626,7 +583,7 @@ driverRouter.post(
         status: 'success',
         message: transfer.success
           ? 'Withdrawal sent — usually arrives in minutes via MoMo'
-          : 'Withdrawal queued — complete MoMo rail if payout is delayed',
+          : 'Withdrawal queued (demo/offline provider) — ops can retry from Trust Ops',
         data: { ...payout.rows[0], transfer },
       });
     } catch (error: any) {
@@ -705,7 +662,7 @@ driverRouter.get(
           `SELECT multiplier, label FROM driver_surge_zones
            WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1`
         )
-        .catch(() => ({ rows: [{ multiplier: 1.8, label: 'High demand nearby' }] }));
+        .catch(() => ({ rows: [] as any[] }));
 
       const offer = await db
         .query(
@@ -716,16 +673,10 @@ driverRouter.get(
         )
         .catch(() => ({ rows: [] as any[] }));
 
-      let amount = Number(today.rows[0]?.amount || 0);
-      let trips = Number(today.rows[0]?.trips || 0);
-      let hours = Number(presence.rows[0]?.hours || 0);
-      let dvtBal = Number(dvt.rows[0]?.dvt || 0);
-      if (!amount) {
-        amount = 18400;
-        trips = trips || 14;
-        hours = hours || 6.5;
-        dvtBal = dvtBal || 840;
-      }
+      const amount = Number(today.rows[0]?.amount || 0);
+      const trips = Number(today.rows[0]?.trips || 0);
+      const hours = Number(presence.rows[0]?.hours || 0);
+      const dvtBal = Number(dvt.rows[0]?.dvt || 0);
 
       res.json({
         status: 'success',
@@ -734,12 +685,12 @@ driverRouter.get(
           todayEarnings: amount,
           currency: 'NGN',
           trips,
-          onlineHours: hours || 6.5,
+          onlineHours: hours,
           rating: Number(rating.rows[0]?.rating || 4.9),
-          dvt: dvtBal || 840,
+          dvt: dvtBal,
           surge: {
-            multiplier: Number(surge.rows[0]?.multiplier || 1.8),
-            label: surge.rows[0]?.label || 'High demand nearby',
+            multiplier: Number(surge.rows[0]?.multiplier || 1),
+            label: surge.rows[0]?.label || '',
           },
           pendingOfferId: offer.rows[0]?.id || null,
         },
@@ -758,7 +709,7 @@ driverRouter.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const driverId = req.user!.id;
-      let row = await db
+      const row = await db
         .query(
           `SELECT * FROM ride_offers
            WHERE driver_id = $1 AND status = 'pending' AND expires_at > NOW()
@@ -767,46 +718,9 @@ driverRouter.get(
         )
         .catch(() => ({ rows: [] as any[] }));
 
-      if (!row.rows[0]) {
-        // Refresh expired demo offer
-        await db
-          .query(
-            `INSERT INTO ride_offers (
-               driver_id, status, expires_at, pickup_label, dropoff_label,
-               distance_to_pickup_km, trip_distance_km, eta_minutes, earnings,
-               surge_multiplier, surge_bonus, currency_code, dvt_reward
-             ) VALUES ($1,'pending', NOW() + INTERVAL '12 seconds',
-               'Victoria Island, Lagos','Lekki Phase 1, Lagos',
-               0.8, 8.4, 22, 1400, 1.8, 630, 'NGN', 60)`,
-            [driverId]
-          )
-          .catch(() => undefined);
-        row = await db.query(
-          `SELECT * FROM ride_offers WHERE driver_id = $1 AND status = 'pending'
-           ORDER BY created_at DESC LIMIT 1`,
-          [driverId]
-        );
-      }
-
       const o = row.rows[0];
       if (!o) {
-        return res.json({
-          status: 'success',
-          data: {
-            id: 'demo-offer',
-            secondsLeft: 12,
-            pickupKm: 0.8,
-            pickup: 'Victoria Island, Lagos',
-            dropoff: 'Lekki Phase 1, Lagos',
-            distanceKm: 8.4,
-            etaMinutes: 22,
-            earnings: 1400,
-            surgeMultiplier: 1.8,
-            surgeBonus: 630,
-            currency: 'NGN',
-            dvtReward: 60,
-          },
-        });
+        return res.status(404).json({ status: 'error', message: 'No pending offer' });
       }
 
       const secondsLeft = Math.max(
@@ -819,16 +733,16 @@ driverRouter.get(
           id: o.id,
           rideId: o.ride_id,
           secondsLeft,
-          pickupKm: Number(o.distance_to_pickup_km || 0.8),
-          pickup: o.pickup_label,
-          dropoff: o.dropoff_label,
-          distanceKm: Number(o.trip_distance_km || 8.4),
-          etaMinutes: Number(o.eta_minutes || 22),
-          earnings: Number(o.earnings || 1400),
-          surgeMultiplier: Number(o.surge_multiplier || 1.8),
-          surgeBonus: Number(o.surge_bonus || 630),
+          pickupKm: Number(o.distance_to_pickup_km || 0),
+          pickup: o.pickup_label || '',
+          dropoff: o.dropoff_label || '',
+          distanceKm: Number(o.trip_distance_km || 0),
+          etaMinutes: Number(o.eta_minutes || 0),
+          earnings: Number(o.earnings || 0),
+          surgeMultiplier: Number(o.surge_multiplier || 1),
+          surgeBonus: Number(o.surge_bonus || 0),
           currency: o.currency_code || 'NGN',
-          dvtReward: Number(o.dvt_reward || 60),
+          dvtReward: Number(o.dvt_reward || 0),
           expiresAt: o.expires_at,
         },
       });
@@ -857,12 +771,10 @@ driverRouter.post(
         await db
           .query(
             `UPDATE rides SET status = 'accepted', driver_id = $1, updated_at = NOW(),
-               nav_instruction = COALESCE(nav_instruction, 'Turn right onto Ozumba Mbadiwe Ave · 200m'),
-               distance_remaining_km = COALESCE(distance_remaining_km, 1.2),
                driver_earnings = COALESCE(driver_earnings, $3),
                dvt_reward = COALESCE(dvt_reward, $4)
              WHERE id = $2`,
-            [req.user!.id, rideId, Number(offer?.earnings || 1400), Number(offer?.dvt_reward || 60)]
+            [req.user!.id, rideId, Number(offer?.earnings || 0), Number(offer?.dvt_reward || 0)]
           )
           .catch(() => undefined);
       } else if (offer) {
@@ -871,21 +783,19 @@ driverRouter.post(
             `INSERT INTO rides (
                driver_id, status, pickup_address, dropoff_address,
                estimated_fare, earnings, eta_minutes,
-               nav_instruction, nav_distance_m, distance_remaining_km,
                driver_earnings, dvt_reward, surge_multiplier
              ) VALUES (
                $1, 'accepted', $2, $3,
                $4, $4, 4,
-               'Turn right onto Ozumba Mbadiwe Ave · 200m', 200, 1.2,
                $4, $5, $6
              ) RETURNING id`,
             [
               req.user!.id,
-              offer.pickup_label || 'Victoria Island, Lagos',
-              offer.dropoff_label || 'Lekki Phase 1, Lagos',
-              Number(offer.earnings || 1400),
-              Number(offer.dvt_reward || 60),
-              Number(offer.surge_multiplier || 1.8),
+              offer.pickup_label || '',
+              offer.dropoff_label || '',
+              Number(offer.earnings || 0),
+              Number(offer.dvt_reward || 0),
+              Number(offer.surge_multiplier || 1),
             ]
           )
           .catch(() => ({ rows: [] as any[] }));
@@ -940,7 +850,7 @@ driverRouter.get(
         .query(
           `SELECT r.*,
                   TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) AS customer_name,
-                  4.8::float AS customer_rating
+                  0::float AS customer_rating
            FROM rides r
            LEFT JOIN users u ON u.id = r.customer_id
            WHERE r.id = $1`,
@@ -949,31 +859,31 @@ driverRouter.get(
         .catch(() => ({ rows: [] as any[] }));
 
       const r = ride.rows[0] || {};
-      const name = (r.customer_name || '').trim() || 'Kwame Asante';
+      const name = (r.customer_name || '').trim() || 'Rider';
       const initials =
         name
           .split(/\s+/)
           .filter(Boolean)
           .slice(0, 2)
           .map((p: string) => p[0]?.toUpperCase())
-          .join('') || 'KA';
+          .join('') || '?';
       res.json({
         status: 'success',
         data: {
           rideId: req.params.id,
-          instruction: r.nav_instruction || 'Turn right onto Ozumba Mbadiwe Ave · 200m',
-          distanceLeftKm: Number(r.distance_remaining_km ?? 1.2),
-          etaMinutes: Number(r.eta_minutes ?? 4),
-          earnings: Number(r.driver_earnings ?? r.estimated_fare ?? 1400),
-          dvtReward: Number(r.dvt_reward ?? 60),
+          instruction: r.nav_instruction || '',
+          distanceLeftKm: Number(r.distance_remaining_km ?? 0),
+          etaMinutes: Number(r.eta_minutes ?? 0),
+          earnings: Number(r.driver_earnings ?? r.estimated_fare ?? 0),
+          dvtReward: Number(r.dvt_reward ?? 0),
           currency: 'NGN',
           passenger: {
             name,
             initials,
-            rating: Number(r.customer_rating || 4.8),
+            rating: Number(r.customer_rating || 0),
           },
-          pickup: r.pickup_address || 'Victoria Island, Lagos',
-          dropoff: r.dropoff_address || 'Lekki Phase 1, Lagos',
+          pickup: r.pickup_address || '',
+          dropoff: r.dropoff_address || '',
           status: r.status || 'accepted',
         },
       });
@@ -1799,47 +1709,29 @@ rentalsRouter.get('/vehicles', async (req: any, res: Response) => {
        ORDER BY is_popular DESC, daily_rate ASC`,
       [req.query.status || null]
     ).catch(() => ({ rows: [] as any[] }));
-    const data =
-      rows.rows.length > 0
-        ? rows.rows.map((v: any) => ({
-            id: v.id,
-            name: `${v.make} ${v.model}`,
-            make: v.make,
-            model: v.model,
-            category: v.category,
-            seats: Number(v.seats),
-            transmission: v.transmission,
-            color: v.color || 'Silver',
-            meta: `${v.category} · ${v.seats} seats · ${v.transmission}${v.color ? ` · ${v.color}` : ''}`,
-            rating: Number(v.rating || 4.8),
-            available: String(v.availability_status || 'available') === 'available',
-            popular: Boolean(v.is_popular),
-            dailyRate: Number(
-              mode === 'chauffeur' && v.chauffeur_daily_rate != null
-                ? v.chauffeur_daily_rate
-                : v.daily_rate
-            ),
-            insuranceDaily: Number(v.insurance_daily ?? 3000),
-            dvtDiscount: Number(v.dvt_discount_default ?? 2000),
-            currency: v.currency_code || 'NGN',
-            emoji: v.emoji || '🚗',
-          }))
-        : [
-            {
-              id: 'e0000000-0000-4000-8000-000000000002',
-              name: 'Honda CR-V',
-              meta: 'SUV · 5 seats · Auto · Silver',
-              color: 'Silver',
-              rating: 4.9,
-              available: true,
-              popular: true,
-              dailyRate: 45000,
-              insuranceDaily: 3000,
-              dvtDiscount: 2000,
-              currency: 'NGN',
-              emoji: '🚙',
-            },
-          ];
+    const data = rows.rows.map((v: any) => ({
+      id: v.id,
+      name: `${v.make} ${v.model}`,
+      make: v.make,
+      model: v.model,
+      category: v.category,
+      seats: Number(v.seats),
+      transmission: v.transmission,
+      color: v.color || 'Silver',
+      meta: `${v.category} · ${v.seats} seats · ${v.transmission}${v.color ? ` · ${v.color}` : ''}`,
+      rating: Number(v.rating || 0),
+      available: String(v.availability_status || 'available') === 'available',
+      popular: Boolean(v.is_popular),
+      dailyRate: Number(
+        mode === 'chauffeur' && v.chauffeur_daily_rate != null
+          ? v.chauffeur_daily_rate
+          : v.daily_rate
+      ),
+      insuranceDaily: Number(v.insurance_daily ?? 0),
+      dvtDiscount: Number(v.dvt_discount_default ?? 0),
+      currency: v.currency_code || 'NGN',
+      emoji: v.emoji || '🚗',
+    }));
     res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
@@ -1897,14 +1789,14 @@ rentalsRouter.get('/confirm-quote', async (req: any, res: Response) => {
       data: {
         vehicle: {
           id: v?.id || vehicleId,
-          name: v ? `${v.make} ${v.model}` : 'Honda CR-V',
+          name: v ? `${v.make} ${v.model}` : 'Vehicle',
           meta: v
-            ? `${v.category} · ${v.seats} seats · ${v.transmission} · ${v.color || 'Silver'}`
-            : 'SUV · 5 seats · Auto · Silver',
-          rating: Number(v?.rating || 4.9),
+            ? `${v.category} · ${v.seats} seats · ${v.transmission} · ${v.color || ''}`.trim()
+            : '',
+          rating: Number(v?.rating || 0),
           mode: mode === 'chauffeur' ? 'Chauffeur' : 'Self-drive',
           emoji: v?.emoji || '🚙',
-          color: v?.color || 'Silver',
+          color: v?.color || '',
         },
         period: {
           pickupDate: fmtDate(pickupAt),
@@ -1919,7 +1811,7 @@ rentalsRouter.get('/confirm-quote', async (req: any, res: Response) => {
         location: {
           hubId: hub.rows[0]?.id || null,
           title: 'Pickup Location',
-          address: hub.rows[0]?.address || 'Movr Hub, Victoria Island, Lagos',
+          address: hub.rows[0]?.address || '',
         },
         pricing: {
           dailyRate: daily,
@@ -1945,19 +1837,7 @@ rentalsRouter.get('/hubs', async (_req: any, res: Response) => {
     const rows = await db
       .query(`SELECT * FROM rental_hubs WHERE is_active = TRUE ORDER BY is_default DESC`)
       .catch(() => ({ rows: [] as any[] }));
-    res.json({
-      status: 'success',
-      data: rows.rows.length
-        ? rows.rows
-        : [
-            {
-              id: 'default',
-              name: 'Movr Hub',
-              address: 'Movr Hub, Victoria Island, Lagos',
-              is_default: true,
-            },
-          ],
-    });
+    res.json({ status: 'success', data: rows.rows });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }
@@ -2005,10 +1885,7 @@ rentalsRouter.post(
         : await db
             .query(`SELECT * FROM rental_hubs WHERE is_default = TRUE LIMIT 1`)
             .catch(() => ({ rows: [] }));
-      const address =
-        req.body.pickupAddress ||
-        hub.rows[0]?.address ||
-        'Movr Hub, Victoria Island, Lagos';
+      const address = req.body.pickupAddress || hub.rows[0]?.address || '';
 
       const rentalType = mode === 'chauffeur' ? 'chauffeur' : 'self_drive';
 
@@ -2075,7 +1952,7 @@ rentalsRouter.post(
             req.user!.id,
             daily,
             total,
-            req.body.pickupAddress || 'Movr Hub, Victoria Island, Lagos',
+            req.body.pickupAddress || '',
           ]
         );
         res.status(201).json({
@@ -2130,16 +2007,16 @@ rentalsRouter.get(
         .catch(() => ({ rows: [] as any[] }));
 
       const r = row.rows[0];
+      if (!r) {
+        return res.status(404).json({ status: 'error', message: 'No active rental' });
+      }
+
       const now = Date.now();
-      const start = r?.pickup_at
-        ? new Date(r.pickup_at).getTime()
-        : now - 9 * 3600000;
-      const end = r?.return_at
-        ? new Date(r.return_at).getTime()
-        : now + 14 * 3600000 + 32 * 60000;
+      const start = r.pickup_at ? new Date(r.pickup_at).getTime() : now;
+      const end = r.return_at ? new Date(r.return_at).getTime() : now;
       const remainingMs = Math.max(0, end - now);
       const totalMs = Math.max(1, end - start);
-      const elapsedPct = Math.min(100, Math.round(((now - start) / totalMs) * 100));
+      const elapsedPct = Math.min(100, Math.max(0, Math.round(((now - start) / totalMs) * 100)));
       const h = Math.floor(remainingMs / 3600000);
       const m = Math.floor((remainingMs % 3600000) / 60000);
       const s = Math.floor((remainingMs % 60000) / 1000);
@@ -2158,35 +2035,33 @@ rentalsRouter.get(
       res.json({
         status: 'success',
         data: {
-          id: r?.id || 'demo-rental',
+          id: r.id,
           status: 'active',
           statusLabel: 'Active',
           vehicle: {
-            name: r ? `${r.make || 'Honda'} ${r.model || 'CR-V'}` : 'Honda CR-V',
-            plate: r?.plate_number || 'LAG-481-KJ',
-            color: r?.color || 'Silver',
-            rating: Number(r?.rating || 4.9),
-            mode: r?.rental_type === 'chauffeur' ? 'Chauffeur' : 'Self-drive',
-            emoji: r?.emoji || '🚙',
-            meta: `${r?.plate_number || 'LAG-481-KJ'} · ${r?.color || 'Silver'}`,
+            name: `${r.make || ''} ${r.model || ''}`.trim() || 'Vehicle',
+            plate: r.plate_number || '',
+            color: r.color || '',
+            rating: Number(r.rating || 0),
+            mode: r.rental_type === 'chauffeur' ? 'Chauffeur' : 'Self-drive',
+            emoji: r.emoji || '🚙',
+            meta: `${r.plate_number || ''}${r.color ? ` · ${r.color}` : ''}`,
           },
           timeRemaining: `${pad(h)}:${pad(m)}:${pad(s)}`,
           remainingMs,
           returnBy: `Return by ${returnBy.replace(',', ' ·')}`,
           startedLabel: `Started ${startedLabel}`,
-          elapsedPct: Number.isFinite(elapsedPct) ? Math.max(0, elapsedPct) : 38,
+          elapsedPct,
           returnLocation: {
             title: 'Return Location',
-            address: r?.hub_address || r?.return_address || 'Movr Hub, Victoria Island, Lagos',
+            address: r.hub_address || r.return_address || '',
           },
           fuelReminder:
-            r?.fuel_reminder ||
-            r?.vehicle_fuel_reminder ||
+            r.fuel_reminder ||
+            r.vehicle_fuel_reminder ||
             'Return with same fuel level. Charges apply otherwise.',
-          extendDailyRate: Number(
-            r?.extend_daily_rate || r?.vehicle_extend_rate || 22500
-          ),
-          currency: r?.currency || 'NGN',
+          extendDailyRate: Number(r.extend_daily_rate || r.vehicle_extend_rate || 0),
+          currency: r.currency || 'NGN',
           endsAt: new Date(end).toISOString(),
           startsAt: new Date(start).toISOString(),
         },
@@ -2273,17 +2148,20 @@ rentalsRouter.get(
           [req.params.id, req.user!.id]
         )
         .catch(() => ({ rows: [] as any[] }));
-      const r = row.rows[0] || {};
+      const r = row.rows[0];
+      if (!r) {
+        return res.status(404).json({ status: 'error', message: 'Rental not found' });
+      }
       res.json({
         status: 'success',
         data: {
           id: req.params.id,
-          vehicle: r.make ? `${r.make} ${r.model}` : 'Honda CR-V',
-          plate: r.plate_number || 'LAG-481-KJ',
-          dailyRate: Number(r.daily_rate || r.rate_amount || 45000),
-          insurance: Number(r.insurance_fee || 3000),
-          dvtDiscount: Number(r.dvt_discount || 2000),
-          total: Number(r.total_amount || 46000),
+          vehicle: r.make ? `${r.make} ${r.model}` : '',
+          plate: r.plate_number || '',
+          dailyRate: Number(r.daily_rate || r.rate_amount || 0),
+          insurance: Number(r.insurance_fee || 0),
+          dvtDiscount: Number(r.dvt_discount || 0),
+          total: Number(r.total_amount || 0),
           currency: r.currency || 'NGN',
           status: r.status || 'active',
         },

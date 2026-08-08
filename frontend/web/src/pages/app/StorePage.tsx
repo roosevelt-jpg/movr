@@ -3,6 +3,8 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../lib/currency';
+import { mediaUrl } from '../../lib/media';
+import { isMediaVideo } from '../../components/ResponsiveMedia';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -13,7 +15,7 @@ const authHeaders = () => {
   return t ? { Authorization: `Bearer ${t}` } : {};
 };
 
-/** Restaurant menu storefront. */
+/** Restaurant menu storefront — CMS/merchant banners + details. */
 const StorePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -25,8 +27,28 @@ const StorePage: React.FC = () => {
   const [cartTotal, setCartTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [slide, setSlide] = useState(0);
 
   const currency = store?.currency_code || 'NGN';
+
+  const slides = useMemo(() => {
+    const fromCarousel = Array.isArray(store?.banners)
+      ? store.banners.filter((b: any) => b.is_active !== false && b.image_url)
+      : [];
+    if (fromCarousel.length) return fromCarousel.map((b: any) => b.image_url);
+    if (store?.banner_url) return [store.banner_url];
+    return [];
+  }, [store]);
+
+  useEffect(() => {
+    setSlide(0);
+  }, [id, slides.length]);
+
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const t = window.setInterval(() => setSlide((s) => (s + 1) % slides.length), 5000);
+    return () => window.clearInterval(t);
+  }, [slides.length]);
 
   const load = async () => {
     if (!id) {
@@ -108,23 +130,75 @@ const StorePage: React.FC = () => {
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto relative pb-8" data-force-dark>
-      <div className="flex justify-between items-start p-4">
-        <button type="button" onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-zinc-900">
+      <div className="relative">
+        {slides.length ? (
+          <div className="relative w-full aspect-[21/9] max-h-52 overflow-hidden bg-zinc-900">
+            {isMediaVideo(slides[slide]) ? (
+              <video
+                key={slides[slide]}
+                src={mediaUrl(slides[slide])}
+                className="absolute inset-0 h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img
+                key={slides[slide]}
+                src={mediaUrl(slides[slide])}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+            {slides.length > 1 ? (
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+                {slides.map((_: string, i: number) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Slide ${i + 1}`}
+                    onClick={() => setSlide(i)}
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === slide ? 'w-5 bg-white' : 'w-1.5 bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex justify-end p-4">
+            <span className="text-5xl">🍔</span>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="absolute top-4 left-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur z-10"
+        >
           ←
         </button>
-        <span className="text-5xl">🍔</span>
       </div>
-      {loading ? <p className="px-4 text-zinc-400">Loading store…</p> : null}
-      {error ? <p className="px-4 text-red-400">{error}</p> : null}
+
+      {loading ? <p className="px-4 text-zinc-400 mt-4">Loading store…</p> : null}
+      {error ? <p className="px-4 text-red-400 mt-4">{error}</p> : null}
       {store ? (
         <>
-          <h1 className="text-3xl font-extrabold px-4">{store.name}</h1>
+          <h1 className="text-3xl font-extrabold px-4 mt-4">{store.name}</h1>
           <p className="text-zinc-400 px-4 mt-2">
-            {[store.category, store.hours_text || store.hours_json?.label].filter(Boolean).join(' · ')}
+            {[store.category, store.hours_text || store.hours_json?.label, store.address]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
+          {store.description ? (
+            <p className="px-4 mt-3 text-sm text-zinc-300 leading-relaxed">{store.description}</p>
+          ) : null}
           <p className="px-4 mt-2 font-semibold">
-            ★ {Number(store.rating || 0).toFixed(1)} · {store.eta_min_minutes || 0}-{store.eta_max_minutes || 0}{' '}
-            min · Min {formatCurrency(Number(store.min_order_amount || 0), currency)}
+            ★ {Number(store.rating || 0).toFixed(1)} · {store.eta_min_minutes || 0}-
+            {store.eta_max_minutes || 0} min · Min{' '}
+            {formatCurrency(Number(store.min_order_amount || 0), currency)}
           </p>
         </>
       ) : null}
@@ -158,14 +232,24 @@ const StorePage: React.FC = () => {
             >
               <p className="font-bold">{p.name}</p>
               <p className="text-sm text-zinc-400 mt-1">{p.description}</p>
-              <p className="font-bold mt-2">{formatCurrency(Number(p.price || p.base_price || 0), currency)}</p>
+              <p className="font-bold mt-2">
+                {formatCurrency(Number(p.price || p.base_price || 0), currency)}
+              </p>
             </button>
-            <div className="relative w-20 h-20 rounded-xl bg-zinc-900 flex items-center justify-center text-3xl">
-              {p.emoji || '🍽️'}
+            <div className="relative w-20 h-20 rounded-xl bg-zinc-900 overflow-hidden flex items-center justify-center text-3xl shrink-0">
+              {p.images?.[0]?.url || p.image_url ? (
+                <img
+                  src={mediaUrl(p.images?.[0]?.url || p.image_url)}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              ) : (
+                p.emoji || '🍽️'
+              )}
               <button
                 type="button"
-                onClick={() => navigate(`/store/${id}/product/${p.id}`)}
-                className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-full bg-blue-500 font-black"
+                onClick={() => add(p.id, Number(p.price || p.base_price || 0))}
+                className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-full bg-blue-500 font-black z-10"
               >
                 +
               </button>

@@ -130,7 +130,7 @@ export function CmsChoiceHero({
               >
                 {c.imageUrl ? (
                   <img
-                    src={c.imageUrl}
+                    src={mediaUrl(c.imageUrl)}
                     alt=""
                     className="w-full h-28 object-cover rounded-xl mb-4 opacity-90"
                   />
@@ -222,7 +222,7 @@ export function CmsHowItWorks({ payload }: { payload: any }) {
               <p className="mt-3 mkt-muted leading-relaxed">{s.body}</p>
               {s.imageUrl ? (
                 <img
-                  src={s.imageUrl}
+                  src={mediaUrl(s.imageUrl)}
                   alt=""
                   className="mt-5 w-full h-36 object-cover rounded-xl border border-white/10"
                 />
@@ -498,7 +498,7 @@ export function CmsAiShowcase({ payload }: { payload: any }) {
                 <div className="flex gap-3 items-start">
                   {quote.imageUrl ? (
                     <img
-                      src={quote.imageUrl}
+                      src={mediaUrl(quote.imageUrl)}
                       alt=""
                       className="h-14 w-14 rounded-lg object-cover shrink-0"
                     />

@@ -16,7 +16,13 @@ function authHeaders(): Record<string, string> {
 }
 
 /** Customer wallet Withdraw — amount chips, SEND TO methods (mockup). */
-export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
+export default function WithdrawScreen({
+  onBack,
+  onVerify,
+}: {
+  onBack?: () => void;
+  onVerify?: () => void;
+}) {
   const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [amount, setAmount] = useState('');
@@ -59,7 +65,7 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
       setKycMsg('');
       return;
     }
-    fetch(`${API}/trust/kyc-gate?amount=${n}&role=driver`, { headers: authHeaders() })
+    fetch(`${API}/trust/kyc-gate?amount=${n}&role=customer`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data;
@@ -192,9 +198,11 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
 
       {kycMsg ? <Text style={[styles.msg, { color: '#fbbf24' }]}>{kycMsg}</Text> : null}
       {kycMsg ? (
-        <Text style={{ color: '#a78bfa', textAlign: 'center', marginBottom: 8, fontSize: 12 }}>
-          Complete verification in Profile → Safety to unlock large payouts.
-        </Text>
+        <Pressable onPress={onVerify || onBack}>
+          <Text style={{ color: '#a78bfa', textAlign: 'center', marginBottom: 8, fontSize: 12 }}>
+            Complete verification → open Safety / Settlement
+          </Text>
+        </Pressable>
       ) : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 

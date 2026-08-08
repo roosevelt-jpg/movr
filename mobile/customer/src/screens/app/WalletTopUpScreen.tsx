@@ -42,7 +42,7 @@ export default function WalletTopUpScreen({
   const [amount, setAmount] = useState(5000);
   const [custom, setCustom] = useState(false);
   const [customText, setCustomText] = useState('');
-  const [available, setAvailable] = useState(24500);
+  const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [methods, setMethods] = useState<any[]>([
     {

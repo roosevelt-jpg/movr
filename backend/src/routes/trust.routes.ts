@@ -86,6 +86,8 @@ trustRouter.post('/rails', async (req: AuthRequest, res: Response) => {
       accountNumber: req.body.accountNumber,
       accountMask: req.body.accountMask,
       isDefault: req.body.isDefault,
+      bankCode: req.body.bankCode || req.body.bank_code,
+      metadata: req.body.metadata,
     });
     res.status(201).json({ status: 'success', data: row });
   } catch (error: any) {
@@ -199,7 +201,9 @@ trustRouter.post('/share-trip', async (req: AuthRequest, res: Response) => {
 trustRouter.get('/kyc-gate', async (req: AuthRequest, res: Response) => {
   try {
     const amount = Number(req.query.amount || 0);
-    const role = String(req.query.role || 'driver') === 'merchant' ? 'merchant' : 'driver';
+    const roleRaw = String(req.query.role || 'customer').toLowerCase();
+    const role =
+      roleRaw === 'merchant' ? 'merchant' : roleRaw === 'driver' ? 'driver' : 'customer';
     try {
       const data = await trust.assertKycForPayout(req.user!.id, amount, role);
       res.json({ status: 'success', data: { ...data, allowed: true } });
@@ -288,6 +292,17 @@ trustAdminRouter.post('/cash-agent/confirm', async (req: AuthRequest, res: Respo
     const data = await trust.confirmCashAgentCode(String(req.body.code || ''), {
       agentPhone: req.body.agentPhone || 'ops',
     });
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+trustAdminRouter.post('/payouts/retry', async (_req: AuthRequest, res: Response) => {
+  try {
+    const { PaymentService } = require('../services/payment.service');
+    const payments = new PaymentService(db);
+    const data = await trust.retryPendingPayouts(payments);
     res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });

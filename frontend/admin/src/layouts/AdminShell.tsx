@@ -24,10 +24,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Ride Management', to: '/rides' },
       { label: 'Dispatcher', to: '/dispatch' },
+      { label: 'AI Support', to: '/ai-support' },
       { label: 'Trust & Settlement', to: '/trust' },
       { label: 'Deliveries', to: '/orders' },
       { label: 'Rentals', to: '/vehicles' },
       { label: 'Broadcasts', to: '/broadcasts' },
+      { label: 'Channels', to: '/channels' },
     ],
   },
   {

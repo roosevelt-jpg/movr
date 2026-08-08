@@ -22,7 +22,7 @@ function authHeaders() {
 export default function ProfileSetupPage() {
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('Kwame');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
   const [loading, setLoading] = useState(false);

@@ -78,7 +78,7 @@ export default function PaymentMethodsScreen({
           <View style={styles.visaBottom}>
             <View>
               <Text style={styles.visaLab}>CARD HOLDER</Text>
-              <Text style={styles.visaVal}>{defaultCard.cardholderName || 'Kwame Asante'}</Text>
+              <Text style={styles.visaVal}>{defaultCard.cardholderName || '—'}</Text>
             </View>
             <View>
               <Text style={styles.visaLab}>EXPIRES</Text>

@@ -68,7 +68,7 @@ export default function PaymentMethodsPage() {
           <div className="flex justify-between text-sm">
             <div>
               <p className="text-[10px] text-zinc-400 font-bold">CARD HOLDER</p>
-              <p className="font-bold mt-1">{defaultCard.cardholderName || 'Kwame Asante'}</p>
+              <p className="font-bold mt-1">{defaultCard.cardholderName || '—'}</p>
             </div>
             <div>
               <p className="text-[10px] text-zinc-400 font-bold">EXPIRES</p>

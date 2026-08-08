@@ -66,7 +66,7 @@ export default function MerchantReturnsScreen({ onBack }: { onBack?: () => void 
               <Pressable style={styles.btn} onPress={() => patch(r.id, 'approved')}>
                 <Text style={styles.btnText}>Approve</Text>
               </Pressable>
-              <Pressable style={[styles.btn, styles.deny]} onPress={() => patch(r.id, 'rejected')}>
+              <Pressable style={[styles.btn, styles.deny]} onPress={() => patch(r.id, 'denied')}>
                 <Text style={styles.btnText}>Reject</Text>
               </Pressable>
             </View>

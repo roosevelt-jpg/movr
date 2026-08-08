@@ -1,4 +1,5 @@
 import React from 'react';
+import { mediaUrl } from '../lib/media';
 
 /** Shared background image/video for CMS marketing sections. */
 export function CmsMediaBackdrop({
@@ -19,19 +20,15 @@ export function CmsMediaBackdrop({
   imageOpacity?: number;
   overlayOpacity?: number;
 }) {
-  const video = videoUrl || (imageUrl && /\.(mp4|webm|mov)(\?|$)/i.test(imageUrl) ? imageUrl : '');
-  const image = video ? '' : imageUrl;
+  const rawVideo =
+    videoUrl || (imageUrl && /\.(mp4|webm|mov)(\?|$)/i.test(imageUrl) ? imageUrl : '');
+  const video = rawVideo ? mediaUrl(rawVideo) : '';
+  const image = video ? '' : imageUrl ? mediaUrl(imageUrl) : '';
   if (!video && !image) return null;
 
   const photo = intensity === 'photo';
-  const imgPct = clampPct(
-    imageOpacity,
-    photo ? 65 : 40
-  );
-  const overlayPct = clampPct(
-    overlayOpacity,
-    photo ? 55 : 70
-  );
+  const imgPct = clampPct(imageOpacity, photo ? 65 : 40);
+  const overlayPct = clampPct(overlayOpacity, photo ? 55 : 70);
 
   return (
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className}`} aria-hidden>
@@ -55,7 +52,6 @@ export function CmsMediaBackdrop({
         className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black"
         style={{ opacity: overlayPct / 100 }}
       />
-      {/* Brand signature — purple → electric blue rail */}
       <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-[#6A00FF] via-[#0055FF] to-[#3F7048]" />
     </div>
   );

@@ -1,4 +1,3 @@
-import path from 'path';
 import multer from 'multer';
 import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken, requireRole } from '../middleware/auth.middleware';
@@ -8,6 +7,7 @@ import {
   assetUrlFromMulterFile,
   multerAssetStorage,
 } from '../utils/asset-storage';
+import { processUploadedMedia } from '../utils/media-process';
 
 const ALLOWED = new Set([
   'image/jpeg',
@@ -43,7 +43,18 @@ function fileFromRequest(req: AuthRequest) {
   return (req as any).file as Express.Multer.File | undefined;
 }
 
-/** POST /api/v1/uploads — authenticated direct file upload → backend/assets/{images|videos|documents} */
+function purposeFromRequest(req: AuthRequest) {
+  return (
+    (req.query.purpose as string) ||
+    (req.body && (req.body.purpose as string)) ||
+    undefined
+  );
+}
+
+/** POST /api/v1/uploads — authenticated direct file upload → backend/assets/{images|videos|documents}
+ *  Images/videos are auto-resized. Optional multipart/query field `purpose`:
+ *  banner|hero|card|product|avatar|default
+ */
 uploadsRouter.post(
   '/',
   authenticateToken,
@@ -55,16 +66,20 @@ uploadsRouter.post(
       if (!file) {
         return res.status(400).json({ status: 'error', message: 'file is required (multipart)' });
       }
-      const url = assetUrlFromMulterFile(file);
-      const rel = path.relative(ASSETS_ROOT, file.path).split(path.sep).join('/');
+      const processed = await processUploadedMedia(file, ASSETS_ROOT, purposeFromRequest(req));
       res.status(201).json({
         status: 'success',
         data: {
-          url,
-          path: rel,
-          filename: file.filename,
-          size: file.size,
-          mimeType: file.mimetype,
+          url: processed.url,
+          path: processed.relativePath,
+          filename: processed.filename,
+          size: processed.size,
+          mimeType: processed.mimeType,
+          width: processed.width,
+          height: processed.height,
+          variants: processed.variants,
+          processed: processed.processed,
+          note: processed.note,
         },
       });
     } catch (error: any) {
@@ -87,14 +102,22 @@ uploadsRouter.post(
       if (!String(file.mimetype).startsWith('image/')) {
         return res.status(400).json({ status: 'error', message: 'Avatar must be an image' });
       }
-      const url = assetUrlFromMulterFile(file);
+      const processed = await processUploadedMedia(file, ASSETS_ROOT, 'avatar');
+      const url = processed.url || assetUrlFromMulterFile(file);
       await db.query(`UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [
         url,
         req.user!.id,
       ]);
       res.status(201).json({
         status: 'success',
-        data: { avatarUrl: url, url },
+        data: {
+          avatarUrl: url,
+          url,
+          width: processed.width,
+          height: processed.height,
+          variants: processed.variants,
+          processed: processed.processed,
+        },
       });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

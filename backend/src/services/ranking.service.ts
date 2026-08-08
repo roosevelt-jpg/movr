@@ -45,7 +45,7 @@ export class RankingService {
   async topStores(limit = 10): Promise<RankedEntity[]> {
     await this.scoreStores(Math.max(limit * 3, 50)).catch(() => undefined);
     const rows = await this.db.query(
-      `SELECT s.id, s.name, s.category, s.rating, s.review_count, s.image_url,
+       `SELECT s.id, s.name, s.category, s.rating, s.review_count, s.image_url, s.banner_url,
               COALESCE(q.score, COALESCE(s.rating, 0) * 20) AS score,
               COALESCE(q.rating_component, 0) AS rating_component,
               COALESCE(q.activity_component, 0) AS activity_component,
@@ -75,7 +75,8 @@ export class RankingService {
         reviewCount: Number(r.review_count || 0),
         responseScore: Number(r.response_score || 0),
         serviceScore: Number(r.service_score || 0),
-        imageUrl: r.image_url,
+        imageUrl: r.banner_url || r.image_url,
+        bannerUrl: r.banner_url || r.image_url,
       },
     }));
   }

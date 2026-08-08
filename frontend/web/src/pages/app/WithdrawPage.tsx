@@ -20,9 +20,9 @@ function authHeaders() {
 
 /** Customer Withdraw — amount chips + SEND TO (mockup). */
 const WithdrawPage: React.FC = () => {
-  const [available, setAvailable] = useState(18400);
+  const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState('NGN');
-  const [amount, setAmount] = useState('10000');
+  const [amount, setAmount] = useState('');
   const [minAmount, setMinAmount] = useState(500);
   const [feeLabel, setFeeLabel] = useState('Free');
   const [chips, setChips] = useState([2000, 5000, 10000]);
@@ -38,7 +38,7 @@ const WithdrawPage: React.FC = () => {
       .then((j) => {
         const d = j?.data;
         if (!d) return;
-        setAvailable(Number(d.available || 18400));
+        setAvailable(Number(d.available ?? 0));
         setCurrency(d.currency || 'NGN');
         setMinAmount(Number(d.minAmount || 500));
         setFeeLabel(d.feeLabel || 'Free');
@@ -57,7 +57,7 @@ const WithdrawPage: React.FC = () => {
       setKycMsg('');
       return;
     }
-    fetch(`${API}/trust/kyc-gate?amount=${amt}&role=driver`, { headers: authHeaders() })
+    fetch(`${API}/trust/kyc-gate?amount=${amt}&role=customer`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data;
@@ -154,18 +154,15 @@ const WithdrawPage: React.FC = () => {
 
       <p className="text-xs font-bold tracking-wider text-zinc-500 mb-2">SEND TO</p>
       <div className="space-y-2 mb-6">
-        {(methods.length
-          ? methods
-          : [
-              {
-                id: 'visa',
-                type: 'card',
-                title: 'VISA •••• 4821',
-                subtitle: 'Instant · Kwame Asante',
-              },
-              { id: 'momo', type: 'momo', title: 'MTN MoMo', subtitle: '+234 801 234 5678' },
-            ]
-        ).map((m) => (
+        {!methods.length ? (
+          <p className="text-sm text-zinc-500">
+            No payout methods yet.{' '}
+            <Link to="/wallet/payment-methods" className="text-purple-400 underline">
+              Add one
+            </Link>
+          </p>
+        ) : (
+          methods.map((m) => (
           <button
             key={m.id}
             type="button"
@@ -187,15 +184,20 @@ const WithdrawPage: React.FC = () => {
               {methodId === m.id ? '✓' : ''}
             </span>
           </button>
-        ))}
+          ))
+        )}
       </div>
 
       {kycMsg ? <p className="text-center text-amber-400 mb-3 text-sm">{kycMsg}</p> : null}
       {kycMsg ? (
         <p className="text-center text-xs text-zinc-500 mb-3">
           Complete verification to unlock large payouts →{' '}
+          <Link to="/wallet/settlement" className="text-violet-400 font-semibold">
+            Settlement / verify profile
+          </Link>
+          {' · '}
           <Link to="/safety" className="text-violet-400 font-semibold">
-            Safety / verify
+            Safety Center
           </Link>
         </p>
       ) : null}

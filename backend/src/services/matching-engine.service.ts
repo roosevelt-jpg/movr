@@ -340,12 +340,34 @@ export class MatchingEngineService {
               return {
                 ...row,
                 priorityWeight,
+                qualityBoost: 0,
                 matchScore:
                   Number(row.avg_rating || 5) * priorityWeight -
                   Number(row.distance_m || 0) / 10000,
               };
             })
           );
+          // Bounded quality-score boost from entity_quality_scores (AI ranking)
+          try {
+            const ids = scored.map((s: any) => s.id).filter(Boolean);
+            if (ids.length) {
+              const qs = await this.db.query(
+                `SELECT entity_id, score FROM entity_quality_scores
+                 WHERE entity_type = 'driver' AND entity_id = ANY($1::uuid[])`,
+                [ids]
+              );
+              const byId = new Map(qs.rows.map((r: any) => [r.entity_id, Number(r.score || 0)]));
+              for (const s of scored) {
+                const q = byId.get(s.id) || 0;
+                // Cap boost at +1.5 so distance/rating remain primary
+                const boost = Math.min(1.5, q / 40);
+                s.qualityBoost = boost;
+                s.matchScore = Number(s.matchScore || 0) + boost;
+              }
+            }
+          } catch {
+            /* quality table may be empty */
+          }
           scored.sort((a, b) => b.matchScore - a.matchScore);
           try {
             if (this.redis?.set) await this.redis.set(cacheKey, scored, 8);

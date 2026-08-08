@@ -281,6 +281,7 @@ const {
 app.use('/api/v1/rides', rideBookingRouter);
 app.use('/api/v1/voice', voiceRouter);
   app.use('/api/v1/ai', require('./routes/ai.routes').aiRouter);
+  app.use('/api/v1/admin/ai', require('./routes/ai.routes').aiAdminRouter);
   app.use('/webhooks', channelWebhooksRouter);
 app.use('/api/v1/admin', adminVehicleRouter);
 app.use('/api/v1/admin/channels', adminChannelsRouter);
@@ -980,58 +981,6 @@ app.get('/api/v1/notifications', authenticateToken, async (req: AuthRequest, res
       };
     }
 
-    if (!rows.rows.length) {
-      rows = {
-        rows: [
-          {
-            id: 'demo-1',
-            title: '240 DVT tokens earned!',
-            body: 'Your ride to Lekki earned you 240 DVT. Claim now.',
-            is_read: false,
-            category: 'tokens',
-            icon_key: 'dvt',
-            created_at: new Date(Date.now() - 2 * 60000).toISOString(),
-          },
-          {
-            id: 'demo-2',
-            title: 'Your order is on its way!',
-            body: 'Tunde is headed to you. ~8 min arrival.',
-            is_read: false,
-            category: 'orders',
-            icon_key: 'order',
-            created_at: new Date(Date.now() - 18 * 60000).toISOString(),
-          },
-          {
-            id: 'demo-3',
-            title: 'Ride completed',
-            body: 'You paid ₦1,200 for your ride to Victoria Island.',
-            is_read: true,
-            category: 'rides',
-            icon_key: 'ride',
-            created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-          },
-          {
-            id: 'demo-4',
-            title: 'New promo available',
-            body: 'Get 20% off your first Grocery order. MOVRGRO20',
-            is_read: true,
-            category: 'promo',
-            icon_key: 'promo',
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-          },
-          {
-            id: 'demo-5',
-            title: 'Rate your last order',
-            body: 'How was your ShopRite delivery?',
-            is_read: true,
-            category: 'orders',
-            icon_key: 'rating',
-            created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-          },
-        ],
-      };
-    }
-
     res.json({
       status: 'success',
       data: rows.rows.map((n: any) => ({
@@ -1109,7 +1058,10 @@ app.get('/api/v1/users/me/profile', authenticateToken, async (req: AuthRequest, 
       )
       .catch(() => ({ rows: [{ c: 0 }] }));
     const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Traveler';
-    const initials = `${(u.first_name || 'K')[0]}${(u.last_name || 'A')[0]}`.toUpperCase();
+    const initials =
+      u.first_name || u.last_name
+        ? `${(u.first_name || '')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase() || '?'
+        : '?';
     res.json({
       status: 'success',
       data: {
@@ -1125,11 +1077,11 @@ app.get('/api/v1/users/me/profile', authenticateToken, async (req: AuthRequest, 
         onboardingStep: Number(u.onboarding_step || 1),
         phoneVerifiedAt: u.phone_verified_at || null,
         stats: {
-          rides: Number(rides.rows[0]?.c || 47),
-          rating: Number(rides.rows[0]?.rating || 4.9) || 4.9,
-          points: Number(points.rows[0]?.points || 850),
+          rides: Number(rides.rows[0]?.c || 0),
+          rating: Number(rides.rows[0]?.rating || 0),
+          points: Number(points.rows[0]?.points || 0),
         },
-        unreadNotifications: Number(unread.rows[0]?.c || 3),
+        unreadNotifications: Number(unread.rows[0]?.c || 0),
       },
     });
   } catch (error: any) {
@@ -1191,7 +1143,7 @@ app.get('/api/v1/rides/:id/receipt', authenticateToken, async (req: AuthRequest,
     const id = req.params.id;
     const shape = (raw: any) => {
       const paidAt = raw.paid_at || raw.paidAt || raw.completed_at || raw.created_at;
-      let when = 'Apr 8, 2026 · 9:12 AM';
+      let when = '';
       if (paidAt) {
         const d = new Date(paidAt);
         if (!Number.isNaN(d.getTime())) {
@@ -1206,31 +1158,31 @@ app.get('/api/v1/rides/:id/receipt', authenticateToken, async (req: AuthRequest,
       }
       return {
         rideId: id,
-        txnRef: raw.txn_ref || raw.txnRef || raw.public_ref || 'MVR-TXN-48219',
+        txnRef: raw.txn_ref || raw.txnRef || raw.public_ref || '',
         service: raw.service_label || raw.service || 'Standard Ride',
-        driverName: raw.driver_name || raw.driverName || 'Emeka Okafor',
-        from: raw.pickup_label || raw.from || raw.pickup_address || 'Victoria Island',
-        to: raw.destination_label || raw.destination || raw.dropoff_address || 'Lekki Phase 1',
-        destination: raw.destination_label || raw.destination || raw.dropoff_address || 'Lekki Phase 1',
-        durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 18),
-        distanceKm: Number(raw.distance_km ?? raw.distanceKm ?? 8.4),
-        distanceLabel: `${Number(raw.distance_km ?? raw.distanceKm ?? 8.4)} km · ${Number(
-          raw.duration_minutes ?? raw.durationMinutes ?? 18
+        driverName: raw.driver_name || raw.driverName || 'Unknown',
+        from: raw.pickup_label || raw.from || raw.pickup_address || '',
+        to: raw.destination_label || raw.destination || raw.dropoff_address || '',
+        destination: raw.destination_label || raw.destination || raw.dropoff_address || '',
+        durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+        distanceKm: Number(raw.distance_km ?? raw.distanceKm ?? 0),
+        distanceLabel: `${Number(raw.distance_km ?? raw.distanceKm ?? 0)} km · ${Number(
+          raw.duration_minutes ?? raw.durationMinutes ?? 0
         )} min`,
-        baseFare: Number(raw.base_fare ?? raw.baseFare ?? 900),
-        distanceFare: Number(raw.distance_fare ?? raw.distanceFare ?? 360),
-        dvtDiscount: Number(raw.dvt_discount ?? raw.dvtDiscount ?? 60),
-        totalPaid: Number(raw.total_paid ?? raw.totalPaid ?? raw.actual_fare ?? 1200),
-        dvtEarned: Number(raw.dvt_earned ?? raw.dvtEarned ?? 120),
+        baseFare: Number(raw.base_fare ?? raw.baseFare ?? 0),
+        distanceFare: Number(raw.distance_fare ?? raw.distanceFare ?? 0),
+        dvtDiscount: Number(raw.dvt_discount ?? raw.dvtDiscount ?? 0),
+        totalPaid: Number(raw.total_paid ?? raw.totalPaid ?? raw.actual_fare ?? 0),
+        dvtEarned: Number(raw.dvt_earned ?? raw.dvtEarned ?? 0),
         paymentMethod: raw.payment_method || raw.paymentMethod || 'Movr Wallet',
         currency: raw.currency_code || raw.currency || 'NGN',
         paidAt: paidAt || null,
         paidAtLabel: when,
         statusLabel: 'Payment Successful',
-        driverFirstName: String(raw.driver_name || raw.driverName || 'Emeka').split(' ')[0],
+        driverFirstName: String(raw.driver_name || raw.driverName || 'Unknown').split(' ')[0],
         /** Movr model: zero take-rate on the fare */
         platformFee: 0,
-        driverKeeps: Number(raw.total_paid ?? raw.totalPaid ?? raw.actual_fare ?? 1200),
+        driverKeeps: Number(raw.total_paid ?? raw.totalPaid ?? raw.actual_fare ?? 0),
         driverKeepsLabel: 'Driver keeps 100% of this fare',
         fairFareNote: 'No commission on this trip — Movr is funded by driver subscriptions, not your fare.',
       };
@@ -1261,32 +1213,13 @@ app.get('/api/v1/rides/:id/receipt', authenticateToken, async (req: AuthRequest,
 
     const row = byRef.rows?.[0];
     if (!row) {
-      return res.json({
-        status: 'success',
-        data: shape({
-          txn_ref: 'MVR-TXN-48219',
-          service_label: 'Standard Ride',
-          driver_name: 'Emeka Okafor',
-          pickup_label: 'Victoria Island',
-          destination_label: 'Lekki Phase 1',
-          duration_minutes: 18,
-          distance_km: 8.4,
-          base_fare: 900,
-          distance_fare: 360,
-          dvt_discount: 60,
-          total_paid: 1200,
-          dvt_earned: 120,
-          payment_method: 'Movr Wallet',
-          currency_code: 'NGN',
-          paid_at: '2026-04-08T09:12:00.000Z',
-        }),
-      });
+      return res.status(404).json({ status: 'error', message: 'Receipt not found' });
     }
 
     const data = shape({
       txn_ref: row.txn_ref || row.public_ref || `MVR-TXN-${String(id).slice(-5).toUpperCase()}`,
       service_label: row.rr_service || row.service_label || 'Standard Ride',
-      driver_name: row.driver_name || row.driver_full || 'Emeka Okafor',
+      driver_name: row.driver_name || row.driver_full || 'Unknown',
       pickup_label: row.pickup_label || row.pickup_address,
       destination_label: row.destination_label || row.dropoff_address,
       duration_minutes: row.duration_minutes,
@@ -2547,7 +2480,7 @@ app.get('/api/v1/me/home-dashboard', authenticateToken, async (req: AuthRequest,
          FROM wallets WHERE user_id = $1`,
         [uid]
       )
-      .catch(() => ({ rows: [{ balance: 24500, points: 850, tokens: 2400, currency: 'NGN' }] }));
+      .catch(() => ({ rows: [{ balance: 0, points: 0, tokens: 0, currency: 'NGN' }] }));
     const tokens = await authDb
       .query(
         `SELECT COALESCE(balance_pending,0)+COALESCE(balance_onchain,0)::float AS tokens
@@ -2587,18 +2520,22 @@ app.get('/api/v1/me/home-dashboard', authenticateToken, async (req: AuthRequest,
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     const w = wallet.rows[0] || {};
-    const dvt = Number(tokens.rows[0]?.tokens ?? w.tokens ?? 2400);
+    const dvt = Number(tokens.rows[0]?.tokens ?? w.tokens ?? 0);
+    const initials =
+      u.first_name || u.last_name
+        ? `${(u.first_name || '')[0] || ''}${(u.last_name || '')[0] || ''}`.toUpperCase() || '?'
+        : '?';
     res.json({
       status: 'success',
       data: {
         greeting,
         name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Traveler',
-        initials: `${(u.first_name || 'K')[0]}${(u.last_name || 'A')[0]}`.toUpperCase(),
+        initials,
         avatarUrl: u.avatar_url || null,
         location: {
-          label: u.home_address || u.city || 'Victoria Island, Lagos',
-          lat: Number(u.home_lat || 6.4281),
-          lng: Number(u.home_lng || 3.4219),
+          label: u.home_address || [u.city, u.country].filter(Boolean).join(', ') || 'Set your location',
+          lat: u.home_lat != null ? Number(u.home_lat) : null,
+          lng: u.home_lng != null ? Number(u.home_lng) : null,
         },
         wallet: {
           balance: Number(w.balance || 0),
@@ -2612,25 +2549,7 @@ app.get('/api/v1/me/home-dashboard', authenticateToken, async (req: AuthRequest,
           { id: 'deliver', label: 'Deliver', icon: 'box' },
           { id: 'rental', label: 'Rental', icon: 'key' },
         ],
-        recent:
-          recent.length > 0
-            ? recent
-            : [
-                {
-                  id: 'demo-1',
-                  kind: 'ride',
-                  title: 'Ride to Lekki',
-                  amount: 1200,
-                  at: new Date().toISOString(),
-                },
-                {
-                  id: 'demo-2',
-                  kind: 'deliver',
-                  title: 'Package Delivery',
-                  amount: 800,
-                  at: new Date(Date.now() - 86400000).toISOString(),
-                },
-              ],
+        recent,
       },
     });
   } catch (error: any) {

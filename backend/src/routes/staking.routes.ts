@@ -21,7 +21,7 @@ publicStakingRouter.get('/stats', async (_req: Request, res: Response) => {
 publicStakingRouter.get('/positions', async (req: Request, res: Response) => {
   try {
     const wallet = req.query.wallet ? String(req.query.wallet) : undefined;
-    const data = await staking.demoPositions(wallet);
+    const data = await staking.portfolioSummary(undefined, wallet);
     res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });

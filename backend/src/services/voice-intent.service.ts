@@ -23,7 +23,8 @@ export class VoiceIntentService {
   }
 
   async transcribeAudio(audioBuffer: Buffer, mimeType = 'audio/webm'): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const { resolveOpenAiApiKey } = require('../utils/openai-credentials');
+    const apiKey = await resolveOpenAiApiKey(this.db);
     if (!apiKey) {
       this.logger.warn('OPENAI_API_KEY missing — returning empty transcript');
       return '';
@@ -50,7 +51,9 @@ export class VoiceIntentService {
   }
 
   async extractTripIntent(utterance: string, userId?: string): Promise<TripIntent> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const { resolveOpenAiApiKey, resolveOpenAiModel } = require('../utils/openai-credentials');
+    const apiKey = await resolveOpenAiApiKey(this.db);
+    const model = await resolveOpenAiModel(this.db);
     let intent: TripIntent = {
       origin: null,
       destination: null,
@@ -63,7 +66,7 @@ export class VoiceIntentService {
         const response = await axios.post(
           'https://api.openai.com/v1/chat/completions',
           {
-            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            model,
             response_format: { type: 'json_object' },
             messages: [
               {

@@ -37,6 +37,7 @@ const TOPIC_ICON: Record<string, string> = {
 export default function HelpCentreScreen({
   onOpenCategory,
   onOpenSupport,
+  onOpenAi,
   onBack,
 }: {
   onOpenCategory?: (slug: string) => void;
@@ -123,6 +124,26 @@ export default function HelpCentreScreen({
       </View>
       <Text style={styles.title}>Help Center</Text>
       <Text style={styles.sub}>How can we help you today?</Text>
+
+      {onOpenAi ? (
+        <Pressable
+          onPress={onOpenAi}
+          style={{
+            marginHorizontal: spacing[4],
+            marginTop: 12,
+            backgroundColor: '#1a1228',
+            borderRadius: 14,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: '#4c1d95',
+          }}
+        >
+          <Text style={{ color: '#e9d5ff', fontWeight: '800' }}>✦ Ask Movr AI</Text>
+          <Text style={{ color: '#a78bfa', marginTop: 4, fontSize: 12 }}>
+            Rides, rates, stores — or escalate to a human
+          </Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.searchBox}>
         <Text style={styles.searchIcon}>🔍</Text>

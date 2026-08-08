@@ -13,3 +13,8 @@ export function mediaUrl(url?: string | null): string {
   }
   return url;
 }
+
+export function isMediaVideo(url?: string | null): boolean {
+  if (!url) return false;
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url) || url.includes('/videos/');
+}

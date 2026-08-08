@@ -34,7 +34,7 @@ type Msg =
 /**
  * WhatsApp-style channel booking chat — voice parse/confirm APIs.
  */
-export default function WhatsAppConversationScreen() {
+export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => void }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
@@ -212,6 +212,11 @@ export default function WhatsAppConversationScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {onBack ? (
+        <Pressable onPress={onBack} style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+          <Text style={{ color: '#a78bfa', fontWeight: '700' }}>← Back</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.header}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>M</Text>

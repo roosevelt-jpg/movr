@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import {
   AuthRequest,
   authenticateToken,
@@ -15,12 +16,14 @@ import { IvrBookingService } from '../services/ivr-booking.service';
 import { RedisService } from '../services/redis.service';
 import getLogger from '../utils/logger';
 import { assertDirectUploadUrl } from '../utils/media-url';
+import { FeatureFlagsService } from '../services/feature-flags.service';
 
 const db = new DatabaseService();
 const matching = new MatchingEngineService(db, null, { broadcastToDrivers: () => undefined } as any);
 const booking = new RideBookingService(db, matching);
 const voice = new VoiceIntentService(db);
 const localization = new LocalizationService(db);
+const flags = new FeatureFlagsService(db);
 let redis: RedisService | null = null;
 try {
   redis = new RedisService();
@@ -35,6 +38,31 @@ export const voiceRouter = Router();
 export const channelWebhooksRouter = Router();
 export const adminVehicleRouter = Router();
 export const adminChannelsRouter = Router();
+
+/** Fail-open when flag row is missing; gate when voice_booking is explicitly off. */
+async function voiceBookingAllowed(userId?: string): Promise<boolean> {
+  try {
+    const row = await db.query(`SELECT enabled FROM feature_flags WHERE key = 'voice_booking' LIMIT 1`);
+    if (!row.rows[0]) return true;
+    return flags.isEnabled('voice_booking', userId);
+  } catch {
+    return true;
+  }
+}
+
+function optionalAuthVoice(req: AuthRequest, _res: Response, next: () => void) {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return next();
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err: any, user: any) => {
+      if (!err && user) req.user = user;
+      next();
+    });
+  } catch {
+    next();
+  }
+}
 
 async function rateLimitPhone(phone: string, channel: string, opts?: { skip?: boolean }) {
   if (opts?.skip) return;
@@ -96,15 +124,22 @@ rideBookingRouter.post('/estimate', async (req: any, res: Response) => {
 });
 
 // --- Voice (Phase 23) ---
-voiceRouter.post('/parse-intent', async (req: AuthRequest, res: Response) => {
+voiceRouter.post('/parse-intent', optionalAuthVoice, async (req: AuthRequest, res: Response) => {
   try {
+    if (!(await voiceBookingAllowed(req.user?.id))) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'feature_disabled',
+        message: 'Voice booking is not enabled for your account yet',
+      });
+    }
     let utterance = req.body.text || '';
     if (!utterance && req.body.audioBase64) {
       const buf = Buffer.from(req.body.audioBase64, 'base64');
       utterance = await voice.transcribeAudio(buf, req.body.mimeType || 'audio/webm');
     }
 
-    const intent = await voice.extractTripIntent(utterance, req.user!.id);
+    const intent = await voice.extractTripIntent(utterance, req.user?.id);
     if (!intent.destination || intent.confidence < 0.45) {
       return res.json({
         status: 'success',
@@ -158,6 +193,13 @@ voiceRouter.post('/parse-intent', async (req: AuthRequest, res: Response) => {
 
 voiceRouter.post('/confirm', authenticateToken, requireCustomer, async (req: AuthRequest, res: Response) => {
   try {
+    if (!(await voiceBookingAllowed(req.user!.id))) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'feature_disabled',
+        message: 'Voice booking is not enabled for your account yet',
+      });
+    }
     if (req.body.spoken) {
       const ok = await voice.confirmIntent(req.body.spoken);
       if (!ok) {

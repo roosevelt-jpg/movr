@@ -35,14 +35,14 @@ const ProfilePage: React.FC = () => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [name, setName] = useState(
-    user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Kwame Asante' : 'Kwame Asante'
+    user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Traveler' : 'Traveler'
   );
-  const [initials, setInitials] = useState('KA');
-  const [phone, setPhone] = useState(user?.phone || '+234 801 234 5678');
-  const [rides, setRides] = useState(47);
-  const [rating, setRating] = useState(4.9);
-  const [points, setPoints] = useState(850);
-  const [unread, setUnread] = useState(3);
+  const [initials, setInitials] = useState('?');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [rides, setRides] = useState(0);
+  const [rating, setRating] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     fetch(`${API}/users/me/profile`, { headers: authHeaders() })
@@ -54,9 +54,9 @@ const ProfilePage: React.FC = () => {
         if (u.initials) setInitials(u.initials);
         if (u.phone) setPhone(u.phone);
         if (u.stats) {
-          setRides(Number(u.stats.rides ?? 47));
-          setRating(Number(u.stats.rating ?? 4.9));
-          setPoints(Number(u.stats.points ?? 850));
+          setRides(Number(u.stats.rides ?? 0));
+          setRating(Number(u.stats.rating ?? 0));
+          setPoints(Number(u.stats.points ?? 0));
         }
         if (u.unreadNotifications != null) setUnread(Number(u.unreadNotifications));
       })

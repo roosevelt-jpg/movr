@@ -133,7 +133,7 @@ customerExtrasRouter.get('/explore', authenticateToken, async (req: AuthRequest,
     const q = String(req.query.q || '').trim().toLowerCase();
     const filter = String(req.query.filter || 'all').toLowerCase();
 
-    let merchants = await db
+    const merchants = await db
       .query(
         `SELECT id, store_id, name, category, emoji, rating, distance_km, filter_tags
          FROM explore_merchants
@@ -141,17 +141,6 @@ customerExtrasRouter.get('/explore', authenticateToken, async (req: AuthRequest,
          ORDER BY sort_order, distance_km`
       )
       .catch(() => ({ rows: [] as any[] }));
-
-    if (!merchants.rows.length) {
-      merchants = {
-        rows: [
-          { id: '1', name: 'Chicken Republic', category: 'Fast Food', emoji: '🍔', rating: 4.8, distance_km: 1.2, store_id: 'c0000000-0000-4000-8000-000000000014' },
-          { id: '2', name: 'MedPlus', category: 'Pharmacy', emoji: '💊', rating: 4.9, distance_km: 0.8 },
-          { id: '3', name: 'ShopRite', category: 'Grocery', emoji: '🛒', rating: 4.5, distance_km: 2.0 },
-          { id: '4', name: 'Fashion Hub', category: 'Fashion', emoji: '👗', rating: 4.6, distance_km: 1.6 },
-        ],
-      };
-    }
 
     let list = merchants.rows;
     if (filter === 'shop') {
@@ -230,71 +219,7 @@ customerExtrasRouter.get('/payment-instruments', authenticateToken, async (req: 
       network: r.network,
     });
 
-    let data = rows.rows.map(mapRow);
-    if (!data.length) {
-      data = [
-        {
-          id: 'visa-demo',
-          type: 'card',
-          provider: 'Visa',
-          brand: 'visa',
-          label: 'Visa',
-          lastFour: '4821',
-          isDefault: true,
-          status: 'active',
-          cardholderName: 'Kwame Asante',
-          expires: '08/27',
-          phone: null,
-          walletAddress: null,
-          network: null,
-        },
-        {
-          id: 'mc-demo',
-          type: 'card',
-          provider: 'Mastercard',
-          brand: 'mastercard',
-          label: 'Mastercard',
-          lastFour: '7732',
-          isDefault: false,
-          status: 'active',
-          cardholderName: 'Kwame Asante',
-          expires: '03/26',
-          phone: null,
-          walletAddress: null,
-          network: null,
-        },
-        {
-          id: 'momo-demo',
-          type: 'momo',
-          provider: 'MTN MoMo',
-          brand: 'momo',
-          label: 'MTN MoMo',
-          lastFour: '5678',
-          isDefault: false,
-          status: 'active',
-          cardholderName: null,
-          expires: null,
-          phone: '+234 801 234 5678',
-          walletAddress: null,
-          network: null,
-        },
-        {
-          id: 'mm-demo',
-          type: 'crypto',
-          provider: 'MetaMask',
-          brand: 'metamask',
-          label: 'MetaMask',
-          lastFour: '9d2c',
-          isDefault: false,
-          status: 'active',
-          cardholderName: null,
-          expires: null,
-          phone: null,
-          walletAddress: '0x3a4F...9d2c',
-          network: 'Polygon',
-        },
-      ];
-    }
+    const data = rows.rows.map(mapRow);
 
     res.json({ status: 'success', data });
   } catch (error: any) {
@@ -468,7 +393,7 @@ customerExtrasRouter.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const uid = req.user!.id;
-      let rows = await db
+      const rows = await db
         .query(
           `SELECT id, subject, status, status_label, ticket_ref, created_at
            FROM support_tickets WHERE user_id = $1
@@ -476,32 +401,6 @@ customerExtrasRouter.get(
           [uid]
         )
         .catch(() => ({ rows: [] as any[] }));
-
-      if (!rows.rows.length) {
-        const seeded = await db
-          .query(
-            `INSERT INTO support_tickets (user_id, subject, status, status_label, ticket_ref, created_at)
-             VALUES ($1, 'Payment not received', 'in_review', 'In Review',
-                     'MVR-TKT-4821', NOW() - INTERVAL '2 days')
-             RETURNING id, subject, status, status_label, ticket_ref, created_at`,
-            [uid]
-          )
-          .catch(() => ({ rows: [] as any[] }));
-        rows = seeded.rows.length
-          ? seeded
-          : {
-              rows: [
-                {
-                  id: 'demo',
-                  subject: 'Payment not received',
-                  status: 'in_review',
-                  status_label: 'In Review',
-                  ticket_ref: 'MVR-TKT-4821',
-                  created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-                },
-              ],
-            };
-      }
 
       const data = rows.rows.map((t: any) => {
         const opened = new Date(t.created_at);
@@ -512,7 +411,7 @@ customerExtrasRouter.get(
           id: t.id,
           subject: t.subject,
           status: t.status_label || t.status || 'In Review',
-          ticketRef: t.ticket_ref || 'MVR-TKT-4821',
+          ticketRef: t.ticket_ref || '',
           openedLabel: when,
           createdAt: t.created_at,
         };

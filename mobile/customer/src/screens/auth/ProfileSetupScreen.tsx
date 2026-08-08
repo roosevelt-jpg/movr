@@ -26,7 +26,7 @@ export default function ProfileSetupScreen({
   }) => void;
 }) {
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('Kwame');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
   const [loading, setLoading] = useState(false);

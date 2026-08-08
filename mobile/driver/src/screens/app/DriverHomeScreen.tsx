@@ -29,14 +29,14 @@ export default function DriverHomeScreen({
   onPerformance?: () => void;
   onSubscription?: () => void;
 }) {
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(false);
   const [data, setData] = useState<any>({
-    todayEarnings: 18400,
-    trips: 14,
-    onlineHours: 6.5,
-    rating: 4.9,
-    dvt: 840,
-    surge: { multiplier: 1.8, label: 'High demand nearby' },
+    todayEarnings: 0,
+    trips: 0,
+    onlineHours: 0,
+    rating: 0,
+    dvt: 0,
+    surge: null,
     currency: 'NGN',
   });
 

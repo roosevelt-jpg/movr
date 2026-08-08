@@ -21,7 +21,7 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
   const [receipts, setReceipts] = useState<any[]>([]);
   const [agentId, setAgentId] = useState('');
   const [amount, setAmount] = useState('1000');
-  const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '' });
+  const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '', bankCode: '' });
   const [dispute, setDispute] = useState({ domain: 'ride', reason: '' });
   const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
@@ -56,6 +56,7 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
         railType: 'momo',
         provider: momo.provider,
         accountNumber: momo.accountNumber,
+        bankCode: momo.bankCode || undefined,
         isDefault: true,
       }),
     });
@@ -142,6 +143,13 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
         value={momo.provider}
         onChangeText={(t) => setMomo({ ...momo, provider: t })}
         placeholder="Provider"
+        placeholderTextColor="#666"
+      />
+      <TextInput
+        style={styles.input}
+        value={momo.bankCode}
+        onChangeText={(t) => setMomo({ ...momo, bankCode: t })}
+        placeholder="Bank/MoMo code (optional)"
         placeholderTextColor="#666"
       />
       <TextInput
