@@ -18,73 +18,35 @@ function authHeaders(): Record<string, string> {
 /** Driver Plans — free trial banner, weekly/monthly cards (mockup). */
 export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) {
   const [plans, setPlans] = useState<any[]>([]);
-  const [meta, setMeta] = useState({
-    tagline: 'Keep 100% of earnings',
-    description:
-      'No commissions ever. Pay a flat weekly or monthly subscription and earn everything you make.',
-  });
-  const [selected, setSelected] = useState('monthly_driver');
-  const [trial, setTrial] = useState({
-    trial: true,
-    trialLabel: 'Currently on Free Trial',
-    trialHint: '3 days remaining · Subscribe to continue',
-  });
+  const [meta, setMeta] = useState({ tagline: '', description: '' });
+  const [selected, setSelected] = useState('');
+  const [trial, setTrial] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${API}/subscriptions/plans`)
       .then((r) => r.json())
       .then((j) => {
-        const list = (j?.data || []).filter(
-          (p: any) =>
-            String(p.id).includes('weekly') ||
-            String(p.id).includes('monthly') ||
-            p.isFeatured
-        );
-        const fallback = j?.data || [];
-        const use = list.length ? list : fallback.slice(0, 2);
+        const use = j?.data || [];
         setPlans(use);
         if (j?.meta) setMeta((m) => ({ ...m, ...j.meta }));
         const featured = use.find((p: any) => p.isFeatured) || use[1] || use[0];
         if (featured?.id) setSelected(String(featured.id));
       })
-      .catch(() => {
-        setPlans([
-          {
-            id: 'weekly_driver',
-            name: 'Weekly',
-            amount: 2500,
-            currency: 'NGN',
-            interval: 'weekly',
-            subtitle: 'Flexible · Cancel anytime',
-            features: ['0% commission on all rides', 'Unlimited trips', 'DVT token rewards included'],
-          },
-          {
-            id: 'monthly_driver',
-            name: 'Monthly',
-            amount: 7000,
-            currency: 'NGN',
-            interval: 'monthly',
-            subtitle: 'Most popular · Auto-renews',
-            badgeLabel: 'BEST VALUE · SAVE 30%',
-            isFeatured: true,
-            features: [
-              '0% commission on all rides',
-              'Priority ride matching',
-              '2x DVT token rewards',
-              'Gold driver badge',
-            ],
-          },
-        ]);
-      });
+      .catch((e) => {
+        setPlans([]);
+        setMsg(e?.message || 'Could not load plans');
+      })
+      .finally(() => setLoading(false));
 
     fetch(`${API}/subscriptions/me`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setTrial((t) => ({ ...t, ...j.data }));
+        if (j?.data) setTrial(j.data);
       })
-      .catch(() => undefined);
+      .catch(() => setTrial(null));
   }, []);
 
   const choice = useMemo(
@@ -106,12 +68,13 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
       if (!res.ok || json.status === 'error') {
         setMsg(json.message || 'Activation failed');
       } else {
-        setMsg('Subscribed');
+        setMsg('Subscribed — you keep 100% of every fare');
         setTrial({
           trial: false,
           trialLabel: null as any,
           trialHint: null as any,
           status: 'active',
+          keep100Message: 'You keep 100% of every fare — no commission, ever.',
         } as any);
       }
     } catch (e: any) {
@@ -121,10 +84,46 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
     }
   };
 
+  const pauseOrResume = async () => {
+    setBusy(true);
+    setMsg('');
+    const paused = String(trial?.status).toLowerCase() === 'paused' || trial?.paused;
+    try {
+      const res = await fetch(`${API}/subscriptions/${paused ? 'resume' : 'pause'}`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(paused ? {} : { days: 14 }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.status === 'error') {
+        setMsg(json.message || 'Could not update plan');
+      } else {
+        setMsg(json.data?.message || (paused ? 'Plan resumed' : 'Plan paused'));
+        setTrial((t: any) => ({
+          ...(t || {}),
+          ...(json.data?.subscription || {}),
+          paused: !paused,
+          status: paused ? 'active' : 'paused',
+        }));
+      }
+    } catch (e: any) {
+      setMsg(e.message || 'Could not update plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const priceLabel = (p: any) => {
     const cur = p.currency || 'NGN';
     const amt = formatCurrency(Number(p.amount || 0), cur);
-    const unit = String(p.interval || '').includes('week') ? '/week' : '/month';
+    const iv = String(p.interval || p.id || '').toLowerCase();
+    const unit = iv.includes('week')
+      ? '/week'
+      : iv.includes('quarter')
+        ? '/quarter'
+        : iv.includes('year')
+          ? '/year'
+          : '/month';
     return `${amt} ${unit}`;
   };
 
@@ -142,18 +141,45 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
         <View style={{ width: 24 }} />
       </View>
 
-      <Text style={styles.hero}>{meta.tagline}</Text>
-      <Text style={styles.sub}>{meta.description}</Text>
+      <Text style={styles.hero}>{meta.tagline || 'Keep 100% of earnings'}</Text>
+      <Text style={styles.sub}>
+        {meta.description ||
+          'No commissions ever. Pay a small subscription — weekly, monthly, quarterly, or yearly.'}
+      </Text>
+      <View style={styles.keepBadge}>
+        <Text style={styles.keepBadgeText}>You keep 100% of every fare</Text>
+      </View>
 
-      {trial.trial ? (
+      {loading ? <Text style={styles.msg}>Loading plans…</Text> : null}
+      {!loading && !plans.length ? <Text style={styles.msg}>No subscription plans available.</Text> : null}
+      {trial?.trial ? (
         <View style={styles.trial}>
           <Text style={styles.trialCheck}>✓</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.trialTitle}>{trial.trialLabel || 'Currently on Free Trial'}</Text>
-            <Text style={styles.trialHint}>
-              {trial.trialHint || '3 days remaining · Subscribe to continue'}
-            </Text>
+            <Text style={styles.trialTitle}>{trial.trialLabel || ''}</Text>
+            <Text style={styles.trialHint}>{trial.trialHint || ''}</Text>
           </View>
+        </View>
+      ) : null}
+
+      {(trial?.status === 'active' || trial?.status === 'paused' || trial?.paused) && !trial?.trial ? (
+        <View style={styles.activeBox}>
+          <Text style={styles.activeTitle}>
+            {trial?.paused || trial?.status === 'paused' ? 'Plan paused' : 'Plan active'}
+          </Text>
+          <Text style={styles.activeSub}>
+            {trial?.keep100Message ||
+              'You keep 100% of every fare. Pause anytime if you need a break from billing.'}
+          </Text>
+          <Pressable style={styles.pauseBtn} onPress={pauseOrResume} disabled={busy}>
+            <Text style={styles.pauseText}>
+              {busy
+                ? '…'
+                : trial?.paused || trial?.status === 'paused'
+                  ? 'Resume plan'
+                  : 'Pause plan (up to 14 days)'}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -200,9 +226,7 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
                 <Text style={styles.ctaText}>
                   {busy
                     ? 'Subscribing…'
-                    : `Subscribe · ${formatCurrency(Number(p.amount || 0), p.currency || 'NGN')}/${
-                        String(p.interval || '').includes('week') ? 'wk' : 'mo'
-                      }`}
+                    : `Subscribe · ${priceLabel(p).replace(' ', '')}`}
                 </Text>
               </Pressable>
             ) : null}
@@ -228,7 +252,35 @@ const styles = StyleSheet.create({
   back: { color: '#FFFFFF', fontSize: 22 },
   title: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   hero: { color: '#FFFFFF', fontSize: 28, fontWeight: '800', marginTop: spacing[2] },
-  sub: { color: 'rgba(255,255,255,0.5)', marginTop: 8, marginBottom: spacing[4], lineHeight: 20 },
+  sub: { color: 'rgba(255,255,255,0.5)', marginTop: 8, marginBottom: spacing[2], lineHeight: 20 },
+  keepBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: spacing[4],
+  },
+  keepBadgeText: { color: '#4ADE80', fontWeight: '700', fontSize: 12 },
+  activeBox: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  activeTitle: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
+  activeSub: { color: 'rgba(255,255,255,0.55)', marginTop: 6, fontSize: 13, lineHeight: 18 },
+  pauseBtn: {
+    marginTop: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pauseText: { color: '#FFFFFF', fontWeight: '700' },
   trial: {
     flexDirection: 'row',
     alignItems: 'center',

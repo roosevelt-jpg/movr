@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
-import { formatCurrency } from '@movr/design-system/format';
+import { formatCurrency, formatCountryLabel } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -27,7 +27,7 @@ export default function SendMoneyScreen() {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
-  const [to, setTo] = useState('+234 · Adaeze O. · Nigeria');
+  const [to, setTo] = useState(`+234 · Adaeze O. · ${formatCountryLabel('NG')}`);
   const [amount, setAmount] = useState('500.00');
   const [currency] = useState('GHS');
   const [quote, setQuote] = useState<any>(null);

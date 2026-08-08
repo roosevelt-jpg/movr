@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api/v1';
-const DEMO = 'f3000000-0000-4000-8000-000000004821';
 
 function authHeaders() {
   const token =
@@ -16,50 +15,47 @@ function naira(n: number) {
   return `₦${Number(n || 0).toLocaleString()}`;
 }
 
-/** Payment Successful ride receipt (mockup). */
+/** Payment Successful ride receipt. */
 export default function RideReceiptPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data, setData] = useState<any>({
-    statusLabel: 'Payment Successful',
-    totalPaid: 1200,
-    paidAtLabel: 'Apr 8, 2026 · 9:12 AM',
-    txnRef: 'MVR-TXN-48219',
-    service: 'Standard Ride',
-    driverName: 'Emeka Okafor',
-    from: 'Victoria Island',
-    to: 'Lekki Phase 1',
-    distanceLabel: '8.4 km · 18 min',
-    baseFare: 900,
-    distanceFare: 360,
-    dvtDiscount: 60,
-    dvtEarned: 120,
-    paymentMethod: 'Movr Wallet',
-  });
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`${API}/rides/${id || DEMO}/receipt`, { headers: authHeaders() })
+    if (!id) {
+      setError('Receipt not found');
+      setLoading(false);
+      return;
+    }
+    fetch(`${API}/rides/${id}/receipt`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load receipt'))
+      .finally(() => setLoading(false));
   }, [id]);
 
   const rows: [string, string][] = [
-    ['Transaction ID', data.txnRef],
-    ['Service', data.service],
-    ['Driver', data.driverName],
-    ['From', data.from],
-    ['To', data.to],
-    ['Distance', data.distanceLabel],
-    ['Base fare', naira(data.baseFare)],
-    ['Distance charge', naira(data.distanceFare)],
+    ['Transaction ID', data?.txnRef || ''],
+    ['Service', data?.service || ''],
+    ['Driver', data?.driverName || ''],
+    ['From', data?.from || ''],
+    ['To', data?.to || ''],
+    ['Distance', data?.distanceLabel || ''],
+    ['Base fare', naira(data?.baseFare)],
+    ['Distance charge', naira(data?.distanceFare)],
   ];
 
   return (
     <div className="mx-auto max-w-lg text-white">
       <div className="mb-4 h-0.5 bg-gradient-to-r from-violet-500 to-blue-500" />
+      {loading ? <p className="text-center text-zinc-400">Loading receipt…</p> : null}
+      {error ? <p className="text-center text-red-400">{error}</p> : null}
+      {!data ? null : (
+      <>
       <div className="mb-6 flex items-center justify-between px-1">
         <button type="button" onClick={() => navigate(-1)} className="text-xl">
           ←
@@ -83,6 +79,10 @@ export default function RideReceiptPage() {
           </div>
         ))}
         <div className="flex justify-between text-sm">
+          <span className="text-white/45">Platform fee</span>
+          <span className="font-bold text-green-400">{naira(data.platformFee ?? 0)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
           <span className="text-white/45">DVT discount</span>
           <span className="font-bold text-green-400">-{naira(data.dvtDiscount)}</span>
         </div>
@@ -90,6 +90,16 @@ export default function RideReceiptPage() {
           <span className="font-extrabold">Total</span>
           <span className="text-lg font-extrabold">{naira(data.totalPaid)}</span>
         </div>
+      </div>
+
+      <div className="mt-3 rounded-xl bg-emerald-950/80 border border-emerald-800/50 p-4">
+        <p className="font-bold text-emerald-300 text-sm">
+          {data.driverKeepsLabel || 'Driver keeps 100% of this fare'}
+        </p>
+        <p className="text-xs text-emerald-200/70 mt-1">
+          {data.fairFareNote ||
+            'No commission — Movr is funded by driver subscriptions, not your fare.'}
+        </p>
       </div>
 
       <div className="mt-4 flex items-center gap-3 rounded-xl bg-zinc-950 p-4">
@@ -109,12 +119,20 @@ export default function RideReceiptPage() {
           Share
         </button>
         <Link
+          to="/refer"
+          className="flex-1 rounded-full border border-violet-700 py-3 text-center font-bold text-violet-300"
+        >
+          Refer
+        </Link>
+        <Link
           to="/history"
           className="flex-1 rounded-full bg-violet-600 py-3 text-center font-bold"
         >
           Done
         </Link>
       </div>
+      </>
+      )}
     </div>
   );
 }

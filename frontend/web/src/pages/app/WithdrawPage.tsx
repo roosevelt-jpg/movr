@@ -111,7 +111,7 @@ const WithdrawPage: React.FC = () => {
         <span>Min: {formatCurrency(minAmount, currency)}</span>
         <span>Fee: {feeLabel}</span>
       </div>
-      <div className="grid grid-cols-4 gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
         {chips.map((c) => (
           <button
             key={c}

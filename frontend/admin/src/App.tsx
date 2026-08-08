@@ -37,6 +37,8 @@ import PromotionsPage from './pages/PromotionsPage';
 import BroadcastCenterPage from './pages/BroadcastCenterPage';
 import PlatformAnalyticsPage from './pages/PlatformAnalyticsPage';
 import SubscriptionFeesPage from './pages/SubscriptionFeesPage';
+import TeamPage from './pages/TeamPage';
+import InviteAcceptPage from './pages/InviteAcceptPage';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -54,11 +56,20 @@ const App: React.FC = () => {
     <BrowserRouter basename="/admin">
       <Routes>
         <Route path="/login" element={<AdminLoginPage />} />
+        <Route path="/invite/accept" element={<InviteAcceptPage />} />
         <Route
           path="/settings"
           element={
             <RequireAdmin>
               <AdminSettingsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/team"
+          element={
+            <RequireAdmin>
+              <TeamPage />
             </RequireAdmin>
           }
         />

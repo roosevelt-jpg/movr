@@ -8,7 +8,6 @@ const API =
   (import.meta as any).env?.VITE_API_URL ||
   process.env.REACT_APP_API_URL ||
   'http://localhost:3000/api/v1';
-const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
 const authHeaders = () => {
   const t = localStorage.getItem('movr_token') || localStorage.getItem('token');
   return {
@@ -17,25 +16,30 @@ const authHeaders = () => {
   };
 };
 
-/** Your Cart checkout (mockup). */
+/** Your Cart checkout. */
 const CartPage: React.FC = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const storeId = params.get('storeId') || CHICKEN_ID;
-  const [items, setItems] = useState<any[]>([
-    { id: '1', name: 'Zinger Burger Meal', price: 3200, qty: 1, emoji: '🍔' },
-    { id: '2', name: 'Grilled Chicken Combo', price: 4500, qty: 1, emoji: '🍗' },
-  ]);
-  const [storeName, setStoreName] = useState('Chicken Republic');
-  const [eta, setEta] = useState('20-35 min');
+  const storeId = params.get('storeId') || '';
+  const [items, setItems] = useState<any[]>([]);
+  const [storeName, setStoreName] = useState('');
+  const [eta, setEta] = useState('');
   const [coupon, setCoupon] = useState('');
-  const [deliveryFee, setDeliveryFee] = useState(500);
-  const [dvtDiscount, setDvtDiscount] = useState(100);
+  const [deliveryFee, setDeliveryFee] = useState(0);
+  const [dvtDiscount, setDvtDiscount] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [currency, setCurrency] = useState('NGN');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const quote = async () => {
+    if (!storeId) {
+      setError('No store selected');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const res = await axios.post(
         `${API}/cart/quote`,
@@ -43,14 +47,14 @@ const CartPage: React.FC = () => {
         { headers: authHeaders() }
       );
       const d = res.data?.data;
-      if (!d) return;
-      setDeliveryFee(Number(d.deliveryFee ?? 500));
-      setDvtDiscount(Number(d.dvtDiscount ?? 100));
+      if (!d) throw new Error('Cart is unavailable');
+      setDeliveryFee(Number(d.deliveryFee ?? 0));
+      setDvtDiscount(Number(d.dvtDiscount ?? 0));
       setDiscount(Number(d.discount ?? 0));
       setCurrency(d.currency || 'NGN');
       if (d.storeName) setStoreName(d.storeName);
       if (d.eta) setEta(d.eta);
-      if (Array.isArray(d.items) && d.items.length) {
+      if (Array.isArray(d.items)) {
         setItems(
           d.items.map((r: any) => ({
             id: String(r.id || r.product_id),
@@ -62,7 +66,10 @@ const CartPage: React.FC = () => {
         );
       }
     } catch {
-      /* keep demo */
+      setItems([]);
+      setError('Could not load cart');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,7 +95,8 @@ const CartPage: React.FC = () => {
         );
       quote();
     } catch {
-      /* optimistic */
+      setError('Could not update cart');
+      quote();
     }
   };
 
@@ -104,12 +112,11 @@ const CartPage: React.FC = () => {
         { headers: authHeaders() }
       );
       const orderId = res.data?.data?.order?.id || res.data?.data?.id;
+      if (!orderId) throw new Error('Order ID missing');
       toast.success('Order placed');
       navigate(`/orders/${orderId}/confirmed`);
-    } catch {
-      const demo = `demo-${Date.now()}`;
-      toast.success('Order placed');
-      navigate(`/orders/${demo}/confirmed`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Could not place order');
     } finally {
       setLoading(false);
     }
@@ -121,9 +128,10 @@ const CartPage: React.FC = () => {
         ←
       </button>
       <h1 className="text-3xl font-extrabold">Your Cart</h1>
-      <p className="text-zinc-400 mt-2 mb-5">
-        🍔 {storeName} · {eta}
-      </p>
+      {storeName || eta ? <p className="text-zinc-400 mt-2 mb-5">{[storeName, eta].filter(Boolean).join(' · ')}</p> : null}
+      {loading ? <p className="text-zinc-400 mb-5">Loading cart…</p> : null}
+      {error ? <p className="text-red-400 mb-5">{error}</p> : null}
+      {!loading && !error && items.length === 0 ? <p className="text-zinc-500 mb-5">Your cart is empty.</p> : null}
 
       <div className="space-y-3 mb-5">
         {items.map((i) => (

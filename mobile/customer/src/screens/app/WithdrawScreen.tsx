@@ -17,31 +17,17 @@ function authHeaders(): Record<string, string> {
 
 /** Customer wallet Withdraw — amount chips, SEND TO methods (mockup). */
 export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
-  const [available, setAvailable] = useState(18400);
+  const [available, setAvailable] = useState(0);
   const [currency, setCurrency] = useState('NGN');
-  const [amount, setAmount] = useState('10000');
-  const [minAmount, setMinAmount] = useState(500);
-  const [feeLabel, setFeeLabel] = useState('Free');
-  const [chips, setChips] = useState([2000, 5000, 10000]);
-  const [methods, setMethods] = useState<any[]>([
-    {
-      id: 'visa',
-      type: 'card',
-      title: 'VISA •••• 4821',
-      subtitle: 'Instant · Kwame Asante',
-      selected: true,
-    },
-    {
-      id: 'momo',
-      type: 'momo',
-      title: 'MTN MoMo',
-      subtitle: '+234 801 234 5678',
-      selected: false,
-    },
-  ]);
-  const [methodId, setMethodId] = useState('visa');
+  const [amount, setAmount] = useState('');
+  const [minAmount, setMinAmount] = useState(0);
+  const [feeLabel, setFeeLabel] = useState('');
+  const [chips, setChips] = useState<number[]>([]);
+  const [methods, setMethods] = useState<any[]>([]);
+  const [methodId, setMethodId] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
   useEffect(() => {
     fetch(`${API}/wallet/withdraw/options`, { headers: authHeaders() })
@@ -49,10 +35,10 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
       .then((j) => {
         const d = j?.data;
         if (!d) return;
-        setAvailable(Number(d.available || 18400));
+        setAvailable(Number(d.available || 0));
         setCurrency(d.currency || 'NGN');
-        setMinAmount(Number(d.minAmount || 500));
-        setFeeLabel(d.feeLabel || 'Free');
+        setMinAmount(Number(d.minAmount || 0));
+        setFeeLabel(d.feeLabel || '');
         if (Array.isArray(d.chips) && d.chips.length) setChips(d.chips);
         if (Array.isArray(d.methods) && d.methods.length) {
           setMethods(d.methods);
@@ -60,7 +46,8 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
           setMethodId(def.id);
         }
       })
-      .catch(() => undefined);
+      .catch((e) => setMsg(e?.message || 'Could not load withdrawal options'))
+      .finally(() => setLoadingOptions(false));
   }, []);
 
   const n = Number(String(amount).replace(/,/g, '')) || 0;
@@ -121,6 +108,7 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
         ) : null}
         <Text style={styles.title}>Withdraw</Text>
       </View>
+      {loadingOptions ? <Text style={styles.msg}>Loading withdrawal options…</Text> : null}
 
       <View style={styles.balance}>
         <Text style={styles.balLab}>AVAILABLE TO WITHDRAW</Text>
@@ -188,7 +176,7 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable style={styles.cta} onPress={withdraw} disabled={busy}>
+      <Pressable style={styles.cta} onPress={withdraw} disabled={busy || !selected}>
         <Text style={styles.ctaText}>
           {busy ? 'Processing…' : `Withdraw ${formatCurrency(n || 0, currency)}`}
         </Text>

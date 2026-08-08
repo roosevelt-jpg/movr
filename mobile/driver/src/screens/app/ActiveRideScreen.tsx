@@ -4,8 +4,6 @@ import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const DEMO_RIDE_ID = 'f0000000-0000-4000-8000-0000000000f1';
-
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
@@ -18,35 +16,32 @@ function authHeaders(): Record<string, string> {
 
 /** Driver navigation to pickup — turn-by-turn, passenger, Arrived (mockup). */
 export default function ActiveRideScreen({
-  rideId = DEMO_RIDE_ID,
+  rideId,
   onArrived,
 }: {
   rideId?: string;
   onArrived?: () => void;
 }) {
-  const [nav, setNav] = useState<any>({
-    instruction: 'Turn right onto Ozumba Mbadiwe Ave · 200m',
-    distanceLeftKm: 1.2,
-    etaMinutes: 4,
-    earnings: 1400,
-    dvtReward: 60,
-    currency: 'NGN',
-    passenger: { name: 'Kwame Asante', initials: 'KA', rating: 4.8 },
-    pickup: 'Victoria Island, Lagos',
-    dropoff: 'Lekki Phase 1, Lagos',
-  });
+  const [nav, setNav] = useState<any>(null);
   const [proxy, setProxy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!rideId) return;
+    if (!rideId) {
+      setLoading(false);
+      setMsg('Ride not found');
+      return;
+    }
     fetch(`${API}/driver/rides/${rideId}/nav`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setNav((n: any) => ({ ...n, ...j.data }));
+        if (j?.data) setNav(j.data);
+        else throw new Error('Ride not found');
       })
-      .catch(() => undefined);
+      .catch((e) => setMsg(e?.message || 'Could not load ride'))
+      .finally(() => setLoading(false));
 
     fetch(`${API}/rides/${rideId}/masked-session`, {
       method: 'POST',
@@ -73,20 +68,23 @@ export default function ActiveRideScreen({
           headers: authHeaders(),
         });
       }
+      if (!res.ok) throw new Error('Could not update ride');
       setMsg('Arrived at pickup');
       onArrived?.();
-    } catch {
-      setMsg('Arrived at pickup');
-      onArrived?.();
+    } catch (e: any) {
+      setMsg(e?.message || 'Could not update ride');
     } finally {
       setBusy(false);
     }
   };
 
-  const p = nav.passenger || {};
+  const p = nav?.passenger || {};
 
   return (
     <View style={styles.root}>
+      {loading ? <Text style={styles.msg}>Loading ride…</Text> : null}
+      {!nav ? <Text style={styles.msg}>{msg || 'No active ride.'}</Text> : null}
+      {nav ? <>
       <View style={styles.navBox}>
         <View style={styles.turnIcon}>
           <Text style={styles.turnArrow}>↱</Text>
@@ -115,18 +113,18 @@ export default function ActiveRideScreen({
           <Text style={styles.metricLab}>Earnings</Text>
         </View>
         <View style={styles.metric}>
-          <Text style={[styles.metricVal, { color: '#A78BFA' }]}>+{nav.dvtReward || 60}</Text>
+          <Text style={[styles.metricVal, { color: '#A78BFA' }]}>+{nav.dvtReward || 0}</Text>
           <Text style={[styles.metricLab, { color: '#A78BFA' }]}>DVT</Text>
         </View>
       </View>
 
       <View style={styles.passenger}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{p.initials || 'KA'}</Text>
+          <Text style={styles.avatarText}>{p.initials || ''}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{p.name || 'Kwame Asante'}</Text>
-          <Text style={styles.rating}>★★★★★ {Number(p.rating || 4.8).toFixed(1)} passenger</Text>
+          <Text style={styles.name}>{p.name || ''}</Text>
+          <Text style={styles.rating}>★★★★★ {Number(p.rating || 0).toFixed(1)} passenger</Text>
         </View>
         <Pressable
           style={styles.comm}
@@ -163,6 +161,7 @@ export default function ActiveRideScreen({
       <Pressable style={styles.arrived} onPress={arrived} disabled={busy}>
         <Text style={styles.arrivedText}>{busy ? '…' : 'Arrived at Pickup'}</Text>
       </Pressable>
+      </> : null}
     </View>
   );
 }

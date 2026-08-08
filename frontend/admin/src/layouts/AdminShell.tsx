@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun, X } from 'lucide-react';
+import { clearAdminAccess } from '../lib/rbac';
 import { useTheme } from '../theme/ThemeProvider';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
@@ -61,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Platform',
     items: [
       { label: 'Site content', to: '/cms' },
+      { label: 'Team & access', to: '/team' },
       { label: 'KYC', to: '/kyc-queue' },
       { label: 'Pricing', to: '/pricing' },
       { label: 'Subscription fees', to: '/subscription-fees' },
@@ -119,6 +121,7 @@ export default function AdminShell({
   const email = localStorage.getItem('movr_admin_email') || 'admin@movr.app';
   const initial = (email.trim()[0] || 'A').toUpperCase();
 
+  const [navOpen, setNavOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(() => localStorage.getItem(AVATAR_KEY) || '');
   const [uploading, setUploading] = useState(false);
@@ -130,6 +133,7 @@ export default function AdminShell({
 
   useEffect(() => {
     setProfileOpen(false);
+    setNavOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -157,10 +161,24 @@ export default function AdminShell({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [navOpen]);
+
   const signOut = () => {
     localStorage.removeItem('movr_admin_token');
     localStorage.removeItem('movr_admin_email');
     localStorage.removeItem('movr_admin_roles');
+    clearAdminAccess();
     localStorage.removeItem(AVATAR_KEY);
     window.location.href = '/admin/login';
   };
@@ -248,46 +266,87 @@ export default function AdminShell({
       </div>
     );
 
+  const sidebar = (
+    <>
+      <div style={styles.brandRow}>
+        <div>
+          <div style={styles.brand}>Movr</div>
+          <p style={styles.brandSub}>Admin console</p>
+        </div>
+        <button
+          type="button"
+          className="admin-shell-close"
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+          style={styles.iconBtn}
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <nav style={styles.nav}>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} style={styles.navGroup}>
+            <div style={styles.navSection}>{group.title}</div>
+            {group.items.map((item) => {
+              const active = isNavActive(item);
+              return (
+                <Link
+                  key={`${group.title}-${item.label}-${item.to}`}
+                  to={item.to}
+                  style={{
+                    ...styles.navItem,
+                    ...(active ? styles.navActive : {}),
+                  }}
+                  onClick={() => setNavOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+    </>
+  );
+
   return (
-    <div style={styles.root}>
-      <aside style={styles.sidebar}>
-        <div style={styles.brand}>Movr</div>
-        <p style={styles.brandSub}>Admin console</p>
-        <nav style={styles.nav}>
-          {NAV_GROUPS.map((group) => (
-            <div key={group.title} style={styles.navGroup}>
-              <div style={styles.navSection}>{group.title}</div>
-              {group.items.map((item) => {
-                const active = isNavActive(item);
-                return (
-                  <Link
-                    key={`${group.title}-${item.label}-${item.to}`}
-                    to={item.to}
-                    style={{
-                      ...styles.navItem,
-                      ...(active ? styles.navActive : {}),
-                    }}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+    <div className={`admin-shell${navOpen ? ' admin-shell--nav-open' : ''}`} style={styles.root}>
+      {navOpen ? (
+        <button
+          type="button"
+          className="admin-shell-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
+      <aside className="admin-shell-sidebar" style={styles.sidebar}>
+        {sidebar}
       </aside>
 
       <div style={styles.mainCol}>
-        <header style={styles.header}>
-          <div>
-            {!hidePageTitle ? (
-              <>
+        <header className="admin-shell-header" style={styles.header}>
+          <div style={styles.headerLeft}>
+            <button
+              type="button"
+              className="admin-shell-menu"
+              aria-label="Open navigation"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(true)}
+              style={styles.iconBtn}
+            >
+              <Menu size={18} />
+            </button>
+            <div>
+              {!hidePageTitle ? (
+                <>
+                  <p style={styles.headerEyebrow}>MOVR OPS</p>
+                  <h2 style={styles.headerTitle}>{activeItem.label}</h2>
+                </>
+              ) : (
                 <p style={styles.headerEyebrow}>MOVR OPS</p>
-                <h2 style={styles.headerTitle}>{activeItem.label}</h2>
-              </>
-            ) : (
-              <p style={styles.headerEyebrow}>MOVR OPS</p>
-            )}
+              )}
+            </div>
           </div>
 
           <div style={styles.headerActions}>
@@ -367,7 +426,9 @@ export default function AdminShell({
             </div>
           </div>
         </header>
-        <main className="admin-main" style={styles.content}>{children}</main>
+        <main className="admin-main" style={styles.content}>
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -393,6 +454,13 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     height: '100vh',
     overflowY: 'auto',
+    zIndex: 40,
+  },
+  brandRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   brand: { fontSize: 22, fontWeight: 800, padding: '0 8px' },
   brandSub: { color: 'var(--text-secondary)', fontSize: 12, padding: '4px 8px 20px', margin: 0 },
@@ -431,6 +499,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     zIndex: 20,
   },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 },
   headerEyebrow: {
     margin: 0,
     fontSize: 11,
@@ -440,6 +509,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headerTitle: { margin: '4px 0 0', fontSize: 22, fontWeight: 700 },
   headerActions: { display: 'flex', alignItems: 'center', gap: 10 },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'var(--surface-elevated)',
+    color: 'var(--text-primary)',
+    display: 'grid',
+    placeItems: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+  },
   themeIconBtn: {
     width: 36,
     height: 36,
@@ -476,6 +558,7 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
     top: 'calc(100% + 10px)',
     width: 260,
+    maxWidth: 'calc(100vw - 24px)',
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
     borderRadius: 16,

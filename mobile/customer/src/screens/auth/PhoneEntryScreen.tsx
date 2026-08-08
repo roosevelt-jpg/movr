@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Linking } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
+import { countryFlagEmoji } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+
+const DIAL_FLAG: Record<string, string> = {
+  '+234': countryFlagEmoji('NG'),
+  '+233': countryFlagEmoji('GH'),
+};
 
 /** Phone entry — country picker + Send Code OTP (mockup). */
 export default function PhoneEntryScreen({
@@ -65,7 +71,7 @@ export default function PhoneEntryScreen({
           style={styles.country}
           onPress={() => setCountryCode(countryCode === '+234' ? '+233' : '+234')}
         >
-          <Text style={styles.flag}>{countryCode === '+234' ? '🇳🇬' : '🇬🇭'}</Text>
+          <Text style={styles.flag}>{DIAL_FLAG[countryCode] || countryFlagEmoji('NG')}</Text>
           <Text style={styles.cc}>{countryCode}</Text>
           <Text style={styles.chev}>▾</Text>
         </Pressable>

@@ -26,8 +26,10 @@ function fmt(ms: number) {
 /** Active Rental (mockup). */
 export default function ActiveRentalPage() {
   const [data, setData] = useState<any>(null);
-  const [remaining, setRemaining] = useState(14 * 3600000 + 32 * 60000);
+  const [remaining, setRemaining] = useState(0);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/rentals/active`, { headers: authHeaders() })
@@ -38,7 +40,8 @@ export default function ActiveRentalPage() {
           if (j.data.remainingMs != null) setRemaining(Number(j.data.remainingMs));
         }
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load active rental'))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -46,19 +49,10 @@ export default function ActiveRentalPage() {
     return () => clearInterval(t);
   }, []);
 
-  const d = data || {
-    id: 'demo',
-    vehicle: { name: 'Honda CR-V', meta: 'LAG-481-KJ · Silver', rating: 4.9, mode: 'Self-drive', emoji: '🚙' },
-    returnBy: 'Return by Apr 11 · 9:00 AM',
-    startedLabel: 'Started 9:00 AM',
-    elapsedPct: 38,
-    returnLocation: { address: 'Movr Hub, Victoria Island, Lagos' },
-    fuelReminder: 'Return with same fuel level. Charges apply otherwise.',
-    extendDailyRate: 22500,
-    currency: 'NGN',
-  };
+  const d = data;
 
   const extend = async () => {
+    if (!d?.id) return;
     const res = await fetch(`${API}/rentals/${d.id}/extend`, {
       method: 'POST',
       headers: authHeaders(),
@@ -70,6 +64,10 @@ export default function ActiveRentalPage() {
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-28" data-force-dark>
+      {loading ? <p className="text-zinc-400">Loading rental…</p> : null}
+      {error ? <p className="text-red-400">{error}</p> : null}
+      {!d ? null : (
+      <>
       <div className="flex items-center justify-between mb-5">
         <Link to="/rentals" className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center font-bold">
           ←
@@ -89,7 +87,7 @@ export default function ActiveRentalPage() {
             <p className="text-xl font-extrabold">{d.vehicle?.name}</p>
             <p className="text-zinc-400 text-sm">{d.vehicle?.meta}</p>
             <p className="text-amber-400 font-bold text-sm mt-1">
-              ★ {Number(d.vehicle?.rating || 4.9).toFixed(1)} {d.vehicle?.mode}
+              ★ {Number(d.vehicle?.rating || 0).toFixed(1)} {d.vehicle?.mode}
             </p>
           </div>
         </div>
@@ -97,11 +95,11 @@ export default function ActiveRentalPage() {
         <p className="text-4xl font-extrabold mt-1">{fmt(remaining)}</p>
         <p className="text-zinc-400 text-sm mt-1 mb-3">{d.returnBy}</p>
         <div className="h-1.5 rounded bg-zinc-700 overflow-hidden">
-          <div className="h-1.5 bg-purple-500" style={{ width: `${d.elapsedPct || 38}%` }} />
+          <div className="h-1.5 bg-purple-500" style={{ width: `${d.elapsedPct || 0}%` }} />
         </div>
         <div className="flex justify-between text-xs text-zinc-500 mt-2">
           <span>{d.startedLabel}</span>
-          <span>{d.elapsedPct || 38}% elapsed</span>
+          <span>{d.elapsedPct || 0}% elapsed</span>
         </div>
       </div>
 
@@ -154,10 +152,12 @@ export default function ActiveRentalPage() {
       <button
         type="button"
         onClick={extend}
-        className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto rounded-2xl py-4 font-extrabold border border-red-500 bg-red-950 text-red-300"
+        className="sticky bottom-4 w-full rounded-2xl py-4 font-extrabold border border-red-500 bg-red-950 text-red-300"
       >
-        Extend Rental · {formatCurrency(Number(d.extendDailyRate || 22500), d.currency || 'NGN')}/day
+        Extend Rental · {formatCurrency(Number(d.extendDailyRate || 0), d.currency || 'NGN')}/day
       </button>
+      </>
+      )}
     </div>
   );
 }

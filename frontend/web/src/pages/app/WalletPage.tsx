@@ -24,22 +24,24 @@ const ICONS: Record<string, string> = {
   tx: '•',
 };
 
-/** My Wallet — portfolio, quick actions, transactions (mockup). */
+/** My Wallet — portfolio, quick actions, transactions. */
 const WalletPage: React.FC = () => {
   const { currency: locCurrency } = useLocalCurrency();
-  const [portfolio, setPortfolio] = useState(34850);
-  const [fiat, setFiat] = useState(24500);
-  const [dvt, setDvt] = useState(2400);
-  const [points, setPoints] = useState(850);
-  const [currency, setCurrency] = useState('NGN');
+  const [portfolio, setPortfolio] = useState(0);
+  const [fiat, setFiat] = useState(0);
+  const [dvt, setDvt] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [currency, setCurrency] = useState(locCurrency || 'NGN');
   const [txs, setTxs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/wallet/portfolio`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data;
-        if (!d) return;
+        if (!d) throw new Error('Wallet data is unavailable');
         setPortfolio(Number(d.portfolioValue ?? 0));
         setFiat(Number(d.fiatBalance ?? 0));
         setDvt(Number(d.dvtTokens ?? 0));
@@ -47,7 +49,8 @@ const WalletPage: React.FC = () => {
         setCurrency(d.currency || locCurrency || 'NGN');
         if (Array.isArray(d.transactions)) setTxs(d.transactions);
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load wallet'))
+      .finally(() => setLoading(false));
   }, [locCurrency]);
 
   const fmt = (n: number) => formatCurrency(Math.abs(n), currency);
@@ -64,6 +67,8 @@ const WalletPage: React.FC = () => {
   return (
     <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 max-w-xl mx-auto w-full" data-force-dark>
       <h1 className="text-3xl font-bold tracking-tight mb-6">My Wallet</h1>
+      {loading ? <p className="mb-4 text-sm text-zinc-400">Loading wallet…</p> : null}
+      {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
       <div className="relative overflow-hidden rounded-2xl p-6 mb-5 bg-gradient-to-br from-[#8E2DE2] via-[#6B21A8] to-[#3B82F6]">
         <p className="text-4xl md:text-5xl font-extrabold">{fmt(portfolio)}</p>
@@ -83,7 +88,7 @@ const WalletPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8">
         {actions.map((a) => (
           <Link
             key={a.label}

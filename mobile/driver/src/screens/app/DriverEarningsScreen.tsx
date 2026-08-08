@@ -37,27 +37,36 @@ export default function DriverEarningsScreen({
   onSubscription?: () => void;
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>('today');
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(false);
   const [data, setData] = useState<any>({
-    amount: 18400,
-    trips: 14,
-    hours: 6.5,
-    dvtEarned: 840,
-    rating: 4.9,
+    amount: 0,
+    trips: 0,
+    hours: 0,
+    dvtEarned: 0,
+    rating: 0,
     activity: [],
     currency: 'NGN',
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = () => {
+    setLoading(true);
+    setError('');
     fetch(`${API}/driver/earnings/dashboard?range=${range}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         if (j?.data) {
-          setData((d: any) => ({ ...d, ...j.data }));
+          setData(j.data);
           if (typeof j.data.online === 'boolean') setOnline(j.data.online);
         }
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setData({ amount: 0, trips: 0, hours: 0, dvtEarned: 0, rating: 0, activity: [], currency: 'NGN' });
+        setOnline(false);
+        setError(e?.message || 'Could not load earnings');
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -96,7 +105,7 @@ export default function DriverEarningsScreen({
               ['TRIPS', String(data.trips ?? 0)],
               ['HOURS', `${data.hours ?? 0}h`],
               ['DVT EARNED', String(data.dvtEarned ?? 0)],
-              ['RATING', `★ ${Number(data.rating || 4.9).toFixed(1)}`],
+              ['RATING', `★ ${Number(data.rating || 0).toFixed(1)}`],
             ].map(([l, v]) => (
               <View key={l} style={styles.metric}>
                 <Text style={styles.metricVal}>{v}</Text>
@@ -119,6 +128,9 @@ export default function DriverEarningsScreen({
             </Pressable>
           ))}
         </View>
+        {loading ? <Text style={styles.state}>Loading earnings…</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!loading && !(data.activity || []).length ? <Text style={styles.state}>No earnings activity.</Text> : null}
 
         {(data.activity || []).map((a: any) => (
           <View key={a.id} style={styles.row}>
@@ -243,4 +255,6 @@ const styles = StyleSheet.create({
   },
   goOnline: { backgroundColor: '#BBF7D0' },
   goText: { color: '#DC2626', fontWeight: '800', fontSize: 16 },
+  state: { color: '#71717A', textAlign: 'center', marginBottom: spacing[3] },
+  error: { color: '#F87171', textAlign: 'center', marginBottom: spacing[3] },
 });

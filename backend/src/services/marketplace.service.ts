@@ -183,17 +183,20 @@ export class MarketplaceService {
     }
     const products = await this.db.query(
       `SELECT p.*,
+              COALESCE(p.sale_price, p.price) AS effective_price,
               COALESCE(p.menu_category, c.name, 'All') AS menu_category,
               COALESCE(p.is_popular, p.is_featured, false) AS is_popular,
               COALESCE(p.emoji, '🍽️') AS emoji
        FROM products p
        LEFT JOIN product_categories c ON c.id = p.category_id
-       WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ${filter}
+       WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE
+         AND COALESCE(p.is_active, TRUE) = TRUE ${filter}
        ORDER BY COALESCE(p.is_popular, p.is_featured, false) DESC, p.name ASC`,
       values
     ).catch(() =>
       this.db.query(
-        `SELECT p.* FROM products p WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ORDER BY p.name`,
+        `SELECT p.*, COALESCE(p.sale_price, p.price) AS effective_price
+         FROM products p WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ORDER BY p.name`,
         [storeId]
       )
     );
@@ -201,6 +204,7 @@ export class MarketplaceService {
     const ids = products.rows.map((p: any) => p.id);
     let variants: any[] = [];
     let addons: any[] = [];
+    let images: any[] = [];
     if (ids.length) {
       const v = await this.db.query(
         `SELECT * FROM product_variants WHERE product_id = ANY($1::uuid[])`,
@@ -216,9 +220,17 @@ export class MarketplaceService {
         )
         .catch(() => ({ rows: [] as any[] }));
       addons = a.rows;
+      const imgs = await this.db
+        .query(
+          `SELECT * FROM product_images WHERE product_id = ANY($1::uuid[]) ORDER BY sort_order ASC, created_at ASC`,
+          [ids]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      images = imgs.rows;
     }
     const byProduct: Record<string, any[]> = {};
     const addonsByProduct: Record<string, any[]> = {};
+    const imagesByProduct: Record<string, any[]> = {};
     for (const v of variants) {
       byProduct[v.product_id] = byProduct[v.product_id] || [];
       byProduct[v.product_id].push(v);
@@ -230,6 +242,15 @@ export class MarketplaceService {
         name: a.name,
         priceDelta: Number(a.price_delta || 0),
         price_delta: Number(a.price_delta || 0),
+      });
+    }
+    for (const img of images) {
+      imagesByProduct[img.product_id] = imagesByProduct[img.product_id] || [];
+      imagesByProduct[img.product_id].push({
+        id: img.id,
+        url: img.url,
+        alt: img.alt,
+        sortOrder: img.sort_order,
       });
     }
 
@@ -260,16 +281,31 @@ export class MarketplaceService {
         ).rows;
 
     return {
-      products: products.rows.map((p: any) => ({
-        ...p,
-        variants: byProduct[p.id] || [],
-        addons: addonsByProduct[p.id] || [],
-        rating: Number(p.rating || 4.8),
-        reviewCount: Number(p.review_count || 0),
-        merchantLabel: p.merchant_label || null,
-        longDescription: p.long_description || p.description || null,
-        available: p.in_stock !== false,
-      })),
+      products: products.rows.map((p: any) => {
+        const gallery = imagesByProduct[p.id] || [];
+        if (!gallery.length && p.image_url) {
+          gallery.push({ id: 'primary', url: p.image_url, alt: p.name, sortOrder: 0 });
+        }
+        const effective = Number(p.effective_price ?? p.sale_price ?? p.price);
+        const compareAt = p.compare_at_price != null ? Number(p.compare_at_price) : null;
+        return {
+          ...p,
+          price: effective,
+          listPrice: Number(p.price),
+          salePrice: p.sale_price != null ? Number(p.sale_price) : null,
+          compareAtPrice: compareAt,
+          onSale: Boolean(p.sale_price != null && Number(p.sale_price) < Number(p.price)),
+          variants: byProduct[p.id] || [],
+          addons: addonsByProduct[p.id] || [],
+          images: gallery,
+          rating: Number(p.rating || 4.8),
+          reviewCount: Number(p.review_count || 0),
+          merchantLabel: p.merchant_label || null,
+          longDescription: p.long_description || p.description || null,
+          available: p.in_stock !== false,
+          stockQty: p.stock_qty != null ? Number(p.stock_qty) : null,
+        };
+      }),
       categories,
     };
   }
@@ -384,7 +420,11 @@ export class MarketplaceService {
     if (!cart.rows[0]) return null;
 
     const items = await this.db.query(
-      `SELECT ci.*, p.name, p.price, p.currency, p.image_url,
+      `SELECT ci.*, p.name,
+              COALESCE(p.sale_price, p.price) AS price,
+              p.price AS list_price,
+              p.sale_price, p.compare_at_price,
+              p.currency, p.image_url, p.store_id AS product_store_id,
               COALESCE(pv.price_delta, 0) AS price_delta, pv.name AS variant_name
        FROM cart_items ci
        JOIN products p ON p.id = ci.product_id
@@ -403,6 +443,9 @@ export class MarketplaceService {
         variant_label: i.variant_name || '',
         unit_price: unit,
         unitPrice: unit,
+        listPrice: Number(i.list_price || i.price),
+        salePrice: i.sale_price != null ? Number(i.sale_price) : null,
+        compareAtPrice: i.compare_at_price != null ? Number(i.compare_at_price) : null,
         lineTotal: unit * Number(i.quantity),
       };
     });
@@ -534,6 +577,23 @@ export class MarketplaceService {
           item.lineTotal,
         ]
       );
+      await this.db
+        .query(
+          `UPDATE products SET
+             stock_qty = CASE
+               WHEN stock_qty IS NULL THEN NULL
+               ELSE GREATEST(0, stock_qty - $1)
+             END,
+             in_stock = CASE
+               WHEN stock_qty IS NULL THEN in_stock
+               WHEN stock_qty - $1 <= 0 THEN FALSE
+               ELSE TRUE
+             END,
+             updated_at = NOW()
+           WHERE id = $2`,
+          [Number(item.quantity || 1), item.product_id]
+        )
+        .catch(() => undefined);
     }
 
     const payment = await this.payments.initializePayment({
@@ -751,5 +811,348 @@ export class MarketplaceService {
     }
 
     return result;
+  }
+
+  private mapProductCard(p: any, images: any[] = []) {
+    const gallery =
+      images.length > 0
+        ? images
+        : p.image_url
+          ? [{ id: 'primary', url: p.image_url, alt: p.name, sortOrder: 0 }]
+          : [];
+    const listPrice = Number(p.price);
+    const salePrice = p.sale_price != null ? Number(p.sale_price) : null;
+    const effective = salePrice != null ? salePrice : listPrice;
+    const compareAt =
+      p.compare_at_price != null
+        ? Number(p.compare_at_price)
+        : salePrice != null && salePrice < listPrice
+          ? listPrice
+          : null;
+    return {
+      ...p,
+      price: effective,
+      listPrice,
+      salePrice,
+      compareAtPrice: compareAt,
+      onSale: Boolean(salePrice != null && salePrice < listPrice),
+      images: gallery,
+      rating: Number(p.rating || 0),
+      reviewCount: Number(p.review_count || 0),
+      storeName: p.store_name || null,
+      storeCategory: p.store_category || null,
+      currency: p.currency || p.currency_code || 'NGN',
+    };
+  }
+
+  async searchProducts(filters: {
+    q?: string;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    sort?: string;
+    storeId?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const values: any[] = [];
+    const where: string[] = [
+      'COALESCE(p.in_stock, TRUE) = TRUE',
+      'COALESCE(p.is_active, TRUE) = TRUE',
+    ];
+
+    if (filters.q) {
+      values.push(`%${String(filters.q).trim()}%`);
+      where.push(
+        `(p.name ILIKE $${values.length} OR COALESCE(p.description,'') ILIKE $${values.length} OR s.name ILIKE $${values.length})`
+      );
+    }
+    if (filters.storeId) {
+      values.push(filters.storeId);
+      where.push(`p.store_id = $${values.length}`);
+    }
+    if (filters.category) {
+      values.push(String(filters.category).toLowerCase());
+      where.push(
+        `(LOWER(COALESCE(c.slug, c.name, p.menu_category, s.category, '')) LIKE '%' || $${values.length} || '%')`
+      );
+    }
+    if (filters.minPrice != null && !Number.isNaN(filters.minPrice)) {
+      values.push(filters.minPrice);
+      where.push(`COALESCE(p.sale_price, p.price) >= $${values.length}`);
+    }
+    if (filters.maxPrice != null && !Number.isNaN(filters.maxPrice)) {
+      values.push(filters.maxPrice);
+      where.push(`COALESCE(p.sale_price, p.price) <= $${values.length}`);
+    }
+
+    const sort = String(filters.sort || 'newest').toLowerCase();
+    const orderBy =
+      sort === 'price_asc' || sort === 'price'
+        ? 'COALESCE(p.sale_price, p.price) ASC NULLS LAST'
+        : sort === 'price_desc'
+          ? 'COALESCE(p.sale_price, p.price) DESC NULLS LAST'
+          : sort === 'rating'
+            ? 'COALESCE(p.rating, 0) DESC, COALESCE(p.review_count, 0) DESC'
+            : 'p.created_at DESC NULLS LAST';
+
+    const limit = Math.min(Math.max(Number(filters.limit) || 48, 1), 100);
+    const offset = Math.max(Number(filters.offset) || 0, 0);
+    values.push(limit, offset);
+
+    const result = await this.db.query(
+      `SELECT p.*,
+              s.name AS store_name,
+              s.category AS store_category,
+              s.currency_code,
+              COALESCE(p.sale_price, p.price) AS effective_price,
+              c.name AS category_name,
+              c.slug AS category_slug
+       FROM products p
+       JOIN stores s ON s.id = p.store_id
+       LEFT JOIN product_categories c ON c.id = p.category_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY ${orderBy}
+       LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values
+    );
+
+    const ids = result.rows.map((r: any) => r.id);
+    let imagesByProduct: Record<string, any[]> = {};
+    if (ids.length) {
+      const imgs = await this.db
+        .query(
+          `SELECT * FROM product_images WHERE product_id = ANY($1::uuid[]) ORDER BY sort_order ASC, created_at ASC`,
+          [ids]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      for (const img of imgs.rows) {
+        imagesByProduct[img.product_id] = imagesByProduct[img.product_id] || [];
+        imagesByProduct[img.product_id].push({
+          id: img.id,
+          url: img.url,
+          alt: img.alt,
+          sortOrder: img.sort_order,
+        });
+      }
+    }
+
+    return {
+      products: result.rows.map((p: any) =>
+        this.mapProductCard(p, imagesByProduct[p.id] || [])
+      ),
+      total: result.rows.length,
+      limit,
+      offset,
+    };
+  }
+
+  async getProductById(productId: string) {
+    const result = await this.db.query(
+      `SELECT p.*,
+              s.name AS store_name,
+              s.category AS store_category,
+              s.currency_code,
+              s.id AS store_id
+       FROM products p
+       JOIN stores s ON s.id = p.store_id
+       WHERE p.id = $1`,
+      [productId]
+    );
+    if (!result.rows[0]) return null;
+    const p = result.rows[0];
+    const [variants, addons, images, reviews] = await Promise.all([
+      this.db
+        .query(`SELECT * FROM product_variants WHERE product_id = $1 ORDER BY name ASC`, [productId])
+        .catch(() => ({ rows: [] as any[] })),
+      this.db
+        .query(
+          `SELECT * FROM product_addons WHERE product_id = $1 AND COALESCE(is_active, TRUE) = TRUE ORDER BY sort_order ASC`,
+          [productId]
+        )
+        .catch(() => ({ rows: [] as any[] })),
+      this.db
+        .query(
+          `SELECT * FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC, created_at ASC`,
+          [productId]
+        )
+        .catch(() => ({ rows: [] as any[] })),
+      this.listProductReviews(productId, 20, 0),
+    ]);
+    const card = this.mapProductCard(
+      p,
+      images.rows.map((img: any) => ({
+        id: img.id,
+        url: img.url,
+        alt: img.alt,
+        sortOrder: img.sort_order,
+      }))
+    );
+    return {
+      ...card,
+      variants: variants.rows,
+      addons: addons.rows.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        priceDelta: Number(a.price_delta || 0),
+        price_delta: Number(a.price_delta || 0),
+      })),
+      reviews: reviews.reviews,
+    };
+  }
+
+  async listProductReviews(productId: string, limit = 20, offset = 0) {
+    const result = await this.db.query(
+      `SELECT r.*,
+              COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', COALESCE(u.last_name, ''))), ''), 'Customer') AS author_name
+       FROM product_reviews r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.product_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [productId, Math.min(limit, 50), Math.max(offset, 0)]
+    );
+    return {
+      reviews: result.rows.map((r: any) => ({
+        id: r.id,
+        productId: r.product_id,
+        userId: r.user_id,
+        orderId: r.order_id,
+        rating: Number(r.rating),
+        title: r.title,
+        body: r.body,
+        createdAt: r.created_at,
+        authorName: r.author_name,
+      })),
+    };
+  }
+
+  async createProductReview(
+    userId: string,
+    productId: string,
+    data: { rating: number; title?: string; body?: string; orderId?: string }
+  ) {
+    const rating = Math.round(Number(data.rating));
+    if (!rating || rating < 1 || rating > 5) {
+      throw new Error('Rating must be between 1 and 5');
+    }
+
+    const purchased = await this.db.query(
+      `SELECT o.id
+       FROM marketplace_orders o
+       JOIN marketplace_order_items i ON i.order_id = o.id
+       WHERE o.user_id = $1 AND i.product_id = $2
+         AND LOWER(COALESCE(o.status::text, '')) IN ('completed', 'delivered', 'paid', 'out_for_delivery', 'preparing', 'confirmed')
+       ORDER BY o.created_at DESC
+       LIMIT 1`,
+      [userId, productId]
+    );
+
+    const orderId = data.orderId || purchased.rows[0]?.id || null;
+
+    const inserted = await this.db.query(
+      `INSERT INTO product_reviews (product_id, user_id, order_id, rating, title, body)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (product_id, user_id) DO UPDATE SET
+         rating = EXCLUDED.rating,
+         title = EXCLUDED.title,
+         body = EXCLUDED.body,
+         order_id = COALESCE(EXCLUDED.order_id, product_reviews.order_id),
+         created_at = NOW()
+       RETURNING *`,
+      [productId, userId, orderId, rating, data.title || null, data.body || null]
+    );
+
+    await this.db.query(
+      `UPDATE products p SET
+         rating = sub.avg_rating,
+         review_count = sub.cnt
+       FROM (
+         SELECT product_id, ROUND(AVG(rating)::numeric, 2) AS avg_rating, COUNT(*)::int AS cnt
+         FROM product_reviews WHERE product_id = $1 GROUP BY product_id
+       ) sub
+       WHERE p.id = sub.product_id`,
+      [productId]
+    );
+
+    return inserted.rows[0];
+  }
+
+  async getWishlist(userId: string) {
+    const rows = await this.db.query(
+      `SELECT w.product_id, w.created_at,
+              p.*, s.name AS store_name, s.category AS store_category, s.currency_code
+       FROM product_wishlist w
+       JOIN products p ON p.id = w.product_id
+       JOIN stores s ON s.id = p.store_id
+       WHERE w.user_id = $1
+       ORDER BY w.created_at DESC`,
+      [userId]
+    );
+    const ids = rows.rows.map((r: any) => r.product_id || r.id);
+    let imagesByProduct: Record<string, any[]> = {};
+    if (ids.length) {
+      const imgs = await this.db
+        .query(
+          `SELECT * FROM product_images WHERE product_id = ANY($1::uuid[]) ORDER BY sort_order ASC`,
+          [ids]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      for (const img of imgs.rows) {
+        imagesByProduct[img.product_id] = imagesByProduct[img.product_id] || [];
+        imagesByProduct[img.product_id].push({
+          id: img.id,
+          url: img.url,
+          alt: img.alt,
+          sortOrder: img.sort_order,
+        });
+      }
+    }
+    return rows.rows.map((p: any) => ({
+      ...this.mapProductCard(p, imagesByProduct[p.id] || []),
+      wishedAt: p.created_at,
+      productId: p.id,
+    }));
+  }
+
+  async requestReturn(
+    userId: string,
+    orderId: string,
+    data: { reason: string; itemId?: string; refundAmount?: number }
+  ) {
+    const order = await this.db.query(
+      `SELECT * FROM marketplace_orders WHERE id = $1 AND user_id = $2`,
+      [orderId, userId]
+    );
+    if (!order.rows[0]) throw new Error('Order not found');
+    const reason = String(data.reason || '').trim();
+    if (!reason) throw new Error('Reason is required');
+
+    const inserted = await this.db.query(
+      `INSERT INTO marketplace_returns (order_id, item_id, user_id, reason, status, refund_amount)
+       VALUES ($1,$2,$3,$4,'requested',$5)
+       RETURNING *`,
+      [
+        orderId,
+        data.itemId || null,
+        userId,
+        reason,
+        data.refundAmount != null ? Number(data.refundAmount) : Number(order.rows[0].total || 0),
+      ]
+    );
+    return inserted.rows[0];
+  }
+
+  async listReturnsForUser(userId: string) {
+    return this.db.query(
+      `SELECT r.*, o.public_ref, o.total AS order_total, s.name AS store_name
+       FROM marketplace_returns r
+       JOIN marketplace_orders o ON o.id = r.order_id
+       LEFT JOIN stores s ON s.id = o.store_id
+       WHERE r.user_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
   }
 }

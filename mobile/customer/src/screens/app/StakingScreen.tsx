@@ -18,17 +18,19 @@ function authHeaders(): Record<string, string> {
 /** DVT Staking dashboard — summary + pools + Stake More (mockup). */
 export default function StakingScreen({ onBack }: { onBack?: () => void }) {
   const [data, setData] = useState<any>({
-    staked: 500,
-    apy: 14.5,
-    rewardsEarned: 72.5,
-    lockPeriodDays: 30,
+    staked: 0,
+    apy: 0,
+    rewardsEarned: 0,
+    lockPeriodDays: 0,
     pools: [],
   });
   const [selected, setSelected] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = () => {
+    setLoading(true);
     fetch(`${API}/staking/dashboard`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -37,7 +39,12 @@ export default function StakingScreen({ onBack }: { onBack?: () => void }) {
           setSelected(j.data.yourPoolId || j.data.pools?.[1]?.id || '');
         }
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setData({ staked: 0, apy: 0, rewardsEarned: 0, lockPeriodDays: 0, pools: [] });
+        setSelected('');
+        setMsg(e?.message || 'Could not load staking');
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -85,11 +92,13 @@ export default function StakingScreen({ onBack }: { onBack?: () => void }) {
             </View>
             <View>
               <Text style={styles.statLab}>Lock Period</Text>
-              <Text style={styles.statVal}>{Number(data.lockPeriodDays || 30)} days</Text>
+              <Text style={styles.statVal}>{Number(data.lockPeriodDays || 0)} days</Text>
             </View>
           </View>
         </View>
 
+        {loading ? <Text style={styles.msg}>Loading staking…</Text> : null}
+        {!loading && !(data.pools || []).length ? <Text style={styles.msg}>No staking pools available.</Text> : null}
         {(data.pools || []).map((p: any) => (
           <Pressable
             key={p.id}
@@ -121,11 +130,15 @@ export default function StakingScreen({ onBack }: { onBack?: () => void }) {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable style={styles.stakeBtn} onPress={stakeMore} disabled={busy}>
+        <Pressable style={styles.stakeBtn} onPress={stakeMore} disabled={busy || loading || !selected}>
           <Text style={styles.stakeText}>{busy ? 'Staking…' : 'Stake More'}</Text>
         </Pressable>
-        <Pressable style={styles.unstakeBox} onPress={() => setMsg('Unstake available after lock')}>
-          <Text style={styles.unstakeHint}> </Text>
+        <Pressable
+          style={styles.unstakeBox}
+          onPress={() => setMsg('Unstake available after lock period ends')}
+          accessibilityLabel="Unstake"
+        >
+          <Text style={styles.unstakeIcon}>↪</Text>
         </Pressable>
       </View>
     </View>
@@ -197,7 +210,10 @@ const styles = StyleSheet.create({
     width: 56,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#FFF',
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: '#09090B',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  unstakeHint: { color: 'transparent' },
+  unstakeIcon: { fontSize: 18 },
 });

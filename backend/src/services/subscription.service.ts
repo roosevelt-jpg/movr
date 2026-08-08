@@ -4,6 +4,8 @@ import { DriverPerformanceService } from './driver-performance.service';
 import { StakingService } from './staking.service';
 import { TokenService } from './token.service';
 
+export type BillingInterval = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
 export class SubscriptionService {
   private performance: DriverPerformanceService;
   private staking: StakingService;
@@ -16,6 +18,35 @@ export class SubscriptionService {
     this.performance = new DriverPerformanceService(db);
     this.staking = new StakingService(db);
     this.tokens = new TokenService(db);
+  }
+
+  /** Normalize plan interval / id hint → billing cadence. */
+  static parseInterval(raw: unknown): BillingInterval {
+    const s = String(raw || '').toLowerCase();
+    if (s.includes('week')) return 'weekly';
+    if (s.includes('quarter') || s.includes('_q') || s.endsWith('_q')) return 'quarterly';
+    if (s.includes('year') || s.includes('annual') || s.includes('_y') || s.endsWith('_y'))
+      return 'yearly';
+    return 'monthly';
+  }
+
+  /** Advance from now by the plan billing cadence. */
+  static nextBillingDate(interval: unknown, from: Date = new Date()): Date {
+    const next = new Date(from);
+    switch (SubscriptionService.parseInterval(interval)) {
+      case 'weekly':
+        next.setDate(next.getDate() + 7);
+        break;
+      case 'quarterly':
+        next.setMonth(next.getMonth() + 3);
+        break;
+      case 'yearly':
+        next.setFullYear(next.getFullYear() + 1);
+        break;
+      default:
+        next.setMonth(next.getMonth() + 1);
+    }
+    return next;
   }
 
   async quote(userId: string, planId: string, paymentMethod: 'fiat' | 'dvt' = 'fiat') {
@@ -110,21 +141,17 @@ export class SubscriptionService {
       payment = { method: 'wallet', amount: quote.finalPrice, currency: quote.plan.currency || 'GHS' };
     }
 
-    const nextBilling = new Date();
-    // Weekly plan renews in 7 days; others monthly
-    const planId = String(data.planId || '');
-    if (planId.includes('weekly')) {
-      nextBilling.setDate(nextBilling.getDate() + 7);
-    } else {
-      nextBilling.setMonth(nextBilling.getMonth() + 1);
-    }
+    const nextBilling = SubscriptionService.nextBillingDate(
+      quote.plan?.interval || data.planId
+    );
 
     const status = 'active';
     const sub = await this.db.query(
       `INSERT INTO subscriptions (
          user_id, plan_id, status, amount, currency, next_billing_date, auto_renew,
-         payment_method, discount_applied_pct, discount_reason, list_price, final_price
-       ) VALUES ($1,$2,$11,$3,$4,$5,TRUE,$10,$6,$7,$8,$9)
+         payment_method, discount_applied_pct, discount_reason, list_price, final_price,
+         paused_at, paused_until, pause_reason
+       ) VALUES ($1,$2,$11,$3,$4,$5,TRUE,$10,$6,$7,$8,$9,NULL,NULL,NULL)
        ON CONFLICT (user_id) DO UPDATE SET
          plan_id = EXCLUDED.plan_id,
          status = EXCLUDED.status,
@@ -135,6 +162,9 @@ export class SubscriptionService {
          list_price = EXCLUDED.list_price,
          final_price = EXCLUDED.final_price,
          next_billing_date = EXCLUDED.next_billing_date,
+         paused_at = NULL,
+         paused_until = NULL,
+         pause_reason = NULL,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -153,5 +183,49 @@ export class SubscriptionService {
     );
 
     return { subscription: sub.rows[0], quote, payment };
+  }
+
+  /**
+   * Pause subscription — stop billing while driver is offline / cash-tight.
+   * They keep 100% of any fares they still take; go offline until resume.
+   */
+  async pause(userId: string, opts?: { days?: number; reason?: string }) {
+    const days = Math.min(90, Math.max(1, Number(opts?.days) || 14));
+    const until = new Date(Date.now() + days * 86400000);
+    const result = await this.db.query(
+      `UPDATE subscriptions SET
+         status = 'paused',
+         paused_at = NOW(),
+         paused_until = $2,
+         pause_reason = $3,
+         updated_at = NOW()
+       WHERE user_id = $1
+       RETURNING *`,
+      [userId, until, opts?.reason || 'driver_requested']
+    );
+    if (!result.rows[0]) throw new Error('No subscription to pause');
+    return {
+      subscription: result.rows[0],
+      message: `Plan paused until ${until.toLocaleDateString()}. You still keep 100% of every fare when you drive.`,
+    };
+  }
+
+  async resume(userId: string) {
+    const result = await this.db.query(
+      `UPDATE subscriptions SET
+         status = 'active',
+         paused_at = NULL,
+         paused_until = NULL,
+         pause_reason = NULL,
+         updated_at = NOW()
+       WHERE user_id = $1
+       RETURNING *`,
+      [userId]
+    );
+    if (!result.rows[0]) throw new Error('No subscription to resume');
+    return {
+      subscription: result.rows[0],
+      message: 'Plan resumed. Keep 100% of every fare — no commission, ever.',
+    };
   }
 }

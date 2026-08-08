@@ -13,18 +13,14 @@ const headers = () => ({
 export default function MerchantPayoutsPage() {
   const { formatMoney } = useLocalCurrency();
   const [summary, setSummary] = useState({
-    available: 435200,
-    thisWeek: 870500,
-    movrFee: 43525,
-    movrFeePct: 5,
-    net: 826975,
+    available: 0,
+    thisWeek: 0,
+    movrFee: 0,
+    movrFeePct: 0,
+    net: 0,
     currency: 'NGN',
   });
-  const [account, setAccount] = useState<any>({
-    bankName: 'GTBank',
-    accountNumber: '021XXXXXXX',
-    accountName: 'Chicken Republic Ltd.',
-  });
+  const [account, setAccount] = useState<any>(null);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -42,15 +38,15 @@ export default function MerchantPayoutsPage() {
           available: Number(d.available ?? prev.available),
           thisWeek: Number(d.thisWeek ?? prev.thisWeek),
           movrFee: Number(d.movrFee ?? prev.movrFee),
-          movrFeePct: Number(d.movrFeePct ?? 5),
+          movrFeePct: Number(d.movrFeePct ?? 0),
           net: Number(d.net ?? prev.net),
           currency: d.currency || prev.currency,
         }));
         if (d.payoutAccount) {
           setAccount({
-            bankName: d.payoutAccount.bankName || 'GTBank',
-            accountNumber: d.payoutAccount.accountNumber || '021XXXXXXX',
-            accountName: d.payoutAccount.accountName || 'Chicken Republic Ltd.',
+            bankName: d.payoutAccount.bankName || '',
+            accountNumber: d.payoutAccount.accountNumber || '',
+            accountName: d.payoutAccount.accountName || '',
           });
         } else if (d.accounts?.[0]) {
           const a = d.accounts[0];
@@ -86,9 +82,9 @@ export default function MerchantPayoutsPage() {
         {
           amount: summary.available,
           bankAccount: {
-            bankName: account.bankName,
-            accountNumber: account.accountNumber,
-            accountName: account.accountName,
+            bankName: account?.bankName,
+            accountNumber: account?.accountNumber,
+            accountName: account?.accountName,
           },
           currency: summary.currency,
         },
@@ -145,7 +141,7 @@ export default function MerchantPayoutsPage() {
         </div>
 
         <p className="mb-3 text-xs font-bold tracking-widest text-zinc-500">PAYOUT ACCOUNT</p>
-        <div className="mb-2 flex items-center gap-3 rounded-2xl border-2 border-violet-500 bg-zinc-900 p-4">
+        {account ? <div className="mb-2 flex items-center gap-3 rounded-2xl border-2 border-violet-500 bg-zinc-900 p-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-zinc-800 text-lg">🏦</div>
           <div className="min-w-0 flex-1">
             <p className="font-bold">
@@ -154,7 +150,7 @@ export default function MerchantPayoutsPage() {
             <p className="text-sm text-zinc-400">{account.accountName}</p>
           </div>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-500 text-sm">✓</span>
-        </div>
+        </div> : <p className="mb-2 text-sm text-zinc-500">No payout account added.</p>}
         <button
           type="button"
           onClick={() => setShowAdd((v) => !v)}
@@ -211,7 +207,7 @@ export default function MerchantPayoutsPage() {
           )}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-900 bg-black/95 p-4 md:static md:mt-8 md:border-0 md:bg-transparent md:p-0">
+        <div className="sticky bottom-0 mt-8 border-t border-zinc-900 bg-black/95 p-4">
           <div className="mx-auto max-w-lg">
             <button
               type="button"

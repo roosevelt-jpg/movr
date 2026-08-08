@@ -19,56 +19,42 @@ const EARN_ICONS: Record<string, string> = {
 };
 const AVATAR_BG = ['#F97316', '#71717A', '#8E2DE2', '#3B82F6'];
 
-/** Rewards + Leaderboard (mockup). */
+/** Rewards + Leaderboard. */
 export default function RewardsPage() {
-  const [data, setData] = useState<any>({
-    points: 850,
-    tierLabel: 'Gold Tier',
-    nextTier: 'Platinum',
-    pointsAway: 150,
-    currentTierMin: 500,
-    nextTierMin: 1000,
-    progress: 0.7,
-    earnCards: [
-      { id: 'ride', label: 'Ride', subtitle: '+10 pts per ride', icon: 'car' },
-      { id: 'shop', label: 'Shop', subtitle: '+5 pts per order', icon: 'bag' },
-      { id: 'refer', label: 'Refer Friends', subtitle: '+50 pts per referral', icon: 'people' },
-      { id: 'deliver', label: 'Deliver', subtitle: '+8 pts per parcel', icon: 'box' },
-    ],
-    leaderboard: [
-      { rank: 1, name: 'Olumide Adebayo', initials: 'OA', points: 2340 },
-      { rank: 2, name: 'Chioma Ferreira', initials: 'CF', points: 1980 },
-      { rank: 7, name: 'You', initials: 'KA', points: 850, isYou: true },
-    ],
-  });
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/points/rewards-hub`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load rewards'))
+      .finally(() => setLoading(false));
   }, []);
 
-  const progress = Math.min(1, Math.max(0.08, Number(data.progress || 0.7)));
+  const progress = Math.min(1, Math.max(0, Number(data?.progress || 0)));
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4" data-force-dark>
+      {loading ? <p className="mb-4 text-sm text-zinc-400">Loading rewards…</p> : null}
+      {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
       <div className="flex justify-between items-center mb-5">
         <h1 className="text-3xl font-extrabold">Rewards</h1>
         <span className="rounded-full border border-amber-700 bg-stone-900 px-3 py-1 text-sm font-bold text-amber-400">
-          🏆 {data.tierLabel || 'Gold Tier'}
+          🏆 {data?.tierLabel || 'No tier'}
         </span>
       </div>
 
       <div className="rounded-2xl bg-zinc-900 p-4 mb-5">
         <div className="flex justify-between">
-          <p className="text-3xl font-extrabold">{Number(data.points || 0).toLocaleString()} pts</p>
+          <p className="text-3xl font-extrabold">{Number(data?.points || 0).toLocaleString()} pts</p>
           <div className="text-right">
-            <p className="text-sm text-zinc-400">Next: {data.nextTier || 'Platinum'}</p>
+            <p className="text-sm text-zinc-400">Next: {data?.nextTier || '—'}</p>
             <p className="text-purple-400 font-bold text-sm">
-              {Number(data.pointsAway || 0).toLocaleString()} pts away
+              {Number(data?.pointsAway || 0).toLocaleString()} pts away
             </p>
           </div>
         </div>
@@ -79,14 +65,14 @@ export default function RewardsPage() {
           />
         </div>
         <div className="flex justify-between text-xs text-zinc-500 mt-2">
-          <span>Gold ({Number(data.currentTierMin || 500)})</span>
-          <span>Platinum ({Number(data.nextTierMin || 1000)})</span>
+          <span>{Number(data?.currentTierMin || 0)}</span>
+          <span>{Number(data?.nextTierMin || 0)}</span>
         </div>
       </div>
 
       <h2 className="text-lg font-extrabold mb-3">Earn Points</h2>
       <div className="grid grid-cols-2 gap-2.5 mb-6">
-        {(data.earnCards || []).map((c: any) => (
+        {(data?.earnCards || []).map((c: any) => (
           <Link
             key={c.id}
             to={c.id === 'refer' ? '/refer' : '#'}
@@ -101,7 +87,7 @@ export default function RewardsPage() {
 
       <h2 className="text-lg font-extrabold mb-3">Leaderboard</h2>
       <ul className="space-y-2">
-        {(data.leaderboard || []).map((r: any, i: number) => (
+        {(data?.leaderboard || []).map((r: any, i: number) => (
           <li
             key={`${r.rank}-${r.name}`}
             className={`flex items-center gap-3 rounded-xl px-2 py-2.5 ${

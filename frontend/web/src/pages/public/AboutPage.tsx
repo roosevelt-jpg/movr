@@ -1,9 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { useCmsPage } from '../../services/cms';
 import { CmsSections } from '../../cms/sections';
-import { BrandHeroBanner } from '../../brand/BrandHeroBanner';
-import { BRAND } from '../../brand/assets';
+import { CmsUnavailable } from '../../cms/CmsUnavailable';
 
 /** About page — CMS slug `about`. */
 export default function AboutPage() {
@@ -18,20 +16,7 @@ export default function AboutPage() {
   }
 
   if (error || !page?.sections?.length) {
-    return (
-      <div className="bg-surface text-text-primary">
-        <BrandHeroBanner
-          imageUrl={BRAND.rideSedan}
-          eyebrow="About Movr"
-          headline="Move. Shop. Deliver."
-          subhead="We connect riders, drivers, and merchants across African cities on one platform."
-        >
-          <Link to="/download" className="mkt-btn-primary inline-flex">
-            Get the app
-          </Link>
-        </BrandHeroBanner>
-      </div>
-    );
+    return <CmsUnavailable title="About page unpublished" />;
   }
 
   return (

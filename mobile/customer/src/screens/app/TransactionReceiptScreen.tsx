@@ -4,8 +4,6 @@ import { spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const DEMO = 'f3000000-0000-4000-8000-000000004821';
-
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
@@ -15,7 +13,7 @@ function authHeaders(): Record<string, string> {
 
 /** Payment Successful receipt — txn breakdown + DVT earned (mockup). */
 export default function TransactionReceiptScreen({
-  rideId = DEMO,
+  rideId,
   onBack,
   onDone,
 }: {
@@ -23,47 +21,40 @@ export default function TransactionReceiptScreen({
   onBack?: () => void;
   onDone?: () => void;
 }) {
-  const [data, setData] = useState<any>({
-    statusLabel: 'Payment Successful',
-    totalPaid: 1200,
-    currency: 'NGN',
-    paidAtLabel: 'Apr 8, 2026 · 9:12 AM',
-    txnRef: 'MVR-TXN-48219',
-    service: 'Standard Ride',
-    driverName: 'Emeka Okafor',
-    from: 'Victoria Island',
-    to: 'Lekki Phase 1',
-    distanceLabel: '8.4 km · 18 min',
-    baseFare: 900,
-    distanceFare: 360,
-    dvtDiscount: 60,
-    dvtEarned: 120,
-    paymentMethod: 'Movr Wallet',
-  });
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const id = rideId || DEMO;
-    fetch(`${API}/rides/${id}/receipt`, { headers: authHeaders() })
+    if (!rideId) {
+      setLoading(false);
+      setError('Receipt not found');
+      return;
+    }
+    fetch(`${API}/rides/${rideId}/receipt`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
+        else throw new Error('Receipt not found');
       })
-      .catch(() => undefined);
+      .catch((e) => setError(e?.message || 'Could not load receipt'))
+      .finally(() => setLoading(false));
   }, [rideId]);
 
-  const cur = data.currency || 'NGN';
+  const cur = data?.currency || 'NGN';
   const rows = [
-    ['Transaction ID', data.txnRef],
-    ['Service', data.service],
-    ['Driver', data.driverName],
-    ['From', data.from],
-    ['To', data.to],
-    ['Distance', data.distanceLabel],
-    ['Base fare', formatCurrency(Number(data.baseFare || 0), cur)],
-    ['Distance charge', formatCurrency(Number(data.distanceFare || 0), cur)],
+    ['Transaction ID', data?.txnRef],
+    ['Service', data?.service],
+    ['Driver', data?.driverName],
+    ['From', data?.from],
+    ['To', data?.to],
+    ['Distance', data?.distanceLabel],
+    ['Base fare', formatCurrency(Number(data?.baseFare || 0), cur)],
+    ['Distance charge', formatCurrency(Number(data?.distanceFare || 0), cur)],
   ];
 
   const share = async () => {
+    if (!data) return;
     try {
       await Share.share({
         message: `Movr receipt ${data.txnRef}: ${formatCurrency(Number(data.totalPaid || 0), cur)}`,
@@ -85,6 +76,10 @@ export default function TransactionReceiptScreen({
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: spacing[4] }}>
+        {loading ? <Text style={styles.when}>Loading receipt…</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!data ? null : (
+        <>
         <View style={styles.check}>
           <Text style={styles.checkMark}>✓</Text>
         </View>
@@ -100,6 +95,12 @@ export default function TransactionReceiptScreen({
             </View>
           ))}
           <View style={styles.row}>
+            <Text style={styles.k}>Platform fee</Text>
+            <Text style={styles.green}>
+              {formatCurrency(Number(data?.platformFee ?? 0), cur)}
+            </Text>
+          </View>
+          <View style={styles.row}>
             <Text style={styles.k}>DVT discount</Text>
             <Text style={styles.green}>
               -{formatCurrency(Number(data.dvtDiscount || 0), cur)}
@@ -109,6 +110,15 @@ export default function TransactionReceiptScreen({
           <View style={styles.row}>
             <Text style={styles.totalLab}>Total</Text>
             <Text style={styles.totalVal}>{formatCurrency(Number(data.totalPaid || 0), cur)}</Text>
+          </View>
+          <View style={styles.keepBox}>
+            <Text style={styles.keepText}>
+              {data.driverKeepsLabel || 'Driver keeps 100% of this fare'}
+            </Text>
+            <Text style={styles.keepSub}>
+              {data.fairFareNote ||
+                'No commission — Movr is funded by driver subscriptions, not your fare.'}
+            </Text>
           </View>
         </View>
 
@@ -121,6 +131,17 @@ export default function TransactionReceiptScreen({
             <Text style={styles.rewardSub}>Paid with: {data.paymentMethod || 'Movr Wallet'}</Text>
           </View>
         </View>
+
+        <Pressable
+          style={styles.referStrip}
+          onPress={() => {
+            /* parent can wire refer via onDone then navigate */
+          }}
+        >
+          <Text style={styles.referText}>Refer a friend · they ride fair too →</Text>
+        </Pressable>
+        </>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -181,6 +202,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: spacing[5],
   },
+  error: { color: '#F87171', textAlign: 'center', marginVertical: spacing[4] },
   card: {
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
@@ -210,6 +232,23 @@ const styles = StyleSheet.create({
   rewardIcon: { color: '#A78BFA', fontSize: 28 },
   rewardTitle: { color: '#FFFFFF', fontWeight: '700' },
   rewardSub: { color: 'rgba(255,255,255,0.45)', marginTop: 4, fontSize: 13 },
+  keepBox: {
+    marginTop: 12,
+    backgroundColor: '#052e16',
+    borderRadius: 12,
+    padding: 12,
+  },
+  keepText: { color: '#86efac', fontWeight: '700', fontSize: 13 },
+  keepSub: { color: '#a7f3d0', fontSize: 11, marginTop: 4, lineHeight: 16 },
+  referStrip: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3b0764',
+    backgroundColor: '#1a0b2e',
+  },
+  referText: { color: '#e9d5ff', fontWeight: '600', textAlign: 'center' },
   footer: {
     position: 'absolute',
     left: 0,

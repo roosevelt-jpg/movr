@@ -13,26 +13,29 @@ const authHeaders = () => {
   return t ? { Authorization: `Bearer ${t}` } : {};
 };
 
-/** Restaurant menu storefront (mockup). */
+/** Restaurant menu storefront. */
 const StorePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [store, setStore] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([
-    { name: 'All' },
-    { name: 'Burgers' },
-    { name: 'Chicken' },
-    { name: 'Sides' },
-  ]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [cat, setCat] = useState('All');
   const [cartCount, setCartCount] = useState(0);
   const [cartTotal, setCartTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const currency = store?.currency_code || 'NGN';
 
   const load = async () => {
-    if (!id) return;
+    if (!id) {
+      setError('Store not found');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const [s, p] = await Promise.all([
         axios.get(`${API}/stores/${id}`),
@@ -46,34 +49,12 @@ const StorePage: React.FC = () => {
         setCategories(p.data.categories);
       }
     } catch {
-      setStore({
-        name: 'Chicken Republic',
-        category: 'Fast Food',
-        hours_text: 'Open until 10 PM',
-        rating: 4.8,
-        eta_min_minutes: 20,
-        eta_max_minutes: 35,
-        min_order_amount: 500,
-        currency_code: 'NGN',
-      });
-      setProducts([
-        {
-          id: '1',
-          name: 'Zinger Burger Meal',
-          description: 'Crispy chicken burger, fries & drink',
-          price: 3200,
-          emoji: '🍔',
-          is_popular: true,
-        },
-        {
-          id: '2',
-          name: 'Grilled Chicken Combo',
-          description: '2pc chicken, coleslaw & plantain',
-          price: 4500,
-          emoji: '🍗',
-          is_popular: true,
-        },
-      ]);
+      setStore(null);
+      setProducts([]);
+      setCategories([]);
+      setError('Could not load store');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,7 +74,8 @@ const StorePage: React.FC = () => {
         )
       );
     } catch {
-      /* ignore */
+      setCartCount(0);
+      setCartTotal(0);
     }
   };
 
@@ -125,21 +107,27 @@ const StorePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto relative pb-24" data-force-dark>
+    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto relative pb-8" data-force-dark>
       <div className="flex justify-between items-start p-4">
         <button type="button" onClick={() => navigate(-1)} className="w-9 h-9 rounded-full bg-zinc-900">
           ←
         </button>
         <span className="text-5xl">🍔</span>
       </div>
-      <h1 className="text-3xl font-extrabold px-4">{store?.name || 'Chicken Republic'}</h1>
-      <p className="text-zinc-400 px-4 mt-2">
-        {store?.category || 'Fast Food'} · {store?.hours_text || store?.hours_json?.label || 'Open until 10 PM'}
-      </p>
-      <p className="px-4 mt-2 font-semibold">
-        ★ {Number(store?.rating || 4.8).toFixed(1)} · {store?.eta_min_minutes || 20}-{store?.eta_max_minutes || 35}{' '}
-        min · Min {formatCurrency(Number(store?.min_order_amount || 500), currency)}
-      </p>
+      {loading ? <p className="px-4 text-zinc-400">Loading store…</p> : null}
+      {error ? <p className="px-4 text-red-400">{error}</p> : null}
+      {store ? (
+        <>
+          <h1 className="text-3xl font-extrabold px-4">{store.name}</h1>
+          <p className="text-zinc-400 px-4 mt-2">
+            {[store.category, store.hours_text || store.hours_json?.label].filter(Boolean).join(' · ')}
+          </p>
+          <p className="px-4 mt-2 font-semibold">
+            ★ {Number(store.rating || 0).toFixed(1)} · {store.eta_min_minutes || 0}-{store.eta_max_minutes || 0}{' '}
+            min · Min {formatCurrency(Number(store.min_order_amount || 0), currency)}
+          </p>
+        </>
+      ) : null}
 
       <div className="flex gap-2 px-4 mt-5 overflow-x-auto">
         {categories.map((c: any) => {
@@ -189,7 +177,7 @@ const StorePage: React.FC = () => {
       {cartCount > 0 ? (
         <Link
           to={`/cart?storeId=${id}`}
-          className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto rounded-2xl bg-blue-600 min-h-[54px] px-5 flex items-center justify-between font-bold"
+          className="mt-6 mx-4 rounded-2xl bg-blue-600 min-h-[54px] px-5 flex items-center justify-between font-bold"
         >
           <span>🛒 View Cart ({cartCount})</span>
           <span>{formatCurrency(cartTotal, currency)} →</span>

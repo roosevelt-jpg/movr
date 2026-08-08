@@ -4,8 +4,6 @@ import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
-
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
@@ -16,30 +14,9 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-const FALLBACK = [
-  {
-    id: 'd0000000-0000-4000-8000-000000000141',
-    name: 'Zinger Burger Meal',
-    description: 'Crispy chicken burger, fries & drink',
-    price: 3200,
-    menu_category: 'Burgers',
-    emoji: '🍔',
-    is_popular: true,
-  },
-  {
-    id: 'd0000000-0000-4000-8000-000000000142',
-    name: 'Grilled Chicken Combo',
-    description: '2pc chicken, coleslaw & plantain',
-    price: 4500,
-    menu_category: 'Chicken',
-    emoji: '🍗',
-    is_popular: true,
-  },
-];
-
 /** Restaurant menu — categories, popular items, floating View Cart (mockup). */
 export default function StoreProfileScreen({
-  storeId = CHICKEN_ID,
+  storeId,
   onOpenCart,
   onBack,
   onAddToCart,
@@ -51,22 +28,17 @@ export default function StoreProfileScreen({
   onOpenCart?: () => void;
   onBack?: () => void;
 }) {
-  const [store, setStore] = useState<any>({
-    name: 'Chicken Republic',
-    category: 'Fast Food',
-    hours: 'Open until 10 PM',
-    rating: 4.8,
-    eta: '20-35 min',
-    minOrder: 500,
-    currency: 'NGN',
-  });
-  const [products, setProducts] = useState<any[]>(FALLBACK);
-  const [categories, setCategories] = useState<string[]>(['All', 'Burgers', 'Chicken', 'Sides']);
+  const [store, setStore] = useState<any>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(['All']);
   const [cat, setCat] = useState('All');
-  const [cartCount, setCartCount] = useState(2);
-  const [cartTotal, setCartTotal] = useState(7700);
+  const [cartCount, setCartCount] = useState(0);
+  const [cartTotal, setCartTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const loadCart = () => {
+    if (!storeId) return;
     fetch(`${API}/cart?storeId=${storeId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -77,38 +49,49 @@ export default function StoreProfileScreen({
           (n: number, i: any) => n + Number(i.unit_price || i.unitPrice || i.price || 0) * Number(i.quantity || 0),
           0
         );
-        if (count > 0) {
-          setCartCount(count);
-          setCartTotal(total);
-        }
+        setCartCount(count);
+        setCartTotal(total);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setCartCount(0);
+        setCartTotal(0);
+      });
   };
 
   useEffect(() => {
+    if (!storeId) {
+      setLoading(false);
+      setError('Store not found');
+      return;
+    }
+    setLoading(true);
+    setError('');
     fetch(`${API}/stores/${storeId}`)
       .then((r) => r.json())
       .then((j) => {
         const s = j?.data;
         if (!s) return;
         setStore({
-          name: s.name || 'Chicken Republic',
-          category: s.category || 'Fast Food',
-          hours: s.hours_text || s.hours_json?.label || 'Open until 10 PM',
-          rating: Number(s.rating || 4.8),
-          eta: `${s.eta_min_minutes || 20}-${s.eta_max_minutes || 35} min`,
-          minOrder: Number(s.min_order_amount || 500),
+          name: s.name || '',
+          category: s.category || '',
+          hours: s.hours_text || s.hours_json?.label || '',
+          rating: Number(s.rating || 0),
+          eta: s.eta_text || (s.eta_min_minutes != null ? `${s.eta_min_minutes}-${s.eta_max_minutes ?? s.eta_min_minutes} min` : ''),
+          minOrder: Number(s.min_order_amount || 0),
           currency: s.currency_code || 'NGN',
         });
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setStore(null);
+        setError(e?.message || 'Could not load store');
+      });
 
     const q = cat !== 'All' ? `?category=${encodeURIComponent(cat)}` : '';
     fetch(`${API}/stores/${storeId}/products${q}`)
       .then((r) => r.json())
       .then((j) => {
         const rows = j?.data || [];
-        if (Array.isArray(rows) && rows.length) {
+        if (Array.isArray(rows)) {
           setProducts(
             rows.map((p: any) => ({
               id: p.id,
@@ -126,7 +109,11 @@ export default function StoreProfileScreen({
           setCategories(cats.map((c: any) => c.name || c).filter(Boolean));
         }
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setProducts([]);
+        setError(e?.message || 'Could not load products');
+      })
+      .finally(() => setLoading(false));
 
     loadCart();
   }, [storeId, cat]);
@@ -151,7 +138,7 @@ export default function StoreProfileScreen({
     loadCart();
   };
 
-  const currency = store.currency || 'NGN';
+  const currency = store?.currency || 'NGN';
 
   return (
     <View style={styles.root}>
@@ -162,13 +149,14 @@ export default function StoreProfileScreen({
           </Pressable>
           <Text style={styles.heroEmoji}>🍔</Text>
         </View>
-        <Text style={styles.title}>{store.name}</Text>
+        {loading ? <Text style={styles.empty}>Loading store…</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Text style={styles.title}>{store?.name || ''}</Text>
         <Text style={styles.sub}>
-          {store.category} · {store.hours}
+          {[store?.category, store?.hours].filter(Boolean).join(' · ')}
         </Text>
         <Text style={styles.stats}>
-          ★ {Number(store.rating).toFixed(1)}   ·   {store.eta}   ·   Min{' '}
-          {formatCurrency(store.minOrder, currency)}
+          {store ? `★ ${Number(store.rating || 0).toFixed(1)}   ·   ${store.eta || ''}   ·   Min ${formatCurrency(store.minOrder || 0, currency)}` : ''}
         </Text>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cats}>
@@ -212,6 +200,7 @@ export default function StoreProfileScreen({
             </View>
           </Pressable>
         ))}
+        {!loading && !list.length ? <Text style={styles.empty}>No products available.</Text> : null}
       </ScrollView>
 
       {cartCount > 0 ? (
@@ -319,4 +308,6 @@ const styles = StyleSheet.create({
   },
   cartLeft: { color: '#fff', fontWeight: '700' },
   cartRight: { color: '#fff', fontWeight: '800' },
+  empty: { color: '#71717A', paddingHorizontal: 16, marginVertical: 12 },
+  error: { color: '#F87171', paddingHorizontal: 16, marginVertical: 8 },
 });

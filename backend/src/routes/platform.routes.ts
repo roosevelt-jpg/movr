@@ -18,6 +18,7 @@ import { InboxService } from '../services/inbox.service';
 import { KycAttestationService } from '../services/kyc-attestation.service';
 import identityVerification from '../services/identity-verification.service';
 import { assertDirectUploadUrl } from '../utils/media-url';
+import { VehicleCatalogService } from '../services/vehicle-catalog.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -29,6 +30,7 @@ const rewards = new RewardsEngineService(db);
 const settlement = new SettlementService(db, payments);
 const inbox = new InboxService(db);
 const kyc = new KycAttestationService(db);
+const vehicleCatalog = new VehicleCatalogService(db);
 
 export const driverRouter = Router();
 export const subscriptionsRouter = Router();
@@ -466,8 +468,48 @@ driverRouter.get(
           payoutMethod: {
             label: method.rows[0]?.provider || 'MTN MoMo',
             mask: method.rows[0]?.account_mask || '****4471',
+            eta: 'Usually arrives in minutes',
           },
+          keep100Note: 'Every fare on Movr is yours — withdraw anytime via MoMo.',
         },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+driverRouter.post(
+  '/payouts/method',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const provider = String(req.body.provider || req.body.channel || 'MTN MoMo').trim();
+      const accountNumber = String(req.body.accountNumber || req.body.phone || '')
+        .replace(/\D/g, '')
+        .slice(-10);
+      if (accountNumber.length < 9) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Enter a valid MoMo / bank account number',
+        });
+      }
+      const mask = `****${accountNumber.slice(-4)}`;
+      await db.query(
+        `INSERT INTO driver_payout_methods (user_id, provider, account_mask, account_number, is_default, updated_at)
+         VALUES ($1, $2, $3, $4, TRUE, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           provider = EXCLUDED.provider,
+           account_mask = EXCLUDED.account_mask,
+           account_number = EXCLUDED.account_number,
+           is_default = TRUE,
+           updated_at = NOW()`,
+        [req.user!.id, provider, mask, accountNumber]
+      );
+      res.json({
+        status: 'success',
+        data: { label: provider, mask, eta: 'Usually arrives in minutes via MoMo' },
       });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -528,7 +570,7 @@ driverRouter.post(
 
       res.status(201).json({
         status: 'success',
-        message: 'Withdrawal requested',
+        message: 'Withdrawal requested — usually arrives in minutes via MoMo',
         data: payout.rows[0],
       });
     } catch (error: any) {
@@ -1014,11 +1056,26 @@ driverRouter.get(
       if (!v) {
         return res.json({ status: 'success', data: null });
       }
+      const make = v.make || null;
+      const model = v.model || null;
+      const makeModel =
+        v.make_model || [make, model].filter(Boolean).join(' ').trim() || null;
       res.json({
         status: 'success',
         data: {
           vehicle_type: v.vehicle_type || v.type || null,
-          make_model: v.make_model || `${v.make || ''} ${v.model || ''}`.trim() || null,
+          make,
+          model,
+          make_model: makeModel,
+          make_id: v.make_id || null,
+          model_id: v.model_id || null,
+          year: v.year || null,
+          color: v.color || null,
+          vin: v.vin || null,
+          chassis_number: v.chassis_number || v.vin || null,
+          body_style: v.body_style || null,
+          transmission: v.transmission || null,
+          fuel_type: v.fuel_type || null,
           plate_number: v.plate_number || v.plate || null,
           registration_status:
             v.verified || v.registration_status === 'verified' ? 'Verified' : 'Pending',
@@ -1037,8 +1094,62 @@ driverRouter.patch(
   requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { vehicle_type, make_model, plate_number, photo_url } = req.body;
+      const {
+        vehicle_type,
+        make,
+        model,
+        make_model,
+        make_id,
+        model_id,
+        year,
+        color,
+        vin,
+        chassis_number,
+        body_style,
+        transmission,
+        fuel_type,
+        plate_number,
+        photo_url,
+      } = req.body;
       assertDirectUploadUrl(photo_url, 'photo_url');
+
+      let resolvedMake = make ? String(make).trim() : null;
+      let resolvedModel = model ? String(model).trim() : null;
+      let resolvedYear = year != null && year !== '' ? Number(year) : null;
+      let resolvedBody = body_style ? String(body_style).trim() : null;
+      let resolvedFuel = fuel_type ? String(fuel_type).trim() : null;
+      let resolvedTx = transmission ? String(transmission).trim() : null;
+      let resolvedMakeId = make_id || null;
+      let resolvedModelId = model_id || null;
+      const chassis = String(chassis_number || vin || '')
+        .trim()
+        .toUpperCase() || null;
+      const vinVal = chassis && chassis.length >= 11 ? chassis : vin ? String(vin).toUpperCase() : null;
+
+      // Auto-complete from global VIN/chassis database when provided
+      if (chassis && chassis.length >= 11 && (!resolvedMake || !resolvedModel || !resolvedYear)) {
+        const decoded = await vehicleCatalog.decodeVin(chassis);
+        if (decoded.ok) {
+          resolvedMake = resolvedMake || decoded.make || null;
+          resolvedModel = resolvedModel || decoded.model || null;
+          resolvedYear = resolvedYear || decoded.year || null;
+          resolvedBody = resolvedBody || decoded.bodyStyle || null;
+          resolvedFuel = resolvedFuel || decoded.fuelType || null;
+          resolvedTx = resolvedTx || decoded.transmission || null;
+          resolvedMakeId = resolvedMakeId || decoded.makeId || null;
+          resolvedModelId = resolvedModelId || decoded.modelId || null;
+        }
+      }
+
+      const displayMakeModel =
+        make_model ||
+        [resolvedMake, resolvedModel].filter(Boolean).join(' ').trim() ||
+        null;
+      const typeHint =
+        vehicle_type ||
+        vehicleCatalog.mapBodyToVehicleType(resolvedBody) ||
+        'Sedan';
+
       const existing = await db
         .query(
           `SELECT id FROM driver_vehicles WHERE driver_user_id = $1 OR user_id = $1 LIMIT 1`,
@@ -1052,21 +1163,61 @@ driverRouter.patch(
             .catch(() => ({ rows: [] }))
         );
 
+      const payload = {
+        vehicle_type: typeHint,
+        make: resolvedMake,
+        model: resolvedModel,
+        make_model: displayMakeModel,
+        make_id: resolvedMakeId,
+        model_id: resolvedModelId,
+        year: resolvedYear,
+        color: color ? String(color).trim() : null,
+        vin: vinVal,
+        chassis_number: chassis,
+        body_style: resolvedBody,
+        transmission: resolvedTx,
+        fuel_type: resolvedFuel,
+        plate_number: plate_number ? String(plate_number).trim() : null,
+        photo_url: photo_url || null,
+      };
+
       if (existing.rows[0]) {
         await db.query(
           `UPDATE driver_vehicles SET
              vehicle_type = COALESCE($2, vehicle_type),
-             make_model = COALESCE($3, make_model),
-             plate_number = COALESCE($4, plate_number),
-             photo_url = COALESCE($5, photo_url),
+             make = COALESCE($3, make),
+             model = COALESCE($4, model),
+             make_model = COALESCE($5, make_model),
+             make_id = COALESCE($6, make_id),
+             model_id = COALESCE($7, model_id),
+             year = COALESCE($8, year),
+             color = COALESCE($9, color),
+             vin = COALESCE($10, vin),
+             chassis_number = COALESCE($11, chassis_number),
+             body_style = COALESCE($12, body_style),
+             transmission = COALESCE($13, transmission),
+             fuel_type = COALESCE($14, fuel_type),
+             plate_number = COALESCE($15, plate_number),
+             photo_url = COALESCE($16, photo_url),
              updated_at = NOW()
            WHERE id = $1`,
           [
             existing.rows[0].id,
-            vehicle_type || null,
-            make_model || null,
-            plate_number || null,
-            photo_url || null,
+            payload.vehicle_type,
+            payload.make,
+            payload.model,
+            payload.make_model,
+            payload.make_id,
+            payload.model_id,
+            payload.year,
+            payload.color,
+            payload.vin,
+            payload.chassis_number,
+            payload.body_style,
+            payload.transmission,
+            payload.fuel_type,
+            payload.plate_number,
+            payload.photo_url,
           ]
         );
       } else {
@@ -1078,15 +1229,28 @@ driverRouter.patch(
         await db
           .query(
             `INSERT INTO driver_vehicles (
-               driver_user_id, vehicle_type_id, vehicle_type, make_model, plate_number, photo_url, verified
-             ) VALUES ($1,$2,$3,$4,$5,$6,true)`,
+               driver_user_id, vehicle_type_id, vehicle_type, make, model, make_model,
+               make_id, model_id, year, color, vin, chassis_number, body_style,
+               transmission, fuel_type, plate_number, photo_url, verified
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,true)`,
             [
               req.user!.id,
               vt.rows[0]?.id || null,
-              vehicle_type || 'Sedan',
-              make_model || null,
-              plate_number || null,
-              photo_url || null,
+              payload.vehicle_type,
+              payload.make,
+              payload.model,
+              payload.make_model,
+              payload.make_id,
+              payload.model_id,
+              payload.year,
+              payload.color,
+              payload.vin,
+              payload.chassis_number,
+              payload.body_style,
+              payload.transmission,
+              payload.fuel_type,
+              payload.plate_number,
+              payload.photo_url,
             ]
           )
           .catch(() => undefined);
@@ -1094,24 +1258,12 @@ driverRouter.patch(
       res.json({
         status: 'success',
         data: {
-          vehicle_type: vehicle_type || 'Sedan',
-          make_model: make_model || null,
-          plate_number: plate_number || null,
-          photo_url: photo_url || null,
+          ...payload,
           registration_status: 'Verified',
         },
       });
     } catch (error: any) {
-      res.json({
-        status: 'success',
-        data: {
-          vehicle_type: req.body.vehicle_type || 'Sedan',
-          make_model: req.body.make_model || null,
-          plate_number: req.body.plate_number || null,
-          photo_url: req.body.photo_url || null,
-          registration_status: 'Verified',
-        },
-      });
+      res.status(500).json({ status: 'error', message: error.message });
     }
   }
 );
@@ -1127,24 +1279,39 @@ subscriptionsRouter.get('/plans', async (req, res: Response) => {
       activeOnly: true,
     });
 
-    // Drivers still see classic weekly/monthly featured cards first
+    // Drivers see cadence cards (weekly → yearly) first, then vehicle-sized matrix plans
     if (audience === 'driver' && !req.query.matrix) {
-      const featured = rows.filter((p: any) =>
-        ['weekly_driver', 'monthly_driver'].includes(p.id)
-      );
+      const cadenceIds = [
+        'weekly_driver',
+        'monthly_driver',
+        'quarterly_driver',
+        'yearly_driver',
+      ];
+      const featured = cadenceIds
+        .map((id) => rows.find((p: any) => p.id === id))
+        .filter(Boolean);
       const sized = rows.filter(
         (p: any) =>
-          !['weekly_driver', 'monthly_driver', 'pro_driver', 'basic_driver'].includes(p.id) &&
+          !cadenceIds.includes(p.id) &&
+          !['pro_driver', 'basic_driver'].includes(p.id) &&
           p.vehicle_category
       );
       rows = [...featured, ...sized].length ? [...featured, ...sized] : rows;
     }
 
+    const intervalOf = (p: any) => {
+      const raw = String(p.interval || p.id || '').toLowerCase();
+      if (raw.includes('week')) return 'weekly';
+      if (raw.includes('quarter')) return 'quarterly';
+      if (raw.includes('year') || raw.includes('annual')) return 'yearly';
+      return p.interval || 'monthly';
+    };
+
     res.json({
       status: 'success',
       data: rows.map((p: any) => ({
         ...p,
-        interval: p.interval || (String(p.id).includes('weekly') ? 'weekly' : 'monthly'),
+        interval: intervalOf(p),
         headline: p.headline || p.name,
         subtitle: p.subtitle || null,
         badgeLabel: p.badge_label || null,
@@ -1153,7 +1320,8 @@ subscriptionsRouter.get('/plans', async (req, res: Response) => {
       meta: {
         tagline: 'Keep 100% of earnings',
         description:
-          'No commissions ever. Pay a flat subscription sized to your vehicle, country, and city — earn everything you make.',
+          'No commissions ever. Choose weekly, monthly, quarterly, or yearly — keep 100% of what you earn.',
+        intervals: ['weekly', 'monthly', 'quarterly', 'yearly'],
         audiences: ['driver', 'bike_listing', 'rental_owner', 'merchant'],
       },
     });
@@ -1231,6 +1399,37 @@ subscriptionsRouter.post(
   }
 );
 
+subscriptionsRouter.post(
+  '/pause',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = await subscriptions.pause(req.user!.id, {
+        days: req.body.days,
+        reason: req.body.reason,
+      });
+      res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+subscriptionsRouter.post(
+  '/resume',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = await subscriptions.resume(req.user!.id);
+      res.json({ status: 'success', data });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
 subscriptionsRouter.get(
   '/me',
   authenticateToken,
@@ -1262,6 +1461,8 @@ subscriptionsRouter.get(
         trialHint: onTrial
           ? `${days} day${days === 1 ? '' : 's'} remaining · Subscribe to continue`
           : null,
+        paused: String(row.status).toLowerCase() === 'paused',
+        keep100Message: 'You keep 100% of every fare — no commission, ever.',
       };
     };
     try {
@@ -1309,6 +1510,221 @@ rentalsRouter.get('/pricing', async (req: any, res: Response) => {
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
+
+/** Owner fleet — list my rental cars. */
+rentalsRouter.get(
+  '/owner/vehicles',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const rows = await db.query(
+        `SELECT id, make, model, year, color, category, seats, transmission, fuel_type,
+                body_style, vin, chassis_number, plate_number, daily_rate, chauffeur_daily_rate,
+                currency_code, availability_status, emoji, image_url, country_code, city,
+                make_id, model_id, is_active, created_at
+         FROM rental_vehicles
+         WHERE owner_user_id = $1
+         ORDER BY created_at DESC`,
+        [req.user!.id]
+      );
+      res.json({
+        status: 'success',
+        data: rows.rows.map((v: any) => ({
+          ...v,
+          name: [v.make, v.model].filter(Boolean).join(' '),
+        })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+/** Owner — create rental listing with global catalog autofill. */
+rentalsRouter.post(
+  '/owner/vehicles',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      let {
+        make,
+        model,
+        makeId,
+        modelId,
+        year,
+        color,
+        category,
+        seats,
+        transmission,
+        fuelType,
+        bodyStyle,
+        vin,
+        chassisNumber,
+        plateNumber,
+        dailyRate,
+        chauffeurDailyRate,
+        currencyCode,
+        countryCode,
+        city,
+        imageUrl,
+        emoji,
+      } = req.body;
+
+      const chassis = String(chassisNumber || vin || '')
+        .trim()
+        .toUpperCase();
+      if (chassis.length >= 11 && (!make || !model || !year)) {
+        const decoded = await vehicleCatalog.decodeVin(chassis);
+        if (decoded.ok) {
+          make = make || decoded.make;
+          model = model || decoded.model;
+          year = year || decoded.year;
+          bodyStyle = bodyStyle || decoded.bodyStyle;
+          fuelType = fuelType || decoded.fuelType;
+          transmission = transmission || decoded.transmission;
+          makeId = makeId || decoded.makeId;
+          modelId = modelId || decoded.modelId;
+        }
+      }
+
+      make = String(make || '').trim();
+      model = String(model || '').trim();
+      if (!make || !model) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Make and model are required (pick from catalog or decode chassis/VIN)',
+        });
+      }
+
+      const cat =
+        category ||
+        vehicleCatalog.mapBodyToVehicleType(bodyStyle) ||
+        'Economy';
+      const rate = Number(dailyRate);
+      if (!(rate > 0)) {
+        return res.status(400).json({ status: 'error', message: 'dailyRate is required' });
+      }
+
+      const inserted = await db.query(
+        `INSERT INTO rental_vehicles (
+           owner_user_id, make, model, make_id, model_id, year, color, category, seats,
+           transmission, fuel_type, body_style, vin, chassis_number, plate_number,
+           daily_rate, chauffeur_daily_rate, currency_code, country_code, city,
+           image_url, emoji, availability_status, is_active
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,
+           'available', TRUE
+         )
+         RETURNING *`,
+        [
+          req.user!.id,
+          make,
+          model,
+          makeId || null,
+          modelId || null,
+          year ? Number(year) : null,
+          color || null,
+          cat,
+          seats ? Number(seats) : 5,
+          transmission || 'Auto',
+          fuelType || null,
+          bodyStyle || null,
+          chassis || null,
+          chassis || null,
+          plateNumber || null,
+          rate,
+          chauffeurDailyRate != null ? Number(chauffeurDailyRate) : null,
+          currencyCode || 'GHS',
+          countryCode || null,
+          city || null,
+          imageUrl || null,
+          emoji || '🚗',
+        ]
+      );
+      const v = inserted.rows[0];
+      res.status(201).json({
+        status: 'success',
+        data: { ...v, name: `${v.make} ${v.model}` },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+/** Owner — update rental listing. */
+rentalsRouter.patch(
+  '/owner/vehicles/:id',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id;
+      const owned = await db.query(
+        `SELECT id FROM rental_vehicles WHERE id = $1 AND owner_user_id = $2`,
+        [id, req.user!.id]
+      );
+      if (!owned.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Vehicle not found' });
+      }
+      const b = req.body;
+      const updated = await db.query(
+        `UPDATE rental_vehicles SET
+           make = COALESCE($2, make),
+           model = COALESCE($3, model),
+           make_id = COALESCE($4, make_id),
+           model_id = COALESCE($5, model_id),
+           year = COALESCE($6, year),
+           color = COALESCE($7, color),
+           category = COALESCE($8, category),
+           seats = COALESCE($9, seats),
+           transmission = COALESCE($10, transmission),
+           fuel_type = COALESCE($11, fuel_type),
+           body_style = COALESCE($12, body_style),
+           vin = COALESCE($13, vin),
+           chassis_number = COALESCE($14, chassis_number),
+           plate_number = COALESCE($15, plate_number),
+           daily_rate = COALESCE($16, daily_rate),
+           chauffeur_daily_rate = COALESCE($17, chauffeur_daily_rate),
+           currency_code = COALESCE($18, currency_code),
+           country_code = COALESCE($19, country_code),
+           city = COALESCE($20, city),
+           image_url = COALESCE($21, image_url),
+           availability_status = COALESCE($22, availability_status),
+           is_active = COALESCE($23, is_active)
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          b.make || null,
+          b.model || null,
+          b.makeId || null,
+          b.modelId || null,
+          b.year != null ? Number(b.year) : null,
+          b.color || null,
+          b.category || null,
+          b.seats != null ? Number(b.seats) : null,
+          b.transmission || null,
+          b.fuelType || null,
+          b.bodyStyle || null,
+          b.vin || b.chassisNumber || null,
+          b.chassisNumber || b.vin || null,
+          b.plateNumber || null,
+          b.dailyRate != null ? Number(b.dailyRate) : null,
+          b.chauffeurDailyRate != null ? Number(b.chauffeurDailyRate) : null,
+          b.currencyCode || null,
+          b.countryCode || null,
+          b.city || null,
+          b.imageUrl || null,
+          b.availabilityStatus || null,
+          b.isActive != null ? Boolean(b.isActive) : null,
+        ]
+      );
+      res.json({ status: 'success', data: updated.rows[0] });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+);
 
 rentalsRouter.get('/vehicles', async (req: any, res: Response) => {
   try {

@@ -5,8 +5,6 @@ import { formatCurrency } from '@movr/design-system/format';
 import { cartApi } from '../../services/api';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
-
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
@@ -27,7 +25,7 @@ type CartItem = {
 
 /** Your Cart — qty, coupon, DVT discount, Place Order (mockup). */
 export default function CartScreen({
-  storeId = CHICKEN_ID,
+  storeId,
   onCheckedOut,
   onBack,
 }: {
@@ -35,23 +33,20 @@ export default function CartScreen({
   onCheckedOut?: (orderId: string) => void;
   onBack?: () => void;
 }) {
-  const [items, setItems] = useState<CartItem[]>([
-    { id: '1', name: 'Zinger Burger Meal', price: 3200, qty: 1, emoji: '🍔' },
-    { id: '2', name: 'Grilled Chicken Combo', price: 4500, qty: 1, emoji: '🍗' },
-  ]);
-  const [storeName, setStoreName] = useState('Chicken Republic');
-  const [eta, setEta] = useState('20-35 min');
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [storeName, setStoreName] = useState('');
+  const [eta, setEta] = useState('');
   const [coupon, setCoupon] = useState('');
-  const [deliveryFee, setDeliveryFee] = useState(500);
+  const [deliveryFee, setDeliveryFee] = useState(0);
   const [discount, setDiscount] = useState(0);
-  const [dvtDiscount, setDvtDiscount] = useState(100);
+  const [dvtDiscount, setDvtDiscount] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingCart, setLoadingCart] = useState(true);
 
   const refreshQuote = async (nextItems?: CartItem[], code?: string) => {
     const list = nextItems || items;
-    const subtotal = list.reduce((s, i) => s + i.price * i.qty, 0);
     try {
       const res = await fetch(`${API}/cart/quote`, {
         method: 'POST',
@@ -61,9 +56,9 @@ export default function CartScreen({
       const j = await res.json();
       const d = j?.data;
       if (d) {
-        setDeliveryFee(Number(d.deliveryFee ?? 500));
+        setDeliveryFee(Number(d.deliveryFee ?? 0));
         setDiscount(Number(d.discount ?? 0));
-        setDvtDiscount(Number(d.dvtDiscount ?? 100));
+        setDvtDiscount(Number(d.dvtDiscount ?? 0));
         setCurrency(d.currency || 'NGN');
         if (d.storeName) setStoreName(d.storeName);
         if (d.eta) setEta(d.eta);
@@ -80,13 +75,21 @@ export default function CartScreen({
         }
         return;
       }
-    } catch {
-      /* local fallback */
+    } catch (e: any) {
+      setDeliveryFee(0);
+      setDiscount(0);
+      setDvtDiscount(0);
+      setMessage(e?.message || 'Could not refresh cart');
     }
-    setDvtDiscount(subtotal > 0 ? 100 : 0);
   };
 
   useEffect(() => {
+    if (!storeId) {
+      setItems([]);
+      setMessage('Cart not found');
+      setLoadingCart(false);
+      return;
+    }
     cartApi
       .get(storeId)
       .then((res) => {
@@ -102,11 +105,13 @@ export default function CartScreen({
           }));
           setItems(mapped);
           refreshQuote(mapped);
-        } else {
-          refreshQuote(items);
-        }
+        } else setItems([]);
       })
-      .catch(() => refreshQuote(items));
+      .catch((e) => {
+        setItems([]);
+        setMessage(e?.message || 'Could not load cart');
+      })
+      .finally(() => setLoadingCart(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
 
@@ -149,10 +154,7 @@ export default function CartScreen({
         if (orderId) onCheckedOut?.(String(orderId));
       }
     } catch (e: any) {
-      // Demo fallback order id
-      const demo = `demo-${Date.now()}`;
-      onCheckedOut?.(demo);
-      setMessage(e.message || 'Order placed (demo)');
+      setMessage(e.message || 'Checkout failed');
     } finally {
       setLoading(false);
     }
@@ -164,8 +166,9 @@ export default function CartScreen({
         <Text style={styles.back}>←</Text>
       </Pressable>
       <Text style={styles.title}>Your Cart</Text>
+      {loadingCart ? <Text style={styles.msg}>Loading cart…</Text> : null}
       <Text style={styles.merchant}>
-        🍔  {storeName}  ·  {eta}
+        {storeName || 'Store'}{eta ? `  ·  ${eta}` : ''}
       </Text>
 
       {items.map((i) => (
@@ -188,6 +191,7 @@ export default function CartScreen({
           </View>
         </View>
       ))}
+      {!items.length ? <Text style={styles.msg}>Your cart is empty.</Text> : null}
 
       <View style={styles.coupon}>
         <Text style={styles.couponIcon}>🎟</Text>

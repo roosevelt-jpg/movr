@@ -17,9 +17,23 @@ type VehicleOption = {
   price?: number;
   etaMinutes?: number;
   capacity?: number;
+  base?: number;
+  distance?: number;
 };
 
-const MOCKUP_CODES = ['standard', 'xl', 'premium'];
+/** Prefer affordable African-first tiers; fall back to whatever the API returns. */
+const PREFERRED_ORDER = [
+  'okada',
+  'motorcycle',
+  'shared',
+  'economy',
+  'standard',
+  'express',
+  'xl',
+  'suv',
+  'premium',
+  'luxury',
+];
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -31,12 +45,23 @@ function authHeaders(): Record<string, string> {
 }
 
 function iconFor(code: string) {
+  if (/okada|motor|bike/i.test(code)) return '🏍️';
+  if (/keke|tricycle/i.test(code)) return '🛺';
+  if (/shared|pool/i.test(code)) return '👥';
   if (/xl|suv|van/i.test(code)) return '🚐';
   if (/prem|lux/i.test(code)) return '⭐';
   return '🚗';
 }
 
-/** Book a Ride — map route, pickup/dest, Standard/XL/Premium, Confirm Ride. */
+function sortTier(list: VehicleOption[]) {
+  return [...list].sort((a, b) => {
+    const ia = PREFERRED_ORDER.indexOf(a.code);
+    const ib = PREFERRED_ORDER.indexOf(b.code);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+}
+
+/** Book a Ride — affordable African tiers, fare breakdown, driver keeps 100%. */
 export default function HomeScreen({
   destination: destProp,
   pickupLabel = 'Victoria Island, Lagos',
@@ -62,7 +87,7 @@ export default function HomeScreen({
 }) {
   const [loading, setLoading] = useState(true);
   const [options, setOptions] = useState<VehicleOption[]>([]);
-  const [selected, setSelected] = useState<string>('standard');
+  const [selected, setSelected] = useState<string>('economy');
   const [currency, setCurrency] = useState('NGN');
   const [pickup, setPickup] = useState(pickupLabel);
   const [destination, setDestination] = useState(destProp || 'Lekki Phase 1...');
@@ -87,7 +112,15 @@ export default function HomeScreen({
         const estimates = json.data?.estimates;
         let list: VehicleOption[] = [];
         if (estimates?.options?.length) {
-          list = estimates.options;
+          list = estimates.options.map((o: any) => ({
+            code: o.code,
+            name: o.name,
+            price: Number(o.price || o.total || 0),
+            etaMinutes: o.etaMinutes,
+            capacity: o.capacity,
+            base: Number(o.base ?? o.baseFare ?? 0) || undefined,
+            distance: Number(o.distance ?? o.distanceFare ?? 0) || undefined,
+          }));
           setCurrency(estimates.currency || 'NGN');
         } else {
           list = (json.data?.vehicleTypes || []).map((t: any) => ({
@@ -95,26 +128,58 @@ export default function HomeScreen({
             name: t.name,
             capacity: t.passenger_capacity,
             price: Number(t.pricing?.base_fare || 0),
+            base: Number(t.pricing?.base_fare || 0),
           }));
         }
-        const preferred = MOCKUP_CODES.map((code) => {
-          const found = list.find((o) => o.code === code || o.name?.toLowerCase() === code);
-          if (found) return found;
-          const fallbackPrice = code === 'standard' ? 1200 : code === 'xl' ? 2100 : 3400;
-          return {
-            code,
-            name: code === 'xl' ? 'XL' : code.charAt(0).toUpperCase() + code.slice(1),
-            price: fallbackPrice,
-          };
-        });
-        setOptions(preferred);
-        setSelected(preferred[0]?.code || 'standard');
+        // Deduplicate economy/standard, okada/motorcycle — prefer named African codes
+        const byFamily = new Map<string, VehicleOption>();
+        for (const o of sortTier(list)) {
+          const family = /okada|motorcycle/.test(o.code)
+            ? 'okada'
+            : /economy|standard/.test(o.code)
+              ? 'economy'
+              : /xl|suv/.test(o.code)
+                ? 'xl'
+                : o.code;
+          if (!byFamily.has(family)) {
+            byFamily.set(family, {
+              ...o,
+              code: family === 'okada' ? (o.code === 'motorcycle' ? 'okada' : o.code) : o.code,
+              name:
+                family === 'okada'
+                  ? 'Okada'
+                  : family === 'economy'
+                    ? o.name === 'Standard'
+                      ? 'Economy'
+                      : o.name
+                    : o.name,
+            });
+          }
+        }
+        const preferred = Array.from(byFamily.values());
+        const use = preferred.length
+          ? preferred
+          : [
+              { code: 'okada', name: 'Okada', price: 650 },
+              { code: 'shared', name: 'Shared', price: 900 },
+              { code: 'economy', name: 'Economy', price: 1200 },
+              { code: 'xl', name: 'XL', price: 2100 },
+            ];
+        setOptions(use);
+        const defaultCode =
+          use.find((o) => o.code === 'economy' || o.code === 'standard')?.code ||
+          use.find((o) => o.code === 'shared')?.code ||
+          use[0]?.code ||
+          'economy';
+        setSelected(defaultCode);
       } catch {
         setOptions([
-          { code: 'standard', name: 'Standard', price: 1200 },
+          { code: 'okada', name: 'Okada', price: 650 },
+          { code: 'shared', name: 'Shared', price: 900 },
+          { code: 'economy', name: 'Economy', price: 1200 },
           { code: 'xl', name: 'XL', price: 2100 },
-          { code: 'premium', name: 'Premium', price: 3400 },
         ]);
+        setSelected('economy');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -127,6 +192,8 @@ export default function HomeScreen({
 
   const active = options.find((o) => o.code === selected) || options[0];
   const fare = Number(active?.price || 1200);
+  const base = Number(active?.base || Math.round(fare * 0.7));
+  const distancePart = Number(active?.distance || Math.max(0, fare - base));
   const dvt = useMemo(() => Math.round(fare * 0.1), [fare]);
 
   const confirm = async () => {
@@ -143,7 +210,7 @@ export default function HomeScreen({
           pickupLng,
           dropoffLat,
           dropoffLng,
-          rideType: selected,
+          rideType: selected === 'okada' ? 'motorcycle' : selected === 'economy' ? 'standard' : selected,
           pickupAddress: pickup,
           dropoffAddress: destination,
         }),
@@ -167,6 +234,10 @@ export default function HomeScreen({
         <View style={[styles.dot, styles.dotDrop]} />
       </View>
 
+      <View style={styles.banner}>
+        <Text style={styles.bannerText}>Driver keeps 100% of this fare · no commission</Text>
+      </View>
+
       <View style={styles.field}>
         <View style={[styles.pin, { backgroundColor: '#8E2DE2' }]} />
         <Text style={styles.fieldText} numberOfLines={1}>
@@ -187,7 +258,11 @@ export default function HomeScreen({
       {loading ? (
         <ActivityIndicator color="#8E2DE2" style={{ marginVertical: 24 }} />
       ) : (
-        <View style={styles.cards}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.cards}
+        >
           {options.map((o) => {
             const on = selected === o.code;
             return (
@@ -207,15 +282,31 @@ export default function HomeScreen({
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       )}
 
-      <View style={styles.fareRow}>
-        <View>
-          <Text style={styles.fareLabel}>Estimated fare</Text>
-          <Text style={styles.dvt}>+{dvt} DVT tokens earned</Text>
+      <View style={styles.breakdown}>
+        <Text style={styles.fareLabel}>Fare breakdown</Text>
+        <View style={styles.brRow}>
+          <Text style={styles.brK}>Base</Text>
+          <Text style={styles.brV}>{formatCurrency(base, currency)}</Text>
         </View>
-        <Text style={styles.fareValue}>{formatCurrency(fare, currency)}</Text>
+        <View style={styles.brRow}>
+          <Text style={styles.brK}>Distance</Text>
+          <Text style={styles.brV}>{formatCurrency(distancePart, currency)}</Text>
+        </View>
+        <View style={styles.brRow}>
+          <Text style={styles.brK}>Platform fee</Text>
+          <Text style={[styles.brV, { color: '#4ade80' }]}>
+            {formatCurrency(0, currency)}
+          </Text>
+        </View>
+        <View style={[styles.brRow, { marginTop: 6 }]}>
+          <Text style={styles.fareLabel}>Estimated total</Text>
+          <Text style={styles.fareValue}>{formatCurrency(fare, currency)}</Text>
+        </View>
+        <Text style={styles.keep}>Driver keeps {formatCurrency(fare, currency)} (100%)</Text>
+        <Text style={styles.dvt}>+{dvt} DVT tokens earned</Text>
       </View>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
@@ -253,6 +344,14 @@ const styles = StyleSheet.create({
   dotPickup: { left: 24, backgroundColor: '#8E2DE2' },
   dotDrop: { right: 24, backgroundColor: '#3B5CFF' },
   carOnRoute: { alignSelf: 'center', fontSize: 22 },
+  banner: {
+    backgroundColor: '#14532d',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  bannerText: { color: '#86efac', fontWeight: '700', fontSize: 12, textAlign: 'center' },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,9 +366,9 @@ const styles = StyleSheet.create({
   fieldText: { flex: 1, color: '#fff', fontWeight: '600' },
   clear: { color: '#888', fontSize: 16, paddingHorizontal: 4 },
   mapPin: { fontSize: 16 },
-  cards: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 18 },
+  cards: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 18, paddingRight: 8 },
   card: {
-    flex: 1,
+    width: 100,
     backgroundColor: '#141414',
     borderRadius: 14,
     padding: 14,
@@ -282,29 +381,32 @@ const styles = StyleSheet.create({
   cardIcon: { fontSize: 22 },
   cardName: { color: '#fff', fontWeight: '700', fontSize: 13 },
   cardPrice: { color: '#c4b5fd', fontWeight: '700', fontSize: 13 },
-  fareRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+  breakdown: {
+    backgroundColor: '#141414',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 18,
   },
-  fareLabel: { color: '#888', fontSize: 13 },
+  fareLabel: { color: '#888', fontSize: 13, fontWeight: '600' },
+  brRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  brK: { color: '#a1a1aa', fontSize: 13 },
+  brV: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  fareValue: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  keep: { color: '#86efac', fontSize: 12, marginTop: 10, fontWeight: '700' },
   dvt: { color: '#a78bfa', fontSize: 12, marginTop: 4, fontWeight: '600' },
-  fareValue: { color: '#fff', fontSize: 28, fontWeight: '800' },
   msg: { color: '#4ade80', marginBottom: 8, textAlign: 'center' },
   cta: {
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#3B5CFF',
-  },
-  ctaA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#3B5CFF', opacity: 0.9 },
-  ctaB: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#8E2DE2',
-    opacity: 0.7,
-    left: '40%',
   },
-  ctaText: { color: '#fff', fontWeight: '800', fontSize: 17, zIndex: 1 },
+  ctaA: { ...StyleSheet.absoluteFillObject, backgroundColor: '#4A00E0', opacity: 0.5 },
+  ctaB: {},
+  ctaText: { color: '#fff', fontWeight: '800', fontSize: 16, zIndex: 1 },
 });

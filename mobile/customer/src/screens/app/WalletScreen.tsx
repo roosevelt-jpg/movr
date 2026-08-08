@@ -39,6 +39,7 @@ export default function WalletScreen({
   onTransfer,
   onClaimDvt,
   onPaymentMethods,
+  onRedeem,
 }: {
   onSend?: () => void;
   onTopUp?: () => void;
@@ -48,27 +49,39 @@ export default function WalletScreen({
   onClaimDvt?: () => void;
   onPaymentMethods?: () => void;
 }) {
-  const [portfolio, setPortfolio] = useState(34850);
-  const [fiat, setFiat] = useState(24500);
-  const [dvt, setDvt] = useState(2400);
-  const [points, setPoints] = useState(850);
+  const [portfolio, setPortfolio] = useState(0);
+  const [fiat, setFiat] = useState(0);
+  const [dvt, setDvt] = useState(0);
+  const [points, setPoints] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
       const res = await fetch(`${API}/wallet/portfolio`, { headers: authHeaders() });
       const j = await res.json();
+      if (!res.ok) throw new Error(j?.message || 'Could not load wallet');
       const d = j?.data;
-      if (!d) return;
+      if (!d) throw new Error('Wallet data is unavailable');
       setPortfolio(Number(d.portfolioValue ?? 0));
       setFiat(Number(d.fiatBalance ?? 0));
       setDvt(Number(d.dvtTokens ?? 0));
       setPoints(Number(d.points ?? 0));
       setCurrency(d.currency || 'NGN');
       if (Array.isArray(d.transactions)) setTxs(d.transactions);
-    } catch {
-      /* keep demo defaults */
+    } catch (e: any) {
+      setPortfolio(0);
+      setFiat(0);
+      setDvt(0);
+      setPoints(0);
+      setTxs([]);
+      setError(e?.message || 'Could not load wallet');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -94,6 +107,8 @@ export default function WalletScreen({
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
       <Text style={styles.title}>My Wallet</Text>
+      {loading ? <Text style={styles.empty}>Loading wallet…</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.card}>
         <View style={styles.glowA} />
@@ -207,6 +222,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[3],
   },
   empty: { color: '#71717A', fontSize: 14 },
+  error: { color: '#F87171', fontSize: 14, marginBottom: spacing[3] },
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',

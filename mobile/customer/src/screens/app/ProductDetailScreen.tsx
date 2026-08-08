@@ -5,18 +5,15 @@ import { formatCurrency } from '@movr/design-system/format';
 import { cartApi, storesApi } from '../../services/api';
 import api from '../../services/api';
 
-const ZINGER_ID = 'd0000000-0000-4000-8000-000000000141';
-const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
-
 type SizeOpt = { id: string; label: string; price_delta?: number };
 type Addon = { id: string; name: string; priceDelta: number };
 
 /** Food product detail — size, add-ons, qty, Add to Cart (mockup). */
 export default function ProductDetailScreen({
-  productId = ZINGER_ID,
-  storeId = CHICKEN_ID,
-  name: nameProp = 'Zinger Burger Meal',
-  price: priceProp = 3200,
+  productId,
+  storeId,
+  name: nameProp = '',
+  price: priceProp = 0,
   onAdded,
   onBack,
 }: {
@@ -29,93 +26,128 @@ export default function ProductDetailScreen({
 }) {
   const [name, setName] = useState(nameProp);
   const [price, setPrice] = useState(priceProp);
+  const [listPrice, setListPrice] = useState(priceProp);
+  const [compareAt, setCompareAt] = useState<number | null>(null);
+  const [onSale, setOnSale] = useState(false);
   const [currency, setCurrency] = useState('NGN');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [emoji, setEmoji] = useState('🍔');
-  const [merchant, setMerchant] = useState('Chicken Republic · Fast Food');
-  const [rating, setRating] = useState(4.8);
-  const [reviews, setReviews] = useState(128);
-  const [available, setAvailable] = useState(true);
-  const [description, setDescription] = useState(
-    'Crispy chicken fillet, signature zinger sauce, lettuce and mayo in a toasted bun — served with fries and a soft drink. Freshly prepared when you order.'
-  );
-  const [sizes, setSizes] = useState<SizeOpt[]>([
-    { id: 'regular', label: 'Regular', price_delta: 0 },
-    { id: 'large', label: 'Large', price_delta: 0 },
-    { id: 'family', label: 'Family', price_delta: 800 },
-  ]);
-  const [addons, setAddons] = useState<Addon[]>([
-    { id: 'fries', name: 'Extra Fries', priceDelta: 400 },
-    { id: 'sauce', name: 'Extra Sauce', priceDelta: 200 },
-  ]);
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [imageIdx, setImageIdx] = useState(0);
+  const [emoji, setEmoji] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [rating, setRating] = useState(0);
+  const [reviews, setReviews] = useState(0);
+  const [reviewList, setReviewList] = useState<any[]>([]);
+  const [available, setAvailable] = useState(false);
+  const [description, setDescription] = useState('');
+  const [sizes, setSizes] = useState<SizeOpt[]>([]);
+  const [addons, setAddons] = useState<Addon[]>([]);
   const [variants, setVariants] = useState<any[]>([]);
-  const [size, setSize] = useState('Large');
-  const [selectedAddons, setSelectedAddons] = useState<Set<string>>(new Set(['fries']));
+  const [size, setSize] = useState('');
+  const [selectedAddons, setSelectedAddons] = useState<Set<string>>(new Set());
   const [qty, setQty] = useState(1);
   const [wish, setWish] = useState(false);
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', body: '' });
 
   useEffect(() => {
-    if (!productId || !storeId) return;
-    storesApi
-      .products(storeId)
-      .then((res) => {
-        const rows = res.data?.data || [];
-        const list = Array.isArray(rows) ? rows : rows.products || [];
-        const p = list.find((x: any) => String(x.id) === String(productId)) || list[0];
-        if (!p) return;
-        setName(p.name || nameProp);
-        setPrice(Number(p.price || p.base_price || priceProp));
-        setCurrency(p.currency || p.currency_code || 'NGN');
-        setImageUrl(p.image_url || null);
-        setEmoji(p.emoji || '🍔');
-        setMerchant(p.merchantLabel || p.merchant_label || 'Chicken Republic · Fast Food');
-        setRating(Number(p.rating || 4.8));
-        setReviews(Number(p.reviewCount || p.review_count || 128));
-        setAvailable(p.available !== false && p.in_stock !== false);
-        setDescription(
-          p.longDescription ||
-            p.long_description ||
-            p.description ||
-            description
+    if (!productId) {
+      setLoading(false);
+      setMsg('Product not found');
+      return;
+    }
+    const applyProduct = (p: any) => {
+      setName(p.name || nameProp);
+      setPrice(Number(p.price || p.base_price || priceProp));
+      setListPrice(Number(p.listPrice ?? p.price ?? priceProp));
+      setCompareAt(p.compareAtPrice != null ? Number(p.compareAtPrice) : null);
+      setOnSale(Boolean(p.onSale));
+      setCurrency(p.currency || p.currency_code || 'NGN');
+      const imgs = Array.isArray(p.images) ? p.images.map((i: any) => i.url).filter(Boolean) : [];
+      if (!imgs.length && p.image_url) imgs.push(p.image_url);
+      setGallery(imgs);
+      setImageUrl(imgs[0] || p.image_url || null);
+      setImageIdx(0);
+      setEmoji(p.emoji || '');
+      setMerchant(p.storeName || p.store_name || p.merchantLabel || p.merchant_label || '');
+      setRating(Number(p.rating || 0));
+      setReviews(Number(p.reviewCount || p.review_count || 0));
+      setAvailable(p.available !== false && p.in_stock !== false);
+      setDescription(
+        p.longDescription || p.long_description || p.description || description
+      );
+      const vs = Array.isArray(p.variants) ? p.variants : [];
+      setVariants(vs);
+      const attrs = p.attributes || {};
+      if (Array.isArray(attrs.sizes) && attrs.sizes.length) {
+        setSizes(
+          attrs.sizes.map((s: any) =>
+            typeof s === 'string'
+              ? { id: s.toLowerCase(), label: s, price_delta: 0 }
+              : {
+                  id: String(s.id || s.label).toLowerCase(),
+                  label: s.label || s.name,
+                  price_delta: Number(s.price_delta || 0),
+                }
+          )
         );
-        const vs = Array.isArray(p.variants) ? p.variants : [];
-        setVariants(vs);
-        const attrs = p.attributes || {};
-        if (Array.isArray(attrs.sizes) && attrs.sizes.length) {
-          setSizes(
-            attrs.sizes.map((s: any) =>
-              typeof s === 'string'
-                ? { id: s.toLowerCase(), label: s, price_delta: 0 }
-                : {
-                    id: String(s.id || s.label).toLowerCase(),
-                    label: s.label || s.name,
-                    price_delta: Number(s.price_delta || 0),
-                  }
-            )
-          );
-        } else if (vs.length) {
-          setSizes(
-            vs.map((v: any) => ({
-              id: String(v.id),
-              label: v.name,
-              price_delta: Number(v.price_delta || 0),
-            }))
-          );
-        }
-        if (Array.isArray(p.addons) && p.addons.length) {
-          setAddons(
-            p.addons.map((a: any) => ({
-              id: String(a.id),
-              name: a.name,
-              priceDelta: Number(a.priceDelta ?? a.price_delta ?? 0),
-            }))
-          );
-          setSelectedAddons(new Set([String(p.addons[0].id)]));
-        }
+      } else if (vs.length) {
+        setSizes(
+          vs.map((v: any) => ({
+            id: String(v.id),
+            label: v.name,
+            price_delta: Number(v.price_delta || 0),
+          }))
+        );
+      }
+      if (Array.isArray(p.addons) && p.addons.length) {
+        setAddons(
+          p.addons.map((a: any) => ({
+            id: String(a.id),
+            name: a.name,
+            priceDelta: Number(a.priceDelta ?? a.price_delta ?? 0),
+          }))
+        );
+        setSelectedAddons(new Set([String(p.addons[0].id)]));
+      }
+      if (Array.isArray(p.reviews)) setReviewList(p.reviews);
+    };
+
+    api
+      .get(`/products/${productId}`)
+      .then((res) => {
+        const p = res.data?.data;
+        if (!p) throw new Error('Product not found');
+        applyProduct(p);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!storeId) throw new Error('Product not found');
+        return storesApi.products(storeId).then((res) => {
+          const rows = res.data?.data || [];
+          const list = Array.isArray(rows) ? rows : rows.products || [];
+          const p = list.find((x: any) => String(x.id) === String(productId));
+          if (!p) throw new Error('Product not found');
+          applyProduct(p);
+          return api.get(`/products/${productId}/reviews`).then((r) => {
+            setReviewList(r.data?.data || []);
+          });
+        });
+      })
+      .catch((e) => {
+        setName('');
+        setPrice(0);
+        setImageUrl(null);
+        setEmoji('');
+        setMerchant('');
+        setDescription('');
+        setSizes([]);
+        setAddons([]);
+        setAvailable(false);
+        setMsg(e?.message || 'Could not load product');
+      })
+      .finally(() => setLoading(false));
 
     api
       .get(`/cart/wishlist/${productId}`)
@@ -147,7 +179,7 @@ export default function ProductDetailScreen({
 
   const toggleWish = async () => {
     if (!productId) {
-      setWish((w) => !w);
+      setMsg('Could not update wishlist');
       return;
     }
     try {
@@ -174,8 +206,7 @@ export default function ProductDetailScreen({
 
   const addToCart = async () => {
     if (!productId || !storeId) {
-      setMsg('Added to cart');
-      onAdded?.();
+      setMsg('Product is unavailable');
       return;
     }
     setAdding(true);
@@ -192,8 +223,7 @@ export default function ProductDetailScreen({
       setMsg('Added to cart');
       onAdded?.();
     } catch (e: any) {
-      setMsg(e?.response?.data?.message || e?.message || 'Added to cart');
-      onAdded?.();
+      setMsg(e?.response?.data?.message || e?.message || 'Could not add to cart');
     } finally {
       setAdding(false);
     }
@@ -211,56 +241,112 @@ export default function ProductDetailScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {loading ? <Text style={styles.merchant}>Loading product…</Text> : null}
         <View style={styles.hero}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.heroImg} />
+          {(gallery[imageIdx] || imageUrl) ? (
+            <Image source={{ uri: gallery[imageIdx] || imageUrl || undefined }} style={styles.heroImg} />
           ) : (
             <Text style={styles.heroEmoji}>{emoji}</Text>
           )}
         </View>
+        {gallery.length > 1 ? (
+          <View style={styles.thumbs}>
+            {gallery.map((url, i) => (
+              <Pressable key={`${url}-${i}`} onPress={() => setImageIdx(i)} style={[styles.thumb, i === imageIdx && styles.thumbOn]}>
+                <Image source={{ uri: url }} style={styles.thumbImg} />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.titleRow}>
           <Text style={styles.title}>{name}</Text>
-          <Text style={styles.price}>{formatCurrency(price, currency)}</Text>
+          <View>
+            <Text style={styles.price}>{formatCurrency(price, currency)}</Text>
+            {compareAt != null && compareAt > price ? (
+              <Text style={styles.strike}>{formatCurrency(compareAt, currency)}</Text>
+            ) : listPrice > price ? (
+              <Text style={styles.strike}>{formatCurrency(listPrice, currency)}</Text>
+            ) : null}
+          </View>
         </View>
+        {onSale ? <Text style={styles.saleChip}>Sale</Text> : null}
         <Text style={styles.merchant}>{merchant}</Text>
         <View style={styles.metaRow}>
-          <Text style={styles.rating}>★ {rating.toFixed(1)} · {reviews} ratings</Text>
+          <Text style={styles.rating}>★ {rating.toFixed(1)} · {reviews || reviewList.length} ratings</Text>
           <View style={styles.avail}>
             <Text style={styles.availTxt}>{available ? 'Available' : 'Unavailable'}</Text>
           </View>
         </View>
         <Text style={styles.desc}>{description}</Text>
 
-        <Text style={styles.section}>SIZE</Text>
-        <View style={styles.sizeRow}>
-          {sizes.map((s) => {
-            const on = size === s.label || size.toLowerCase() === s.id;
-            return (
-              <Pressable
-                key={s.id}
-                style={[styles.sizeChip, on && styles.sizeOn]}
-                onPress={() => setSize(s.label)}
-              >
-                <Text style={[styles.sizeTxt, on && styles.sizeTxtOn]}>{s.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {sizes.length ? (
+          <>
+            <Text style={styles.section}>SIZE</Text>
+            <View style={styles.sizeRow}>
+              {sizes.map((s) => {
+                const on = size === s.label || size.toLowerCase() === s.id;
+                return (
+                  <Pressable
+                    key={s.id}
+                    style={[styles.sizeChip, on && styles.sizeOn]}
+                    onPress={() => setSize(s.label)}
+                  >
+                    <Text style={[styles.sizeTxt, on && styles.sizeTxtOn]}>{s.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
 
-        <Text style={styles.section}>ADD-ONS</Text>
-        {addons.map((a) => {
-          const on = selectedAddons.has(a.id);
-          return (
-            <Pressable key={a.id} style={styles.addon} onPress={() => toggleAddon(a.id)}>
-              <View style={[styles.check, on && styles.checkOn]}>
-                {on ? <Text style={styles.checkMark}>✓</Text> : null}
-              </View>
-              <Text style={styles.addonName}>{a.name}</Text>
-              <Text style={styles.addonPrice}>+{formatCurrency(a.priceDelta, currency)}</Text>
-            </Pressable>
-          );
-        })}
+        {addons.length ? (
+          <>
+            <Text style={styles.section}>ADD-ONS</Text>
+            {addons.map((a) => {
+              const on = selectedAddons.has(a.id);
+              return (
+                <Pressable key={a.id} style={styles.addon} onPress={() => toggleAddon(a.id)}>
+                  <View style={[styles.check, on && styles.checkOn]}>
+                    {on ? <Text style={styles.checkMark}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.addonName}>{a.name}</Text>
+                  <Text style={styles.addonPrice}>+{formatCurrency(a.priceDelta, currency)}</Text>
+                </Pressable>
+              );
+            })}
+          </>
+        ) : null}
+
+        <Text style={styles.section}>REVIEWS</Text>
+        {reviewList.length === 0 ? (
+          <Text style={styles.merchant}>No reviews yet.</Text>
+        ) : (
+          reviewList.slice(0, 5).map((r) => (
+            <View key={r.id} style={styles.reviewCard}>
+              <Text style={styles.reviewTitle}>
+                ★ {r.rating} · {r.authorName || 'Customer'}
+              </Text>
+              {r.title ? <Text style={styles.addonName}>{r.title}</Text> : null}
+              {r.body ? <Text style={styles.merchant}>{r.body}</Text> : null}
+            </View>
+          ))
+        )}
+        <Pressable
+          style={styles.reviewBtn}
+          onPress={async () => {
+            try {
+              await api.post(`/products/${productId}/reviews`, reviewForm);
+              setMsg('Thanks for your review');
+              const r = await api.get(`/products/${productId}/reviews`);
+              setReviewList(r.data?.data || []);
+            } catch (e: any) {
+              setMsg(e?.response?.data?.message || 'Could not submit review');
+            }
+          }}
+        >
+          <Text style={styles.reviewBtnTxt}>Submit {reviewForm.rating}★ review</Text>
+        </Pressable>
       </ScrollView>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
@@ -275,7 +361,7 @@ export default function ProductDetailScreen({
             <Text style={styles.qtyBtnTxt}>+</Text>
           </Pressable>
         </View>
-        <Pressable style={styles.cta} onPress={addToCart} disabled={adding}>
+        <Pressable style={styles.cta} onPress={addToCart} disabled={adding || loading || !available}>
           <Text style={styles.ctaText}>
             {adding ? 'Adding…' : `Add to Cart · ${formatCurrency(lineTotal, currency)}`}
           </Text>
@@ -315,10 +401,46 @@ const styles = StyleSheet.create({
   },
   heroImg: { width: '100%', height: '100%', borderRadius: 20 },
   heroEmoji: { fontSize: 88 },
+  thumbs: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+  },
+  thumbOn: { borderColor: '#8E2DE2' },
+  thumbImg: { width: '100%', height: '100%' },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
   title: { color: '#FFF', fontSize: 24, fontWeight: '800', flex: 1 },
   price: { color: '#FFF', fontSize: 22, fontWeight: '800' },
+  strike: { color: '#71717A', textDecorationLine: 'line-through', fontSize: 12, textAlign: 'right' },
+  saleChip: {
+    alignSelf: 'flex-start',
+    color: '#FB923C',
+    backgroundColor: '#431407',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    fontWeight: '800',
+    fontSize: 11,
+    marginTop: 6,
+  },
   merchant: { color: '#A1A1AA', marginTop: 6 },
+  reviewCard: { backgroundColor: '#141414', borderRadius: 12, padding: 12, marginBottom: 8 },
+  reviewTitle: { color: '#FB923C', fontWeight: '700', marginBottom: 4 },
+  reviewBtn: {
+    marginTop: 8,
+    backgroundColor: '#1A1025',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#8E2DE2',
+  },
+  reviewBtnTxt: { color: '#E9D5FF', fontWeight: '700' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   rating: { color: '#FB923C', fontWeight: '700' },
   avail: {

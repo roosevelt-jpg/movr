@@ -106,7 +106,11 @@ adminSubscriptionFeesRouter.post(
         city: req.body.city || null,
         vehicleCategory: req.body.vehicleCategory || req.body.vehicle_category || null,
         vehicleTypeCode: req.body.vehicleTypeCode || req.body.vehicle_type_code || null,
-        interval: (req.body.interval || 'monthly') as 'weekly' | 'monthly',
+        interval: (req.body.interval || 'monthly') as
+          | 'weekly'
+          | 'monthly'
+          | 'quarterly'
+          | 'yearly',
         userId: req.body.userId || undefined,
       };
       if (req.body.userId) {

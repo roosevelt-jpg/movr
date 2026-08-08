@@ -12,7 +12,7 @@ const headers = () => ({
   'Content-Type': 'application/json',
 });
 
-/** Driver matched — ETA map, Call/Message/SOS, wallet fare, Cancel (mockup). */
+/** Driver matched — ETA map, Call/Message/SOS, wallet fare, Cancel. */
 const ActiveRidePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -25,13 +25,19 @@ const ActiveRidePage: React.FC = () => {
   const [sosMsg, setSosMsg] = useState('');
   const [noticeAcked, setNoticeAcked] = useState(false);
   const [noticeBusy, setNoticeBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const load = () => {
     if (!id) return;
     ridesApi
       .getRideDetails(id)
-      .then((res) => setRide(res.data?.data || res.data))
-      .catch(() => undefined);
+      .then((res) => {
+        setRide(res.data?.data || res.data);
+        setError('');
+      })
+      .catch(() => setError('Could not load active ride'))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -104,20 +110,22 @@ const ActiveRidePage: React.FC = () => {
   };
 
   const driver = ride?.driver;
-  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 2);
-  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 1200);
+  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 0);
+  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 0);
   const currency = ride?.currency || locCurrency || 'NGN';
-  const plate = String(driver?.vehicle?.plate || 'LAG 294-HG').replace(/-/g, ' ');
-  const model = driver?.vehicle?.model || 'Toyota Corolla';
-  const color = driver?.vehicle?.color || 'Silver';
-  const rating = Number(driver?.rating ?? 4.9).toFixed(1);
-  const trips = Number(driver?.tripCount ?? 312);
-  const banner = ride?.etaLabel || `Driver is ${eta} min away`;
-  const payment = ride?.paymentMethod || 'Movr Wallet';
-  const name = driver?.name || ride?.driver_name || 'Emeka Okafor';
+  const plate = String(driver?.vehicle?.plate || '').replace(/-/g, ' ');
+  const model = driver?.vehicle?.model || '';
+  const color = driver?.vehicle?.color || '';
+  const rating = Number(driver?.rating ?? 0).toFixed(1);
+  const trips = Number(driver?.tripCount ?? 0);
+  const banner = ride?.etaLabel || (ride ? `Driver is ${eta} min away` : '');
+  const payment = ride?.paymentMethod || '';
+  const name = driver?.name || ride?.driver_name || '';
 
   return (
     <div className="min-h-[70vh] rounded-2xl bg-black text-white overflow-hidden border border-zinc-800 relative max-w-xl mx-auto" data-force-dark>
+      {loading ? <p className="p-5 text-zinc-400">Loading ride…</p> : null}
+      {error ? <p className="p-5 text-red-400">{error}</p> : null}
       {!noticeAcked ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-6">
           <div className="max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 space-y-4">
@@ -154,7 +162,7 @@ const ActiveRidePage: React.FC = () => {
 
       <div className="p-5 space-y-4">
         <div className="text-center">
-          <p className="text-zinc-400">{ride?.matchedHeadline || 'Driver matched!'}</p>
+          <p className="text-zinc-400">{ride?.matchedHeadline || ''}</p>
           <p className="text-xl font-bold mt-1">
             Arriving in <span className="text-purple-400">{eta} min</span>
           </p>

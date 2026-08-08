@@ -159,7 +159,7 @@ export default function FinanceDashboardPage() {
 
       {message ? <p style={styles.message}>{message}</p> : null}
 
-      <div style={styles.cards}>
+      <div style={styles.cards} className="admin-kpi-grid" data-admin-grid="kpi">
         {cards.map((c) => (
           <div key={c.label} style={styles.card}>
             <div style={styles.label}>{c.label}</div>
@@ -169,7 +169,7 @@ export default function FinanceDashboardPage() {
         ))}
       </div>
 
-      <div style={styles.midRow}>
+      <div style={styles.midRow} className="admin-split-grid" data-admin-grid="split">
         <div style={styles.panel}>
           <h2 style={styles.panelTitle}>Monthly GMV</h2>
           <div style={{ height: 240 }}>
@@ -237,6 +237,7 @@ export default function FinanceDashboardPage() {
             {paying === 'all' ? 'Processing…' : 'Process All'}
           </button>
         </div>
+        <div className="admin-table-scroll">
         <table style={styles.table}>
           <thead>
             <tr>
@@ -293,6 +294,7 @@ export default function FinanceDashboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </AdminShell>
   );

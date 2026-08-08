@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
+import { formatCountryLabel } from '@movr/design-system/format';
 import { pickAndUploadImage } from '../../lib/upload';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -97,7 +98,7 @@ export default function MerchantIdentityOnboardingScreen() {
             style={[styles.chip, country === c.code && styles.chipOn]}
             onPress={() => setCountry(c.code)}
           >
-            <Text style={styles.chipText}>{c.code}</Text>
+            <Text style={styles.chipText}>{formatCountryLabel(c.code, c.label)}</Text>
           </Pressable>
         ))}
       </View>

@@ -6,8 +6,16 @@ import { getStoredCountry, setStoredCountry } from '../hooks/useLocalCurrency';
 import { useCmsPage } from '../services/cms';
 import { StoreBadgeButton } from './StoreBadges';
 import { useTheme } from '../theme/ThemeProvider';
+import { countryFlagEmoji } from '@movr/format';
 import { AFRICA_LOCALES } from '../lib/africaLocales';
 import { SocialPlatformIcon, socialAriaLabel, type SocialLink } from './SocialPlatformIcon';
+
+function localeLabel(countryCode: string, displayLabel: string) {
+  const flag = countryFlagEmoji(countryCode);
+  if (!flag) return displayLabel;
+  if (displayLabel.includes(flag)) return displayLabel;
+  return `${flag} ${displayLabel}`;
+}
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -22,59 +30,13 @@ type LocaleRow = {
 
 const FALLBACK_FOOTER = {
   brand: 'Movr',
-  tagline: 'Move. Shop. Deliver.\nGlobal mobility, commerce, and logistics in one platform.',
+  tagline: '',
   /** Empty until admin adds social links in CMS → global → footer */
   social: [] as SocialLink[],
-  columns: [
-    {
-      title: 'SERVICES',
-      links: [
-        { label: 'Ride', href: '/#ride' },
-        { label: 'Shop', href: '/#shop' },
-        { label: 'Deliver', href: '/#deliver' },
-        { label: 'Rentals', href: '/#rentals' },
-      ],
-    },
-    {
-      title: 'PLATFORM',
-      links: [
-        { label: 'Movr AI', href: '/ai' },
-        { label: 'Wallet', href: '/wallet' },
-        { label: 'Marketplace', href: '/marketplace' },
-        { label: 'Download app', href: '/download' },
-      ],
-    },
-    {
-      title: 'COMPANY',
-      links: [
-        { label: 'About Movr', href: '/about' },
-        { label: 'For drivers', href: '/drivers' },
-        { label: 'For merchants', href: '/merchants' },
-        { label: 'Careers', href: '/about' },
-      ],
-    },
-    {
-      title: 'SUPPORT',
-      links: [
-        { label: 'Help centre', href: '/help' },
-        { label: 'Talk to Movr AI', href: '/ai' },
-        { label: 'Contact us', href: '/contact' },
-        { label: 'Safety', href: '/help' },
-        { label: 'Terms of Service', href: '/terms' },
-        { label: 'Privacy Policy', href: '/privacy' },
-      ],
-    },
-  ],
-  appButtons: [
-    { label: 'App Store', store: 'ios', href: '/download' },
-    { label: 'Google Play', store: 'android', href: '/download' },
-  ],
-  copyright: '© 2026 Movr Global Technologies. All rights reserved.',
-  legalLinks: [
-    { label: 'Privacy', href: '/privacy' },
-    { label: 'Terms', href: '/terms' },
-    { label: 'Cookies', href: '/privacy' },
-  ],
+  columns: [] as { title: string; links: { label: string; href: string }[] }[],
+  appButtons: [] as { label: string; store: string; href: string }[],
+  copyright: '© Movr',
+  legalLinks: [] as { label: string; href: string }[],
 };
 
 /** Public site footer — CMS + live app links + locales (mockup). */
@@ -298,7 +260,7 @@ export default function SiteFooter() {
                     value={c.country_code}
                     className={light ? 'bg-white text-black' : 'bg-black text-white'}
                   >
-                    {c.display_label}
+                    {localeLabel(c.country_code, c.display_label)}
                   </option>
                 ))}
               </select>

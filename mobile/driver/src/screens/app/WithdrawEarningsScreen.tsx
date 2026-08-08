@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+
+const PROVIDERS = ['MTN MoMo', 'Vodafone Cash', 'AirtelTigo Money', 'Bank transfer'];
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -15,15 +17,21 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Driver withdraw earnings — MoMo destination + withdraw now (mockup). */
+/** Driver withdraw earnings — MoMo cash-out with editable destination. */
 export default function WithdrawEarningsScreen() {
-  const [available, setAvailable] = useState(1640);
-  const [amount, setAmount] = useState('1640.00');
-  const [method, setMethod] = useState({ label: 'MTN MoMo', mask: '****4471' });
+  const [available, setAvailable] = useState(0);
+  const [currency, setCurrency] = useState('GHS');
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState<any>(null);
+  const [editingMethod, setEditingMethod] = useState(false);
+  const [provider, setProvider] = useState('MTN MoMo');
+  const [account, setAccount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingBalance, setLoadingBalance] = useState(true);
   const [msg, setMsg] = useState('');
+  const [keepNote, setKeepNote] = useState('');
 
-  useEffect(() => {
+  const load = () => {
     fetch(`${API}/driver/earnings/balance`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -32,27 +40,51 @@ export default function WithdrawEarningsScreen() {
           setAvailable(v);
           setAmount(v.toFixed(2));
         }
+        if (j?.data?.currency) setCurrency(j.data.currency);
         if (j?.data?.payoutMethod) setMethod(j.data.payoutMethod);
+        if (j?.data?.keep100Note) setKeepNote(j.data.keep100Note);
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setAvailable(0);
+        setAmount('');
+        setMethod(null);
+        setMsg(e?.message || 'Could not load earnings balance');
+      })
+      .finally(() => setLoadingBalance(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
-  const changeMethod = async () => {
-    const next = method.label.includes('MTN')
-      ? { label: 'Vodafone Cash', mask: '****8821' }
-      : { label: 'MTN MoMo', mask: '****4471' };
-    setMethod(next);
-    await fetch(`${API}/driver/payout-methods/default`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ provider: next.label, mask: next.mask }),
-    }).catch(() => undefined);
+  const saveMethod = async () => {
+    setLoading(true);
+    setMsg('');
+    try {
+      const res = await fetch(`${API}/driver/payouts/method`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ provider, accountNumber: account }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.status === 'error') {
+        setMsg(json.message || 'Could not save method');
+      } else {
+        setMethod(json.data);
+        setEditingMethod(false);
+        setMsg(`Saved · ${json.data?.eta || 'Usually arrives in minutes'}`);
+      }
+    } catch (e: any) {
+      setMsg(e.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const withdraw = async () => {
     const n = Number(amount);
-    if (!n || n > available) {
-      setMsg('Amount exceeds available balance');
+    if (!n || n > available || !method) {
+      setMsg(!method ? 'Add a MoMo number first' : 'Amount exceeds available balance');
       return;
     }
     setLoading(true);
@@ -63,13 +95,13 @@ export default function WithdrawEarningsScreen() {
         headers: authHeaders(),
         body: JSON.stringify({
           amount: n,
-          currency: 'GHS',
+          currency,
           channel: method.label,
         }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMsg('Withdrawal requested');
+        setMsg(json.message || 'Withdrawal requested — usually arrives in minutes');
         setAvailable((a) => Math.max(0, a - n));
         setAmount(Math.max(0, available - n).toFixed(2));
       } else {
@@ -83,50 +115,84 @@ export default function WithdrawEarningsScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.title}>Withdraw earnings</Text>
+      <Text style={styles.sub}>
+        {keepNote || 'Every fare on Movr is yours — withdraw anytime via MoMo.'}
+      </Text>
+      {loadingBalance ? <Text style={styles.msg}>Loading balance…</Text> : null}
 
       <View style={styles.balanceCard}>
         <View style={styles.balanceGlow} />
         <Text style={styles.balanceLabel}>Available to withdraw</Text>
-        <Text style={styles.balanceValue}>{formatCurrency(available, 'GHS')}</Text>
+        <Text style={styles.balanceValue}>{formatCurrency(available, currency)}</Text>
       </View>
 
       <Text style={styles.label}>Amount</Text>
       <TextInput
         style={styles.inputFocus}
-        value={`GH₵${Number(amount || 0).toLocaleString('en-GH', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`}
+        value={amount}
         onChangeText={(t) => setAmount(t.replace(/[^\d.]/g, ''))}
         keyboardType="decimal-pad"
+        placeholder="0.00"
+        placeholderTextColor="#666"
       />
 
       <Text style={styles.label}>Withdraw to</Text>
-      <View style={styles.method}>
-        <Text style={styles.methodText}>
-          {method.label} · {method.mask}
-        </Text>
-        <Pressable onPress={changeMethod}>
-          <Text style={styles.change}>Change</Text>
-        </Pressable>
-      </View>
+      {editingMethod || !method ? (
+        <View style={styles.editBox}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+            {PROVIDERS.map((p) => (
+              <Pressable
+                key={p}
+                style={[styles.chip, provider === p && styles.chipOn]}
+                onPress={() => setProvider(p)}
+              >
+                <Text style={styles.chipText}>{p}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <TextInput
+            style={styles.inputFocus}
+            value={account}
+            onChangeText={setAccount}
+            keyboardType="phone-pad"
+            placeholder="MoMo / account number"
+            placeholderTextColor="#666"
+          />
+          <Pressable style={styles.saveMethod} onPress={saveMethod} disabled={loading}>
+            <Text style={styles.saveMethodText}>{loading ? 'Saving…' : 'Save payout method'}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.method}>
+          <View>
+            <Text style={styles.methodText}>
+              {method.label} · {method.mask}
+            </Text>
+            <Text style={styles.eta}>{method.eta || 'Usually arrives in minutes'}</Text>
+          </View>
+          <Pressable onPress={() => setEditingMethod(true)}>
+            <Text style={styles.change}>Change</Text>
+          </Pressable>
+        </View>
+      )}
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable style={styles.cta} onPress={withdraw} disabled={loading}>
+      <Pressable style={styles.cta} onPress={withdraw} disabled={loading || !method}>
         <View style={styles.ctaLeft} />
         <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>{loading ? 'Processing…' : 'Withdraw now'}</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000', padding: spacing[4] },
-  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700', marginBottom: spacing[5] },
+  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '700' },
+  sub: { color: 'rgba(255,255,255,0.55)', marginTop: 6, marginBottom: spacing[5], fontSize: 13 },
   balanceCard: {
     borderRadius: 20,
     paddingVertical: spacing[6],
@@ -159,24 +225,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: spacing[4],
-    fontSize: 16,
     fontWeight: '700',
+    fontSize: 16,
   },
   method: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#141414',
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    marginBottom: spacing[5],
-  },
-  methodText: { flex: 1, color: '#FFFFFF', fontWeight: '600' },
-  change: { color: '#5B8AFF', fontWeight: '700' },
-  msg: { color: '#A1A1AA', marginBottom: spacing[3] },
-  cta: {
-    marginTop: 'auto' as any,
+    padding: 16,
     marginBottom: spacing[4],
+  },
+  methodText: { color: '#FFFFFF', fontWeight: '700' },
+  eta: { color: '#A1A1AA', fontSize: 12, marginTop: 4 },
+  change: { color: '#A78BFA', fontWeight: '700' },
+  editBox: { marginBottom: spacing[4] },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#333',
+    marginRight: 8,
+  },
+  chipOn: { borderColor: '#8B5CF6', backgroundColor: 'rgba(139,92,246,0.2)' },
+  chipText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
+  saveMethod: {
+    backgroundColor: '#27272a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  saveMethodText: { color: '#FFF', fontWeight: '700' },
+  msg: { color: '#4ADE80', marginBottom: spacing[3], textAlign: 'center' },
+  cta: {
+    marginTop: spacing[2],
     borderRadius: radius.pill,
     minHeight: 54,
     alignItems: 'center',
@@ -184,11 +268,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#6345ED',
   },
-  ctaLeft: { ...StyleSheet.absoluteFillObject, backgroundColor: '#6345ED' },
-  ctaRight: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#3B5CFF',
-    opacity: 0.75,
-  },
-  ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  ctaLeft: {},
+  ctaRight: {},
+  ctaText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
 });

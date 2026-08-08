@@ -11,19 +11,21 @@ function authHeaders() {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-/** Order Confirmed (mockup). */
+/** Order Confirmed. */
 export default function OrderConfirmedPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [merchant, setMerchant] = useState('Chicken Republic');
-  const [orderRef, setOrderRef] = useState('MVR-20480');
-  const [arrival, setArrival] = useState('10:07 AM');
-  const [timeLeft, setTimeLeft] = useState('~26 min');
+  const [merchant, setMerchant] = useState('');
+  const [orderRef, setOrderRef] = useState('');
+  const [arrival, setArrival] = useState('');
+  const [timeLeft, setTimeLeft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id || String(id).startsWith('demo-')) {
-      const t = new Date(Date.now() + 26 * 60000);
-      setArrival(t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    if (!id) {
+      setError('Order not found');
+      setLoading(false);
       return;
     }
     fetch(`${API}/orders/${id}`, { headers: authHeaders() })
@@ -36,7 +38,8 @@ export default function OrderConfirmedPage() {
         if (o.estimated_arrival) setArrival(o.estimated_arrival);
         if (o.time_left) setTimeLeft(o.time_left);
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load order'))
+      .finally(() => setLoading(false));
   }, [id]);
 
   const copy = async () => {
@@ -49,6 +52,10 @@ export default function OrderConfirmedPage() {
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-6 text-center" data-force-dark>
+      {loading ? <p className="text-zinc-400">Loading order…</p> : null}
+      {error ? <p className="text-red-400">{error}</p> : null}
+      {!loading && !error ? (
+      <>
       <div className="relative w-24 h-24 mx-auto mb-5">
         <div className="absolute inset-0 rounded-full bg-green-500/20" />
         <div className="absolute inset-2 rounded-full bg-green-500/30" />
@@ -70,7 +77,7 @@ export default function OrderConfirmedPage() {
         <span>📋</span>
       </button>
 
-      <div className="grid grid-cols-4 gap-1 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-1 mb-6">
         {[
           { label: 'Confirmed', icon: '✓', on: true },
           { label: 'Preparing', icon: '🍳', on: true },
@@ -110,11 +117,20 @@ export default function OrderConfirmedPage() {
       </button>
       <button
         type="button"
+        onClick={() => navigate('/marketplace')}
+        className="w-full rounded-2xl py-3.5 font-bold border border-zinc-700 mb-3"
+      >
+        Rate products
+      </button>
+      <button
+        type="button"
         onClick={() => navigate('/dashboard')}
         className="w-full rounded-2xl py-3.5 font-bold border border-zinc-700"
       >
         Back to Home
       </button>
+      </>
+      ) : null}
     </div>
   );
 }

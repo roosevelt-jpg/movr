@@ -14,50 +14,36 @@ function authHeaders(): Record<string, string> {
 /** Driver Profile & Ratings — avatar, GOLD badge, stats, breakdown bars, reviews. */
 export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
   const [data, setData] = useState<any>({
-    name: 'Emeka Okafor',
-    initials: 'EO',
-    role: 'Driver',
-    location: 'Lagos, Nigeria',
-    sinceYear: 2023,
-    loyaltyBadge: 'GOLD',
-    stats: { trips: 312, rating: 4.9, dvt: 18200, dvtLabel: '18.2K', acceptance: 98 },
-    ratingBreakdown: [
-      { stars: 5, percent: 82 },
-      { stars: 4, percent: 14 },
-      { stars: 3, percent: 3 },
-      { stars: 2, percent: 1 },
-    ],
-    recentReviews: [
-      {
-        name: 'Kofi A.',
-        initials: 'KA',
-        rating: 5,
-        comment: 'Very professional and friendly. Smooth ride the whole way.',
-        when: 'Today',
-      },
-      {
-        name: 'Chioma F.',
-        initials: 'CF',
-        rating: 5,
-        comment: 'Car was very clean and the AC worked perfectly.',
-        when: 'Yesterday',
-      },
-    ],
+    name: '',
+    initials: '',
+    role: '',
+    location: '',
+    sinceYear: null,
+    loyaltyBadge: '',
+    stats: { trips: 0, rating: 0, dvt: 0, dvtLabel: '', acceptance: 0 },
+    ratingBreakdown: [],
+    recentReviews: [],
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/driver/profile/ratings`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
+        else throw new Error('Profile data is unavailable');
       })
-      .catch(() => undefined);
+      .catch((e) => setError(e?.message || 'Could not load profile'))
+      .finally(() => setLoading(false));
   }, []);
 
   const s = data.stats || {};
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 48 }}>
+      {loading ? <Text style={styles.state}>Loading profile…</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {onBack ? (
         <Pressable onPress={onBack} style={styles.backBtn}>
           <Text style={styles.back}>←</Text>
@@ -69,24 +55,24 @@ export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
           <View style={styles.avatar}>
             <View style={styles.avatarGlowA} />
             <View style={styles.avatarGlowB} />
-            <Text style={styles.avatarText}>{data.initials || 'EO'}</Text>
+            <Text style={styles.avatarText}>{data.initials || ''}</Text>
           </View>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{data.loyaltyBadge || 'GOLD'}</Text>
+            <Text style={styles.badgeText}>{data.loyaltyBadge || ''}</Text>
           </View>
         </View>
         <Text style={styles.name}>{data.name}</Text>
         <Text style={styles.meta}>
-          {data.role || 'Driver'} · {data.location} · Since {data.sinceYear}
+          {[data.role, data.location, data.sinceYear ? `Since ${data.sinceYear}` : ''].filter(Boolean).join(' · ')}
         </Text>
       </View>
 
       <View style={styles.stats}>
         {[
-          { label: 'Trips', value: String(s.trips ?? 312), color: '#FFFFFF' },
-          { label: 'Rating', value: Number(s.rating ?? 4.9).toFixed(1), color: '#F5C542' },
-          { label: 'DVT', value: s.dvtLabel || '18.2K', color: '#A78BFA' },
-          { label: 'Accept', value: `${Math.round(Number(s.acceptance ?? 98))}%`, color: '#FFFFFF' },
+          { label: 'Trips', value: String(s.trips ?? 0), color: '#FFFFFF' },
+          { label: 'Rating', value: Number(s.rating ?? 0).toFixed(1), color: '#F5C542' },
+          { label: 'DVT', value: s.dvtLabel || String(s.dvt ?? 0), color: '#A78BFA' },
+          { label: 'Accept', value: `${Math.round(Number(s.acceptance ?? 0))}%`, color: '#FFFFFF' },
         ].map((m) => (
           <View key={m.label} style={styles.stat}>
             <Text style={[styles.statVal, { color: m.color }]}>{m.value}</Text>
@@ -113,6 +99,7 @@ export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
       ))}
 
       <Text style={[styles.section, { marginTop: spacing[6] }]}>RECENT REVIEWS</Text>
+      {!loading && !(data.recentReviews || []).length ? <Text style={styles.state}>No reviews yet.</Text> : null}
       {(data.recentReviews || []).map((r: any, i: number) => (
         <View key={`${r.name}-${i}`} style={styles.review}>
           <View style={styles.reviewTop}>
@@ -233,4 +220,6 @@ const styles = StyleSheet.create({
   reviewWhen: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
   stars: { color: '#F5A623', fontSize: 12, letterSpacing: 1 },
   reviewBody: { color: 'rgba(255,255,255,0.65)', fontSize: 14, lineHeight: 20 },
+  state: { color: '#71717A', textAlign: 'center', marginVertical: spacing[3] },
+  error: { color: '#F87171', textAlign: 'center', marginVertical: spacing[3] },
 });

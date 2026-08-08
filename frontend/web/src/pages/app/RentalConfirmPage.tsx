@@ -6,7 +6,6 @@ const API =
   (import.meta as any).env?.VITE_API_URL ||
   process.env.REACT_APP_API_URL ||
   'http://localhost:3000/api/v1';
-const CRV_ID = 'e0000000-0000-4000-8000-000000000002';
 
 function authHeaders() {
   const t = localStorage.getItem('movr_token') || localStorage.getItem('token');
@@ -20,7 +19,7 @@ function authHeaders() {
 export default function RentalConfirmPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const vehicleId = params.get('vehicleId') || CRV_ID;
+  const vehicleId = params.get('vehicleId') || '';
   const mode = (params.get('mode') as 'self_drive' | 'chauffeur') || 'self_drive';
   const [quote, setQuote] = useState<any>(null);
   const [hubs, setHubs] = useState<any[]>([]);
@@ -28,8 +27,15 @@ export default function RentalConfirmPage() {
   const [showHubs, setShowHubs] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!vehicleId) {
+      setError('Vehicle not found');
+      setLoading(false);
+      return;
+    }
     fetch(
       `${API}/rentals/confirm-quote?vehicleId=${vehicleId}&mode=${mode}&days=1`,
       { headers: authHeaders() }
@@ -41,7 +47,8 @@ export default function RentalConfirmPage() {
           if (j.data.location?.hubId) setHubId(j.data.location.hubId);
         }
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load rental quote'))
+      .finally(() => setLoading(false));
     fetch(`${API}/rentals/hubs`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => setHubs(j.data || []))
@@ -69,37 +76,17 @@ export default function RentalConfirmPage() {
       setMsg(j?.data?.message || (res.ok ? 'Rental confirmed & paid' : j.message));
       if (res.ok) setTimeout(() => navigate('/rentals'), 800);
     } catch {
-      setMsg('Confirmed (demo)');
+      setMsg('Could not confirm rental');
     } finally {
       setBusy(false);
     }
   };
 
-  const v = quote?.vehicle || {
-    name: 'Honda CR-V',
-    meta: 'SUV · 5 seats · Auto · Silver',
-    rating: 4.9,
-    mode: 'Self-drive',
-    emoji: '🚙',
-  };
-  const p = quote?.period || {
-    pickupDate: 'Apr 10, 2026',
-    pickupTime: '9:00 AM',
-    returnDate: 'Apr 11, 2026',
-    returnTime: '9:00 AM',
-    label: '1 day rental',
-  };
-  const pricing = quote?.pricing || {
-    total: 46000,
-    currency: 'NGN',
-    lines: [
-      { label: 'Daily rate', amount: 45000 },
-      { label: 'Insurance', amount: 3000 },
-      { label: 'DVT discount', amount: -2000 },
-    ],
-  };
-  const currency = pricing.currency || 'NGN';
-  const total = Number(pricing.total || 46000);
+  const v = quote?.vehicle;
+  const p = quote?.period;
+  const pricing = quote?.pricing;
+  const currency = pricing?.currency || 'NGN';
+  const total = Number(pricing?.total || 0);
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-28" data-force-dark>
@@ -110,6 +97,10 @@ export default function RentalConfirmPage() {
         <h1 className="text-lg font-extrabold">Confirm Rental</h1>
         <span className="w-9" />
       </div>
+      {loading ? <p className="text-zinc-400">Loading rental quote…</p> : null}
+      {error ? <p className="text-red-400">{error}</p> : null}
+      {!quote ? null : (
+      <>
 
       <div className="flex gap-3 rounded-2xl bg-zinc-900 p-3.5 mb-3">
         <div className="w-16 h-16 rounded-xl bg-zinc-800 flex items-center justify-center text-3xl">
@@ -119,7 +110,7 @@ export default function RentalConfirmPage() {
           <p className="font-extrabold text-lg">{v.name}</p>
           <p className="text-sm text-zinc-400 mt-0.5">{v.meta}</p>
           <p className="text-sm text-amber-400 font-bold mt-1">
-            ★ {Number(v.rating || 4.9).toFixed(1)} · {v.mode || 'Self-drive'}
+            ★ {Number(v.rating || 0).toFixed(1)} · {v.mode || ''}
           </p>
         </div>
       </div>
@@ -141,7 +132,7 @@ export default function RentalConfirmPage() {
         </div>
         <div className="mt-4 flex justify-center">
           <span className="rounded-full bg-violet-950 text-violet-300 text-xs font-bold px-3 py-1.5">
-            {p.label || '1 day rental'}
+            {p.label || ''}
           </span>
         </div>
       </div>
@@ -151,7 +142,7 @@ export default function RentalConfirmPage() {
         <div className="flex-1">
           <p className="font-extrabold">Pickup Location</p>
           <p className="text-sm text-zinc-400 mt-0.5">
-            {quote?.location?.address || 'Movr Hub, Victoria Island, Lagos'}
+            {quote?.location?.address || ''}
           </p>
         </div>
         <button type="button" className="text-purple-400 font-extrabold" onClick={() => setShowHubs((s) => !s)}>
@@ -184,7 +175,7 @@ export default function RentalConfirmPage() {
       ) : null}
 
       <div className="rounded-2xl bg-zinc-900 p-3.5 mb-4 space-y-2.5">
-        {(pricing.lines || []).map((line: any) => (
+        {(pricing?.lines || []).map((line: any) => (
           <div key={line.label} className="flex justify-between">
             <span className="text-zinc-400">{line.label}</span>
             <span className={`font-bold ${Number(line.amount) < 0 ? 'text-green-400' : ''}`}>
@@ -205,10 +196,12 @@ export default function RentalConfirmPage() {
         type="button"
         disabled={busy}
         onClick={pay}
-        className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto rounded-2xl py-4 font-extrabold bg-indigo-500 disabled:opacity-60"
+        className="sticky bottom-4 w-full rounded-2xl py-4 font-extrabold bg-indigo-500 disabled:opacity-60"
       >
         {busy ? 'Processing…' : `Confirm & Pay ${formatCurrency(total, currency)}`}
       </button>
+      </>
+      )}
     </div>
   );
 }

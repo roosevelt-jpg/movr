@@ -11,6 +11,64 @@ const marketplace = new MarketplaceService(db, payments);
 export const storesRouter = Router();
 export const cartRouter = Router();
 export const ordersRouter = Router();
+export const productsRouter = Router();
+
+productsRouter.get('/', async (req: any, res: Response) => {
+  try {
+    const data = await marketplace.searchProducts({
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      category: typeof req.query.category === 'string' ? req.query.category : undefined,
+      storeId: typeof req.query.storeId === 'string' ? req.query.storeId : undefined,
+      minPrice: req.query.minPrice != null ? Number(req.query.minPrice) : undefined,
+      maxPrice: req.query.maxPrice != null ? Number(req.query.maxPrice) : undefined,
+      sort: typeof req.query.sort === 'string' ? req.query.sort : undefined,
+      limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+      offset: req.query.offset != null ? Number(req.query.offset) : undefined,
+    });
+    res.json({ status: 'success', data: data.products, meta: { limit: data.limit, offset: data.offset } });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+productsRouter.get('/:id', async (req: any, res: Response) => {
+  try {
+    const product = await marketplace.getProductById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ status: 'error', message: 'Product not found' });
+    }
+    res.json({ status: 'success', data: product });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+productsRouter.get('/:id/reviews', async (req: any, res: Response) => {
+  try {
+    const data = await marketplace.listProductReviews(
+      req.params.id,
+      req.query.limit != null ? Number(req.query.limit) : 20,
+      req.query.offset != null ? Number(req.query.offset) : 0
+    );
+    res.json({ status: 'success', data: data.reviews });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+productsRouter.post('/:id/reviews', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const review = await marketplace.createProductReview(req.user!.id, req.params.id, {
+      rating: Number(req.body.rating),
+      title: req.body.title,
+      body: req.body.body,
+      orderId: req.body.orderId,
+    });
+    res.status(201).json({ status: 'success', data: review });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
 
 storesRouter.get('/', async (req: any, res: Response) => {
   try {
@@ -197,6 +255,15 @@ ordersRouter.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+ordersRouter.get('/returns/mine', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await marketplace.listReturnsForUser(req.user!.id);
+    res.json({ status: 'success', data: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 ordersRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const order = await marketplace.getOrder(req.user!.id, req.params.id);
@@ -218,18 +285,24 @@ ordersRouter.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   }
 });
 
+ordersRouter.post('/:id/returns', async (req: AuthRequest, res: Response) => {
+  try {
+    const row = await marketplace.requestReturn(req.user!.id, req.params.id, {
+      reason: req.body.reason,
+      itemId: req.body.itemId,
+      refundAmount: req.body.refundAmount != null ? Number(req.body.refundAmount) : undefined,
+    });
+    res.status(201).json({ status: 'success', data: row });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 /** Wishlist (product favorites) */
 cartRouter.get('/wishlist', async (req: AuthRequest, res: Response) => {
   try {
-    const rows = await db.query(
-      `SELECT w.product_id, w.created_at, p.name, p.price, p.image_url, p.store_id
-       FROM product_wishlist w
-       JOIN products p ON p.id = w.product_id
-       WHERE w.user_id = $1
-       ORDER BY w.created_at DESC`,
-      [req.user!.id]
-    );
-    res.json({ status: 'success', data: rows.rows });
+    const data = await marketplace.getWishlist(req.user!.id);
+    res.json({ status: 'success', data });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }

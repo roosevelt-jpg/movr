@@ -33,13 +33,6 @@ const TOPIC_ICON: Record<string, string> = {
   dvt: '⛓',
 };
 
-const FALLBACK_TOPICS = [
-  { slug: 'ride', title: 'Ride Issues', icon_key: 'car' },
-  { slug: 'pay', title: 'Payments', icon_key: 'card' },
-  { slug: 'order', title: 'Orders & Delivery', icon_key: 'package' },
-  { slug: 'dvt', title: 'DVT Tokens', icon_key: 'chain' },
-];
-
 /** Help Center — search, topics, tickets, contact (mockup). */
 export default function HelpCentreScreen({
   onOpenCategory,
@@ -52,16 +45,10 @@ export default function HelpCentreScreen({
   onBack?: () => void;
 }) {
   const [q, setQ] = useState('');
-  const [topics, setTopics] = useState(FALLBACK_TOPICS);
-  const [tickets, setTickets] = useState<any[]>([
-    {
-      subject: 'Payment not received',
-      status: 'In Review',
-      ticketRef: 'MVR-TKT-4821',
-      openedLabel: 'Opened 2 days ago',
-    },
-  ]);
+  const [topics, setTopics] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const url = q.trim()
@@ -72,7 +59,7 @@ export default function HelpCentreScreen({
         .then((r) => r.json())
         .then((body) => {
           const rows = body?.data || [];
-          if (Array.isArray(rows) && rows.length) {
+          if (Array.isArray(rows)) {
             setTopics(
               rows.map((c: any) => ({
                 slug: c.slug,
@@ -82,7 +69,11 @@ export default function HelpCentreScreen({
             );
           }
         })
-        .catch(() => undefined);
+        .catch((e) => {
+          setTopics([]);
+          setMsg(e?.message || 'Could not load help topics');
+        })
+        .finally(() => setLoading(false));
     }, q.trim() ? 200 : 0);
     return () => clearTimeout(t);
   }, [q]);
@@ -91,11 +82,11 @@ export default function HelpCentreScreen({
     fetch(`${API}/me/support/tickets`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (Array.isArray(j?.data?.tickets) && j.data.tickets.length) {
+        if (Array.isArray(j?.data?.tickets)) {
           setTickets(j.data.tickets);
         }
       })
-      .catch(() => undefined);
+      .catch(() => setTickets([]));
   }, []);
 
   const raiseTicket = async () => {
@@ -118,9 +109,6 @@ export default function HelpCentreScreen({
   };
 
   const grid = topics.slice(0, 4);
-  while (grid.length < 4) {
-    grid.push(FALLBACK_TOPICS[grid.length]);
-  }
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
@@ -148,6 +136,8 @@ export default function HelpCentreScreen({
       </View>
 
       <Text style={styles.section}>POPULAR TOPICS</Text>
+      {loading ? <Text style={styles.empty}>Loading help topics…</Text> : null}
+      {!loading && !grid.length ? <Text style={styles.empty}>No help topics available.</Text> : null}
       <View style={styles.grid}>
         {grid.map((t) => (
           <Pressable
@@ -162,6 +152,7 @@ export default function HelpCentreScreen({
       </View>
 
       <Text style={styles.section}>YOUR TICKETS</Text>
+      {!tickets.length ? <Text style={styles.empty}>No support tickets.</Text> : null}
       {tickets.map((t) => (
         <View key={t.id || t.ticketRef} style={styles.ticket}>
           <View style={{ flex: 1 }}>
@@ -280,4 +271,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#22C55E',
   },
   msg: { color: '#A78BFA', textAlign: 'center', marginTop: 12 },
+  empty: { color: '#71717A', marginBottom: spacing[4] },
 });

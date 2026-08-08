@@ -150,7 +150,7 @@ export default function AdminOverviewPage() {
       {error ? <p style={styles.error}>{error}</p> : null}
       {loading ? <p style={styles.sub}>Loading dashboard…</p> : null}
 
-      <div style={styles.cards}>
+      <div style={styles.cards} className="admin-kpi-grid" data-admin-grid="kpi">
         {cards.map((c) => (
           <div key={c.label} style={styles.card}>
             <div style={styles.label}>{c.label}</div>
@@ -159,7 +159,7 @@ export default function AdminOverviewPage() {
         ))}
       </div>
 
-      <div style={styles.chartsRow}>
+      <div style={styles.chartsRow} className="admin-split-grid" data-admin-grid="split">
         <div style={styles.panel}>
           <h2 style={styles.panelTitle}>Weekly Revenue</h2>
           <div style={{ height: 220 }}>
@@ -229,9 +229,10 @@ export default function AdminOverviewPage() {
         </div>
       </div>
 
-      <div style={styles.tablesRow}>
+      <div style={styles.tablesRow} className="admin-split-grid" data-admin-grid="split">
         <div style={styles.panel}>
           <h2 style={styles.panelTitle}>Recent Rides</h2>
+          <div className="admin-table-scroll">
           <table style={styles.table}>
             <thead>
               <tr>
@@ -262,10 +263,12 @@ export default function AdminOverviewPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         <div style={styles.panel}>
           <h2 style={styles.panelTitle}>Top Merchants</h2>
+          <div className="admin-table-scroll">
           <table style={styles.table}>
             <thead>
               <tr>
@@ -294,6 +297,7 @@ export default function AdminOverviewPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </AdminShell>

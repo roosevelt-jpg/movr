@@ -24,27 +24,14 @@ const TOPIC_ICON: Record<string, string> = {
   dvt: '⛓',
 };
 
-const FALLBACK = [
-  { slug: 'ride', title: 'Ride Issues', icon_key: 'car' },
-  { slug: 'pay', title: 'Payments', icon_key: 'card' },
-  { slug: 'order', title: 'Orders & Delivery', icon_key: 'package' },
-  { slug: 'dvt', title: 'DVT Tokens', icon_key: 'chain' },
-];
-
-/** Help Center — topics, tickets, contact (mockup). */
+/** Help Center — CMS page + live topics/tickets APIs. */
 export default function HelpCentrePage() {
   const navigate = useNavigate();
   const { page, loading: cmsLoading } = useCmsPage('help');
   const [q, setQ] = useState('');
-  const [topics, setTopics] = useState(FALLBACK);
-  const [tickets, setTickets] = useState<any[]>([
-    {
-      subject: 'Payment not received',
-      status: 'In Review',
-      ticketRef: 'MVR-TKT-4821',
-      openedLabel: 'Opened 2 days ago',
-    },
-  ]);
+  const [topics, setTopics] = useState<{ slug: string; title: string; icon_key: string }[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
@@ -54,7 +41,7 @@ export default function HelpCentrePage() {
     fetch(url)
       .then((r) => r.json())
       .then((body) => {
-        if (Array.isArray(body?.data) && body.data.length) {
+        if (Array.isArray(body?.data)) {
           setTopics(
             body.data.map((c: any) => ({
               slug: c.slug,
@@ -62,20 +49,22 @@ export default function HelpCentrePage() {
               icon_key: c.icon_key || c.slug,
             }))
           );
+        } else {
+          setTopics([]);
         }
       })
-      .catch(() => undefined);
+      .catch(() => setTopics([]));
   }, [q]);
 
   useEffect(() => {
     fetch(`${API}/me/support/tickets`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (Array.isArray(j?.data?.tickets) && j.data.tickets.length) {
-          setTickets(j.data.tickets);
-        }
+        if (Array.isArray(j?.data?.tickets)) setTickets(j.data.tickets);
+        else setTickets([]);
       })
-      .catch(() => undefined);
+      .catch(() => setTickets([]))
+      .finally(() => setTicketsLoading(false));
   }, []);
 
   const raise = async () => {
@@ -98,8 +87,7 @@ export default function HelpCentrePage() {
     );
   }
 
-  // Prefer mockup layout over CMS when building help center UX
-  if (page?.sections?.length && false) {
+  if (page?.sections?.length) {
     return (
       <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug="help" />
@@ -107,8 +95,7 @@ export default function HelpCentrePage() {
     );
   }
 
-  const grid = [...topics.slice(0, 4)];
-  while (grid.length < 4) grid.push(FALLBACK[grid.length]);
+  const grid = topics.slice(0, 8);
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4" data-force-dark>
@@ -126,21 +113,27 @@ export default function HelpCentrePage() {
       </div>
 
       <p className="text-xs font-bold tracking-wider text-zinc-500 mb-2">POPULAR TOPICS</p>
-      <div className="grid grid-cols-2 gap-2.5 mb-6">
-        {grid.map((t) => (
-          <button
-            key={t.slug}
-            type="button"
-            onClick={() => navigate(`/help/${t.slug}`)}
-            className="rounded-xl bg-zinc-900 p-4 text-left min-h-[88px]"
-          >
-            <div className="text-2xl mb-2">{TOPIC_ICON[t.icon_key] || '•'}</div>
-            <div className="font-bold">{t.title}</div>
-          </button>
-        ))}
-      </div>
+      {grid.length === 0 ? (
+        <p className="text-sm text-zinc-500 mb-6">No help topics available.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2.5 mb-6">
+          {grid.map((t) => (
+            <button
+              key={t.slug}
+              type="button"
+              onClick={() => navigate(`/help/${t.slug}`)}
+              className="rounded-xl bg-zinc-900 p-4 text-left min-h-[88px]"
+            >
+              <div className="text-2xl mb-2">{TOPIC_ICON[t.icon_key] || '•'}</div>
+              <div className="font-bold">{t.title}</div>
+            </button>
+          ))}
+        </div>
+      )}
 
       <p className="text-xs font-bold tracking-wider text-zinc-500 mb-2">YOUR TICKETS</p>
+      {ticketsLoading ? <p className="text-sm text-zinc-500 mb-6">Loading tickets…</p> : null}
+      {!ticketsLoading && tickets.length === 0 ? <p className="text-sm text-zinc-500 mb-6">No support tickets.</p> : null}
       {tickets.map((t) => (
         <div key={t.id || t.ticketRef} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3.5 mb-6">
           <div className="flex-1">

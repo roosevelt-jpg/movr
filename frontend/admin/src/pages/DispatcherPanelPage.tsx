@@ -293,7 +293,7 @@ export default function DispatcherPanelPage() {
         ))}
       </div>
 
-      <div style={styles.summaryRow}>
+      <div style={styles.summaryRow} className="admin-kpi-grid" data-admin-grid="kpi">
         {[
           { label: 'Active Rides', value: String(activeRides) },
           { label: 'Queued', value: String(queued) },
@@ -307,7 +307,7 @@ export default function DispatcherPanelPage() {
       </div>
 
       {tab === 'queue' && (
-        <div style={styles.queueLayout}>
+        <div style={styles.queueLayout} className="admin-split-grid" data-admin-grid="split">
           <div style={styles.panel}>
             <div style={styles.filterTabs}>
               {(
@@ -436,7 +436,7 @@ export default function DispatcherPanelPage() {
       )}
 
       {tab === 'live' && (
-        <div style={styles.board}>
+        <div style={styles.board} className="admin-split-grid" data-admin-grid="split">
           <div style={styles.mapPanel}>
             <div style={styles.mapGrid}>
               <div style={styles.mapOverlay}>
@@ -497,7 +497,8 @@ export default function DispatcherPanelPage() {
 
       {tab === 'drivers' && (
         <div style={styles.panel}>
-          <h2 style={styles.panelTitle}>Driver Status</h2>
+            <h2 style={styles.panelTitle}>Driver Status</h2>
+            <div className="admin-table-scroll">
           <table style={styles.table}>
             <thead>
               <tr>
@@ -528,12 +529,14 @@ export default function DispatcherPanelPage() {
               )}
             </tbody>
           </table>
+            </div>
         </div>
       )}
 
       {tab === 'incidents' && (
         <div style={styles.panel}>
           <h2 style={styles.panelTitle}>Incident Log</h2>
+          <div className="admin-table-scroll">
           <table style={styles.table}>
             <thead>
               <tr>
@@ -562,6 +565,7 @@ export default function DispatcherPanelPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -573,6 +577,7 @@ export default function DispatcherPanelPage() {
               {reporting ? 'Saving…' : 'Generate Shift Report'}
             </button>
           </div>
+          <div className="admin-table-scroll">
           <table style={styles.table}>
             <thead>
               <tr>
@@ -611,6 +616,7 @@ export default function DispatcherPanelPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </AdminShell>

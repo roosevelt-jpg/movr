@@ -11,15 +11,7 @@ const FALLBACK_NAV = {
   brand: 'Movr',
   logoUrl: '/brand/movr-logo.png',
   faviconUrl: '/favicon.png',
-  links: [
-    { label: 'Ride', href: '/#ride' },
-    { label: 'Shop', href: '/#shop' },
-    { label: 'Deliver', href: '/#deliver' },
-    { label: 'AI', href: '/ai' },
-    { label: 'Drivers', href: '/drivers' },
-    { label: 'Merchants', href: '/merchants' },
-    { label: 'About', href: '/about' },
-  ],
+  links: [] as { label: string; href: string }[],
   secondaryCta: { label: 'Log in', href: '/login' },
   cta: { label: 'Get started', href: '/register' },
 };

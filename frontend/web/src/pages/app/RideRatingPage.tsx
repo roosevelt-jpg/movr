@@ -22,53 +22,50 @@ function authHeaders() {
   };
 }
 
-/** Arrival receipt + rate + tip + DVT (mockup). */
+/** Arrival receipt + rate + tip + DVT. */
 const RideRatingPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [name, setName] = useState('Emeka');
-  const [rating, setRating] = useState(4);
-  const [tip, setTip] = useState<number | 'custom'>(200);
+  const [name, setName] = useState('');
+  const [rating, setRating] = useState(0);
+  const [tip, setTip] = useState<number | 'custom'>(0);
   const [customTip, setCustomTip] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [receipt, setReceipt] = useState({
-    destination: 'Lekki Phase 1',
-    durationMinutes: 18,
-    distanceKm: 8.4,
-    baseFare: 900,
-    distanceFare: 240,
-    dvtDiscount: 60,
-    totalPaid: 1080,
-    dvtEarned: 120,
-    currency: 'NGN',
-  });
+  const [receipt, setReceipt] = useState<any>(null);
+  const [receiptLoading, setReceiptLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setError('Ride not found');
+      setReceiptLoading(false);
+      return;
+    }
     fetch(`${API}/rides/${id}/receipt`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data;
         if (!d) return;
         setReceipt({
-          destination: d.destination || 'Lekki Phase 1',
-          durationMinutes: Number(d.durationMinutes || 18),
-          distanceKm: Number(d.distanceKm || 8.4),
-          baseFare: Number(d.baseFare || 900),
-          distanceFare: Number(d.distanceFare || 240),
-          dvtDiscount: Number(d.dvtDiscount || 60),
-          totalPaid: Number(d.totalPaid || 1080),
-          dvtEarned: Number(d.dvtEarned || 120),
+          destination: d.destination || '',
+          durationMinutes: Number(d.durationMinutes || 0),
+          distanceKm: Number(d.distanceKm || 0),
+          baseFare: Number(d.baseFare || 0),
+          distanceFare: Number(d.distanceFare || 0),
+          dvtDiscount: Number(d.dvtDiscount || 0),
+          totalPaid: Number(d.totalPaid || 0),
+          dvtEarned: Number(d.dvtEarned || 0),
           currency: d.currency || 'NGN',
         });
         if (d.driverFirstName) setName(d.driverFirstName);
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load ride receipt'))
+      .finally(() => setReceiptLoading(false));
   }, [id]);
 
   const tipAmount = tip === 'custom' ? Number(customTip || 0) : Number(tip);
-  const c = receipt.currency;
+  const c = receipt?.currency || 'NGN';
   const fmt = (n: number) => formatCurrency(n, c);
 
   const submit = async () => {
@@ -81,8 +78,7 @@ const RideRatingPage: React.FC = () => {
       toast.success('Thanks for riding with Movr');
       navigate('/history');
     } catch {
-      toast.success('Submitted');
-      navigate('/history');
+      toast.error('Could not submit rating');
     } finally {
       setLoading(false);
     }
@@ -90,6 +86,10 @@ const RideRatingPage: React.FC = () => {
 
   return (
     <div className="min-h-[70vh] bg-black text-white p-6 max-w-xl mx-auto" data-force-dark>
+      {receiptLoading ? <p className="text-center text-zinc-400">Loading ride…</p> : null}
+      {error ? <p className="text-center text-red-400">{error}</p> : null}
+      {!receipt ? null : (
+      <>
       <div className="w-16 h-16 rounded-full bg-green-500 text-black font-black text-2xl flex items-center justify-center mx-auto mb-4">
         ✓
       </div>
@@ -118,7 +118,7 @@ const RideRatingPage: React.FC = () => {
         </div>
       </div>
 
-      <p className="font-bold mb-3">How was {name}?</p>
+      <p className="font-bold mb-3">{name ? `How was ${name}?` : 'How was your driver?'}</p>
       <div className="flex gap-2 mb-6">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
@@ -181,12 +181,14 @@ const RideRatingPage: React.FC = () => {
 
       <button
         type="button"
-        disabled={loading}
+        disabled={loading || rating === 0}
         onClick={submit}
         className="w-full rounded-2xl bg-blue-500 py-3.5 font-bold disabled:opacity-50"
       >
         {loading ? 'Submitting…' : 'Submit & Done'}
       </button>
+      </>
+      )}
     </div>
   );
 };

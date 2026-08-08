@@ -23,37 +23,35 @@ const AVATAR_BG = ['#F97316', '#71717A', '#8E2DE2', '#3B82F6', '#22C55E'];
 /** Rewards — points, Gold→Platinum progress, earn grid, leaderboard (mockup). */
 export default function RewardsScreen({ onRefer }: { onRefer?: () => void }) {
   const [data, setData] = useState<any>({
-    points: 850,
-    tierLabel: 'Gold Tier',
-    nextTier: 'Platinum',
-    pointsAway: 150,
-    currentTierMin: 500,
-    nextTierMin: 1000,
-    progress: 0.7,
-    earnCards: [
-      { id: 'ride', label: 'Ride', subtitle: '+10 pts per ride', icon: 'car' },
-      { id: 'shop', label: 'Shop', subtitle: '+5 pts per order', icon: 'bag' },
-      { id: 'refer', label: 'Refer Friends', subtitle: '+50 pts per referral', icon: 'people' },
-      { id: 'deliver', label: 'Deliver', subtitle: '+8 pts per parcel', icon: 'box' },
-    ],
-    leaderboard: [
-      { rank: 1, name: 'Olumide Adebayo', initials: 'OA', points: 2340, isYou: false },
-      { rank: 2, name: 'Chioma Ferreira', initials: 'CF', points: 1980, isYou: false },
-      { rank: 7, name: 'You', initials: 'KA', points: 850, isYou: true },
-    ],
+    points: 0,
+    tierLabel: '',
+    nextTier: '',
+    pointsAway: 0,
+    currentTierMin: 0,
+    nextTierMin: 0,
+    progress: 0,
+    earnCards: [],
+    leaderboard: [],
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetch(`${API}/points/rewards-hub`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
+        else throw new Error('Rewards data is unavailable');
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setData((d: any) => ({ ...d, earnCards: [], leaderboard: [] }));
+        setError(e?.message || 'Could not load rewards');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const pts = Number(data.points || 0);
-  const progress = Math.min(1, Math.max(0.08, Number(data.progress || 0.7)));
+  const progress = Math.min(1, Math.max(0, Number(data.progress || 0)));
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
@@ -61,7 +59,7 @@ export default function RewardsScreen({ onRefer }: { onRefer?: () => void }) {
         <Text style={styles.title}>Rewards</Text>
         <View style={styles.tierPill}>
           <Text style={styles.tierIcon}>🏆</Text>
-          <Text style={styles.tierText}>{data.tierLabel || 'Gold Tier'}</Text>
+          <Text style={styles.tierText}>{data.tierLabel || 'No tier'}</Text>
         </View>
       </View>
 
@@ -69,7 +67,7 @@ export default function RewardsScreen({ onRefer }: { onRefer?: () => void }) {
         <View style={styles.pointsRow}>
           <Text style={styles.pointsBig}>{pts.toLocaleString()} pts</Text>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.nextLabel}>Next: {data.nextTier || 'Platinum'}</Text>
+            <Text style={styles.nextLabel}>Next: {data.nextTier || '—'}</Text>
             <Text style={styles.away}>
               {Number(data.pointsAway || 0).toLocaleString()} pts away
             </Text>
@@ -80,15 +78,17 @@ export default function RewardsScreen({ onRefer }: { onRefer?: () => void }) {
         </View>
         <View style={styles.barLabels}>
           <Text style={styles.barLab}>
-            Gold ({Number(data.currentTierMin || 500).toLocaleString()})
+            Current ({Number(data.currentTierMin || 0).toLocaleString()})
           </Text>
           <Text style={styles.barLab}>
-            Platinum ({Number(data.nextTierMin || 1000).toLocaleString()})
+            Next ({Number(data.nextTierMin || 0).toLocaleString()})
           </Text>
         </View>
       </View>
 
       <Text style={styles.section}>Earn Points</Text>
+      {loading ? <Text style={styles.empty}>Loading rewards…</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.earnGrid}>
         {(data.earnCards || []).map((c: any) => (
           <Pressable
@@ -104,6 +104,7 @@ export default function RewardsScreen({ onRefer }: { onRefer?: () => void }) {
       </View>
 
       <Text style={styles.section}>Leaderboard</Text>
+      {!loading && !(data.leaderboard || []).length ? <Text style={styles.empty}>No leaderboard data.</Text> : null}
       {(data.leaderboard || []).map((r: any, i: number) => (
         <View key={`${r.rank}-${r.name}`} style={[styles.rankRow, r.isYou && styles.rankYou]}>
           <Text style={[styles.rankNum, r.rank === 1 && styles.rankGold, r.isYou && styles.rankPurple]}>
@@ -219,4 +220,6 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
   rankName: { flex: 1, color: '#FFF', fontWeight: '600' },
   rankPts: { color: '#FFF', fontWeight: '800' },
+  empty: { color: '#71717A', marginBottom: spacing[3] },
+  error: { color: '#F87171', marginBottom: spacing[3] },
 });

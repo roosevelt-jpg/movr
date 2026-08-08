@@ -280,7 +280,7 @@ export default function AdminLiveMapPage() {
 
       {message ? <p style={styles.error}>{message}</p> : null}
 
-      <div style={styles.layout}>
+      <div style={styles.layout} data-admin-grid="map" className="admin-split-grid">
         <div style={styles.mapCol}>
           <div style={styles.filters}>
             {pills.map((p) => (

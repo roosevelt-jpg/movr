@@ -163,7 +163,7 @@ const TokenPage: React.FC = () => {
       </div>
 
       <p className="text-xs font-bold tracking-widest text-white/40">AMOUNT TO REDEEM</p>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {CHIPS.map((c) => {
           const on = chip === c;
           return (

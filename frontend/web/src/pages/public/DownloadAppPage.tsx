@@ -1,33 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useCmsPage } from '../../services/cms';
 import { CmsSections } from '../../cms/sections';
-import { StoreBadgeButton } from '../../components/StoreBadges';
+import { CmsUnavailable } from '../../cms/CmsUnavailable';
 
-const API = import.meta.env.VITE_API_URL || '/api/v1';
-
-const DEFAULT_LINKS = {
-  ios_url: 'https://apps.apple.com/app/movr',
-  android_url: 'https://play.google.com/store/apps/details?id=io.movr.app',
-};
-
-/** Download page — prefers CMS `download` slug; falls back to badges + app-links API. */
+/** Download page — CMS slug `download`. */
 export default function DownloadAppPage() {
-  const { page, loading } = useCmsPage('download');
-  const [links, setLinks] = useState(DEFAULT_LINKS);
-
-  useEffect(() => {
-    fetch(`${API}/public/app-links`)
-      .then((r) => r.json())
-      .then((body) => {
-        if (body?.data?.ios_url || body?.data?.android_url) {
-          setLinks({
-            ios_url: body.data.ios_url || DEFAULT_LINKS.ios_url,
-            android_url: body.data.android_url || DEFAULT_LINKS.android_url,
-          });
-        }
-      })
-      .catch(() => undefined);
-  }, []);
+  const { page, loading, error } = useCmsPage('download');
 
   if (loading) {
     return (
@@ -37,36 +15,13 @@ export default function DownloadAppPage() {
     );
   }
 
-  if (page?.sections?.length) {
-    return (
-      <div className="bg-surface text-text-primary">
-        <CmsSections sections={page.sections} pageSlug="download" />
-      </div>
-    );
+  if (error || !page?.sections?.length) {
+    return <CmsUnavailable title="Download page unpublished" />;
   }
 
   return (
-    <div className="bg-surface text-text-primary flex flex-col flex-1">
-      <section className="mkt-hero relative min-h-[52vh] flex flex-col justify-end">
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-60"
-          style={{ backgroundImage: 'url(/brand/movr-wordmark.png)' }}
-          aria-hidden
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/90" aria-hidden />
-        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-[#6A00FF] via-[#0055FF] to-[#3F7048]" aria-hidden />
-        <main className="mkt-shell relative flex-1 flex flex-col items-center justify-center py-20 sm:py-28 text-center">
-          <p className="mkt-eyebrow">Get the app</p>
-          <h1 className="mkt-display mt-5 max-w-3xl">Take Movr with you.</h1>
-          <p className="mt-5 text-lg text-white/70 max-w-xl">
-            Book rides, shop local stores, send parcels, and manage your wallet — on iOS and Android.
-          </p>
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
-            <StoreBadgeButton store="ios" href={links.ios_url} label="App Store" />
-            <StoreBadgeButton store="android" href={links.android_url} label="Google Play" />
-          </div>
-        </main>
-      </section>
+    <div className="bg-surface text-text-primary">
+      <CmsSections sections={page.sections} pageSlug="download" />
     </div>
   );
 }

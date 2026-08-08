@@ -2,10 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, formatCountryLabel } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
+
+function countryOrAny(code?: string | null) {
+  if (!code) return 'any';
+  return formatCountryLabel(code);
+}
 
 const AUDIENCES = [
   { id: 'driver', label: 'Drivers (100% fare)' },
@@ -315,7 +320,7 @@ export default function SubscriptionFeesPage() {
                 </select>
               </label>
               <label>
-                Country
+                Country{planForm.country_code ? ` · ${formatCountryLabel(planForm.country_code)}` : ''}
                 <input
                   style={styles.input}
                   value={planForm.country_code}
@@ -344,7 +349,7 @@ export default function SubscriptionFeesPage() {
                   <div>
                     <strong>{p.headline || p.name}</strong>
                     <div style={styles.muted}>
-                      {p.id} · {p.vehicle_category || 'any'} · {p.country_code || 'any'}
+                      {p.id} · {p.vehicle_category || 'any'} · {countryOrAny(p.country_code)}
                       {p.city ? ` · ${p.city}` : ''}
                     </div>
                   </div>
@@ -406,7 +411,7 @@ export default function SubscriptionFeesPage() {
                 </select>
               </label>
               <label>
-                Country
+                Country{ruleForm.country_code ? ` · ${formatCountryLabel(ruleForm.country_code)}` : ''}
                 <input
                   style={styles.input}
                   value={ruleForm.country_code}
@@ -443,7 +448,7 @@ export default function SubscriptionFeesPage() {
                   <div>
                     <strong>{r.label || r.plan_id}</strong>
                     <div style={styles.muted}>
-                      pri {r.priority} · {r.vehicle_category || 'any'} · {r.country_code || 'any'}
+                      pri {r.priority} · {r.vehicle_category || 'any'} · {countryOrAny(r.country_code)}
                       {r.city ? ` · ${r.city}` : ''} → {r.plan_id}
                     </div>
                   </div>
@@ -464,6 +469,7 @@ export default function SubscriptionFeesPage() {
             <div style={styles.form}>
               <label>
                 Country
+                {resolveForm.countryCode ? ` · ${formatCountryLabel(resolveForm.countryCode)}` : ''}
                 <input
                   style={styles.input}
                   value={resolveForm.countryCode}
@@ -524,7 +530,7 @@ export default function SubscriptionFeesPage() {
               {preview.slice(0, 40).map((row, i) => (
                 <div key={`${row.planId}-${i}`} style={styles.previewRow}>
                   <span>
-                    {row.country}
+                    {formatCountryLabel(row.country)}
                     {row.city ? `/${row.city}` : ''} · {row.vehicleCategory || 'default'}
                   </span>
                   <span style={styles.amount}>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -14,43 +14,42 @@ function authHeaders() {
   };
 }
 
-/** Parcel tracking (mockup). */
+/** Parcel tracking. */
 export default function ParcelTrackingPage() {
-  const { ref = 'MVR-P-8821' } = useParams();
+  const { ref = '' } = useParams();
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!ref) {
+      setError('Tracking reference not found');
+      setLoading(false);
+      return;
+    }
     fetch(`${API}/deliveries/track/${encodeURIComponent(ref)}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => setData(j.data))
-      .catch(() => undefined);
+      .catch(() => setError('Could not load parcel tracking'))
+      .finally(() => setLoading(false));
   }, [ref]);
 
-  const d = data || {
-    label: 'Parcel #MVR-P-8821',
-    statusLabel: 'En Route',
-    scheduledLabel: 'Scheduled · 2 min ago',
-    etaLabel: 'Courier is 12 min away',
-    courier: { name: 'Tunde Adeyemi', title: 'Movr Courier', rating: 4.7 },
-    pickup: '24 Admiralty Way, Lekki',
-    dropoff: 'Marina Square, Lagos Island',
-    timeline: [
-      { id: '1', label: 'Parcel picked up', state: 'done' },
-      { id: '2', label: 'In transit · 12 min away', state: 'active' },
-      { id: '3', label: 'Delivered & signed', state: 'pending' },
-    ],
-    shareUrl: 'https://movr.app/track/MVR-P-8821',
-  };
+  const d = data;
 
   const share = async () => {
-    const res = await fetch(`${API}/deliveries/${d.id || 'demo'}/share-link`, {
+    if (!d?.id) return;
+    const res = await fetch(`${API}/deliveries/${d.id}/share-link`, {
       method: 'POST',
       headers: authHeaders(),
       body: '{}',
     }).catch(() => null);
     const j = res ? await res.json() : null;
     const url = j?.data?.shareUrl || d.shareUrl;
+    if (!url) {
+      setMsg('Could not create tracking link');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       setMsg('Tracking link copied');
@@ -60,7 +59,11 @@ export default function ParcelTrackingPage() {
   };
 
   return (
-    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-24" data-force-dark>
+    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-8" data-force-dark>
+      {loading ? <p className="text-zinc-400">Loading parcel…</p> : null}
+      {error ? <p className="text-red-400">{error}</p> : null}
+      {!d ? null : (
+      <>
       <div className="relative h-40 rounded-2xl bg-zinc-950 mb-4 flex flex-col items-center justify-center overflow-hidden">
         <p className="absolute top-3 rounded-lg bg-black px-3 py-1 text-xs font-bold">{d.etaLabel}</p>
         <p className="text-3xl mb-6">🛵</p>
@@ -89,7 +92,7 @@ export default function ParcelTrackingPage() {
           <div className="flex-1">
             <p className="font-extrabold">{d.courier?.name}</p>
             <p className="text-xs text-zinc-400">
-              {d.courier?.title} · ★ {Number(d.courier?.rating || 4.7).toFixed(1)}
+              {d.courier?.title} · ★ {Number(d.courier?.rating || 0).toFixed(1)}
             </p>
           </div>
           <button type="button" className="w-10 h-10 rounded-xl bg-zinc-800">📞</button>
@@ -131,11 +134,13 @@ export default function ParcelTrackingPage() {
       <button
         type="button"
         onClick={share}
-        className="fixed bottom-6 left-4 right-4 max-w-xl mx-auto rounded-xl bg-zinc-900 px-4 py-3.5 flex justify-between font-semibold"
+        className="mt-6 w-full rounded-xl bg-zinc-900 px-4 py-3.5 flex justify-between font-semibold"
       >
         <span className="text-zinc-400">Share tracking link</span>
         <span className="text-purple-400 font-extrabold">share ↗</span>
       </button>
+      </>
+      )}
     </div>
   );
 }

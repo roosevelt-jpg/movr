@@ -4,7 +4,7 @@ import {
   currencyForCountry,
   formatCurrency,
   formatMoneyForCountry,
-  COUNTRY_NAME,
+  formatCountryLabel,
 } from '../lib/currency';
 
 /**
@@ -19,7 +19,7 @@ export function useLocalCurrency(overrideCurrency?: string | null) {
   return useMemo(
     () => ({
       country: (country || 'GH').toUpperCase(),
-      countryName: COUNTRY_NAME[country] || country,
+      countryName: formatCountryLabel(country),
       currency,
       setCountry,
       formatMoney: (amount: number) =>

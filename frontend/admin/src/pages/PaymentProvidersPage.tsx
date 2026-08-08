@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
+import { formatCountryLabel } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -8,20 +9,15 @@ interface ProviderRow {
   id: string;
   scope: 'global' | 'country' | 'standby';
   country_code: string | null;
-  provider: 'paystack' | 'flutterwave';
+  provider: 'paystack' | 'flutterwave' | 'stripe';
   is_active: boolean;
   label?: string;
   status?: 'Active' | 'Standby';
 }
 
-const COUNTRY_NAME: Record<string, string> = {
-  GH: 'Ghana',
-  NG: 'Nigeria',
-  KE: 'Kenya',
+const COUNTRY_LABEL_OVERRIDE: Record<string, string> = {
   SN: 'Senegal (Paystack unsupported)',
   STBY: 'Standby provider',
-  ZA: 'South Africa',
-  CI: "Côte d'Ivoire",
 };
 
 const MOCKUP_ORDER = ['global', 'GH', 'NG', 'KE', 'SN', 'STBY'];
@@ -48,7 +44,10 @@ export default function PaymentProvidersPage() {
             ? 'Global default'
             : r.country_code === 'STBY' || r.scope === 'standby'
               ? 'Standby provider'
-              : COUNTRY_NAME[r.country_code || ''] || r.country_code || 'Country',
+              : formatCountryLabel(
+                  r.country_code,
+                  COUNTRY_LABEL_OVERRIDE[r.country_code || ''] || undefined
+                ),
         status:
           r.country_code === 'STBY' || r.scope === 'standby' || !r.is_active
             ? ('Standby' as const)
@@ -82,7 +81,7 @@ export default function PaymentProvidersPage() {
     load();
   }, []);
 
-  const update = async (id: string, provider: 'paystack' | 'flutterwave') => {
+  const update = async (id: string, provider: 'paystack' | 'flutterwave' | 'stripe') => {
     setSaving(id);
     setEditing(null);
     try {
@@ -139,12 +138,13 @@ export default function PaymentProvidersPage() {
                       value={row.provider}
                       disabled={saving === row.id}
                       onChange={(e) =>
-                        update(row.id, e.target.value as 'paystack' | 'flutterwave')
+                        update(row.id, e.target.value as 'paystack' | 'flutterwave' | 'stripe')
                       }
                       style={styles.select}
                     >
                       <option value="paystack">Paystack</option>
                       <option value="flutterwave">Flutterwave</option>
+                      <option value="stripe">Stripe</option>
                     </select>
                   ) : (
                     <button type="button" style={styles.change} onClick={() => setEditing(row.id)}>

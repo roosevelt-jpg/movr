@@ -13,6 +13,7 @@ import {
   X,
   Store,
   Ticket,
+  RotateCcw,
 } from 'lucide-react';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/merchant/setup', label: 'Setup', icon: Store, match: ['/merchant/setup'] },
   { to: '/merchant/store', label: 'My Store', icon: Store, match: ['/merchant/store'] },
   { to: '/merchant/products', label: 'Products', icon: Package, match: ['/merchant/products'] },
+  { to: '/merchant/returns', label: 'Returns', icon: RotateCcw, match: ['/merchant/returns'] },
   { to: '/merchant/coupons', label: 'Coupons', icon: Ticket, match: ['/merchant/coupons'] },
   { to: '/merchant/payouts', label: 'Payouts', icon: CreditCard, match: ['/merchant/payouts'] },
   { to: '/merchant/settings', label: 'Settings', icon: Settings, match: ['/merchant/settings'] },

@@ -146,7 +146,7 @@ export const requireTrustAndSafety = async (
     });
   }
   let roles = req.user.roles || [];
-  if (!roles.includes('trust_and_safety')) {
+  if (!roles.includes('trust_and_safety') && !roles.includes('super_admin')) {
     try {
       const { DatabaseService } = await import('../services/database.service');
       const db = new DatabaseService();
@@ -157,11 +157,73 @@ export const requireTrustAndSafety = async (
       /* keep JWT roles */
     }
   }
-  if (!roles.includes('trust_and_safety')) {
+  if (!roles.includes('trust_and_safety') && !roles.includes('super_admin')) {
     return res.status(403).json({
       status: 'error',
       message: 'trust-and-safety role required',
     });
   }
   next();
+};
+
+/** Load roles for an admin from DB (and cache on req.user). */
+export async function loadAdminRoles(userId: string): Promise<string[]> {
+  const { DatabaseService } = await import('../services/database.service');
+  const db = new DatabaseService();
+  const rr = await db.query(`SELECT role FROM admin_roles WHERE user_id = $1`, [userId]);
+  return rr.rows.map((r: any) => String(r.role));
+}
+
+/** Resolve permission keys for a set of roles. super_admin → all permissions. */
+export async function loadPermissionsForRoles(roles: string[]): Promise<string[]> {
+  if (!roles.length) return [];
+  const { DatabaseService } = await import('../services/database.service');
+  const db = new DatabaseService();
+  if (roles.includes('super_admin')) {
+    const all = await db.query(`SELECT key FROM admin_permissions ORDER BY key`);
+    return all.rows.map((r: any) => String(r.key));
+  }
+  const rr = await db.query(
+    `SELECT DISTINCT permission_key AS key
+     FROM admin_role_permissions
+     WHERE role = ANY($1::text[])
+     ORDER BY permission_key`,
+    [roles]
+  );
+  return rr.rows.map((r: any) => String(r.key));
+}
+
+/**
+ * Require at least one of the given permissions.
+ * Reloads roles from DB when JWT claims may be stale.
+ */
+export const requirePermission = (...perms: string[]) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user || req.user.userType !== 'admin') {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Admin access required',
+      });
+    }
+    try {
+      let roles = req.user.roles || [];
+      if (!roles.length || !roles.includes('super_admin')) {
+        roles = await loadAdminRoles(req.user.id);
+        req.user.roles = roles;
+      }
+      const permissions = await loadPermissionsForRoles(roles);
+      (req.user as any).permissions = permissions;
+      const ok = perms.some((p) => permissions.includes(p));
+      if (!ok) {
+        return res.status(403).json({
+          status: 'error',
+          message: `Requires permission: ${perms.join(' | ')}`,
+        });
+      }
+      next();
+    } catch (error: any) {
+      logger.error('requirePermission failed', { error: error?.message });
+      return res.status(500).json({ status: 'error', message: 'Permission check failed' });
+    }
+  };
 };

@@ -23,20 +23,28 @@ export default function ExplorePage() {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [merchants, setMerchants] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    setLoading(true);
+    setError('');
     const params = new URLSearchParams({ filter });
     if (q) params.set('q', q);
     fetch(`${API}/me/explore?${params}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => setMerchants(j?.data?.merchants || []))
-      .catch(() => undefined);
+      .catch(() => {
+        setMerchants([]);
+        setError('Could not load results');
+      })
+      .finally(() => setLoading(false));
   }, [q, filter]);
 
   const showGrid = filter === 'all' || filter === 'shop';
 
   return (
-    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4 pb-28" data-force-dark>
+    <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4" data-force-dark>
       <div className="flex items-center gap-2 rounded-2xl border-2 border-purple-500 bg-zinc-950 px-3 mb-4">
         <span>🔍</span>
         <input
@@ -62,6 +70,8 @@ export default function ExplorePage() {
           </button>
         ))}
       </div>
+      {loading ? <p className="text-zinc-400">Loading results…</p> : null}
+      {error ? <p className="text-red-400">{error}</p> : null}
 
       {showGrid ? (
         <div className="grid grid-cols-2 gap-2.5">
@@ -75,7 +85,7 @@ export default function ExplorePage() {
               <p className="text-2xl mb-2">{m.emoji}</p>
               <p className="font-extrabold text-sm">{m.name}</p>
               <p className="text-xs text-zinc-500 mt-1">{m.meta}</p>
-              <p className="text-sm mt-2">★ {Number(m.rating || 4.5).toFixed(1)}</p>
+              <p className="text-sm mt-2">★ {Number(m.rating || 0).toFixed(1)}</p>
             </button>
           ))}
         </div>
@@ -83,7 +93,7 @@ export default function ExplorePage() {
         <p className="text-zinc-500 text-center mt-10">Use the actions below to continue</p>
       )}
 
-      <div className="fixed bottom-4 left-0 right-0 max-w-xl mx-auto px-4 flex gap-2">
+      <div className="sticky bottom-4 mt-8 flex gap-2 rounded-2xl bg-black/90 p-2">
         <Link
           to="/"
           className="flex-1 rounded-xl bg-purple-200 py-3 text-center text-purple-900 font-extrabold text-xs"

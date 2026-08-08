@@ -117,13 +117,14 @@ const Home: React.FC = () => {
                 Earn with MOVR
               </h2>
               <p className="text-xl text-gray-600 mb-6">
-                Drivers earn 100% commission! Pay only a monthly subscription. No hidden fees.
+                Drivers keep 100% of every fare. Pay only a small subscription — weekly, monthly,
+                quarterly, or yearly. No commission. No hidden fees.
               </p>
               <ul className="space-y-3 text-gray-600 mb-8">
-                <li>✅ 100% of every fare you earn</li>
-                <li>✅ Cancel anytime, no lock-in</li>
-                <li>✅ Access to analytics dashboard</li>
-                <li>✅ Instant payouts</li>
+                <li>✅ Keep 100% of every fare you earn</li>
+                <li>✅ Pause or cancel anytime</li>
+                <li>✅ Instant MoMo payouts</li>
+                <li>✅ Built for African cities</li>
               </ul>
               <button className="bg-purple-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-purple-700">
                 Become a Driver
@@ -169,7 +170,7 @@ const Home: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { name: 'Basic', price: 'Free', features: ['Use app', 'Request rides', 'Shop'] },
-              { name: 'Driver', price: 'GHS 99/mo', features: ['100% commission', 'Analytics', 'Priority support'] },
+              { name: 'Driver', price: 'GHS 99/mo', features: ['Keep 100% of fares', 'Analytics', 'Priority support'] },
               { name: 'Pro', price: 'GHS 499/mo', features: ['Everything in Driver', 'Bonus earnings', 'Exclusive events'] },
             ].map((plan) => (
               <div key={plan.name} className="bg-white rounded-lg shadow-lg p-8">

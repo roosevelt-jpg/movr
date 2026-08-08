@@ -103,6 +103,26 @@ app.use(cors({
   credentials: true
 }));
 
+// Stripe webhooks need the raw body for signature verification (before JSON parser)
+app.post(
+  '/webhooks/stripe',
+  express.raw({ type: 'application/json' }),
+  async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+      const signature = (req.headers['stripe-signature'] as string) || '';
+      const { PaymentService } = await import('./services/payment.service');
+      const { DatabaseService } = await import('./services/database.service');
+      const svc = new PaymentService(new DatabaseService());
+      await svc.refreshProviderCredentials();
+      await svc.handleStripeWebhook(req.body, signature);
+      res.sendStatus(200);
+    } catch (error: any) {
+      logger.error('Stripe webhook error', { message: error?.message });
+      res.status(400).json({ status: 'error', message: error?.message || 'Webhook error' });
+    }
+  }
+);
+
 // Body parser
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -164,7 +184,7 @@ app.use('/api/v1/admin/integrations', adminIntegrationsRouter);
 app.use('/api/v1/wallet', walletTransferRouter);
 app.use('/api/v1/wallet', walletRouter);
 
-const { storesRouter, cartRouter, ordersRouter } = require('./routes/stores.routes');
+const { storesRouter, cartRouter, ordersRouter, productsRouter } = require('./routes/stores.routes');
 const { merchantRouter } = require('./routes/merchant.routes');
 const { uploadsRouter, UPLOAD_ROOT, ASSETS_ROOT } = require('./routes/uploads.routes');
 const { LEGACY_UPLOADS_ROOT } = require('./utils/asset-storage');
@@ -180,6 +200,7 @@ app.use('/api/v1/admin/marketplace', adminCatalogRouter);
 app.use('/api/v1/stores', storesRouter);
 app.use('/api/v1/cart', cartRouter);
 app.use('/api/v1/orders', ordersRouter);
+app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/merchant', merchantRouter);
 
 const { kycRouter } = require('./routes/kyc.routes');
@@ -201,6 +222,8 @@ app.use('/api/v1/staking', stakingRouter);
 app.use('/api/v1/public/staking', publicStakingRouter);
 const { publicLocalizeRouter } = require('./routes/localize.routes');
 app.use('/api/v1/public', publicLocalizeRouter);
+const { publicVehicleCatalogRouter } = require('./routes/vehicle-catalog.routes');
+app.use('/api/v1/public', publicVehicleCatalogRouter);
 const { publicCmsRouter, adminCmsRouter } = require('./routes/cms.routes');
 app.use('/api/v1/public/cms', publicCmsRouter);
 app.use('/api/v1/admin/cms', adminCmsRouter);
@@ -236,6 +259,7 @@ app.use('/api/v1/admin', require('./routes/admin-profiles.routes').adminProfiles
 app.use('/api/v1/admin', require('./routes/admin-broadcasts.routes').adminBroadcastsRouter);
 app.use('/api/v1/admin', require('./routes/admin-platform-analytics.routes').adminPlatformAnalyticsRouter);
 app.use('/api/v1/admin', require('./routes/admin-subscription-fees.routes').adminSubscriptionFeesRouter);
+app.use('/api/v1/admin', require('./routes/admin-team.routes').adminTeamRouter);
 app.use('/api/v1/admin/finance', adminFinanceRouter);
 app.use('/api/v1/admin/rewards-rules', adminRewardsRouter);
 app.use('/api/v1/inbox', inboxRouter);
@@ -679,6 +703,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
         return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
       }
       let roles: string[] = [];
+      let permissions: string[] = [];
       if (dbUser.user_type === 'admin') {
         try {
           const rr = await authDb.query(
@@ -686,12 +711,24 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
             [dbUser.id]
           );
           roles = rr.rows.map((r: any) => r.role);
+          if (roles.includes('super_admin')) {
+            const all = await authDb.query(`SELECT key FROM admin_permissions ORDER BY key`);
+            permissions = all.rows.map((r: any) => r.key);
+          } else if (roles.length) {
+            const pp = await authDb.query(
+              `SELECT DISTINCT permission_key AS key
+               FROM admin_role_permissions WHERE role = ANY($1::text[])`,
+              [roles]
+            );
+            permissions = pp.rows.map((r: any) => r.key);
+          }
         } catch {
           roles = [];
+          permissions = [];
         }
       }
       const token = jwt.sign(
-        { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type, roles },
+        { id: dbUser.id, email: dbUser.email, userType: dbUser.user_type, roles, permissions },
         process.env.JWT_SECRET || 'secret',
         { expiresIn: '7d' }
       );
@@ -703,6 +740,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
           name: `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim(),
           userType: dbUser.user_type,
           roles,
+          permissions,
           token,
           user: {
             id: dbUser.id,
@@ -712,6 +750,7 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
             phone: dbUser.phone || (!isEmail ? raw : ''),
             userType: dbUser.user_type,
             roles,
+            permissions,
             country: dbUser.country || 'GH',
             city: dbUser.city || 'Accra',
             isVerified: true,
@@ -1186,6 +1225,11 @@ app.get('/api/v1/rides/:id/receipt', authenticateToken, async (req: AuthRequest,
         paidAtLabel: when,
         statusLabel: 'Payment Successful',
         driverFirstName: String(raw.driver_name || raw.driverName || 'Emeka').split(' ')[0],
+        /** Movr model: zero take-rate on the fare */
+        platformFee: 0,
+        driverKeeps: Number(raw.total_paid ?? raw.totalPaid ?? raw.actual_fare ?? 1200),
+        driverKeepsLabel: 'Driver keeps 100% of this fare',
+        fairFareNote: 'No commission on this trip — Movr is funded by driver subscriptions, not your fare.',
       };
     };
 
@@ -1751,6 +1795,9 @@ app.get('/api/v1/rides/:id', authenticateToken, async (req: AuthRequest, res: Ex
           distanceKm: Number(row.distance_km ?? 8.4),
           durationMinutes: Number(row.duration_minutes ?? row.estimated_duration_minutes ?? 18),
           dvtEarned: Number(row.dvt_earned ?? 120),
+          platformFee: 0,
+          driverKeeps: Number(row.actual_fare ?? fare) || 1080,
+          driverKeepsLabel: 'Driver keeps 100% of this fare',
         },
         driver: row.driver_id
           ? {
@@ -1832,14 +1879,47 @@ app.get('/api/v1/rides', authenticateToken, async (req: AuthRequest, res: Expres
 });
 
 // ============================================
-// ROUTES: MARKETPLACE (STUBS)
+// ROUTES: MARKETPLACE (catalog aliases)
 // ============================================
 app.get('/api/v1/marketplace/stores', async (req: ExpressRequest, res: ExpressResponse) => {
-  res.json({ status: 'success', data: [] });
+  try {
+    const { MarketplaceService } = require('./services/marketplace.service');
+    const { PaymentService } = require('./services/payment.service');
+    const marketplace = new MarketplaceService(authDb, new PaymentService(authDb));
+    const { category, search, lat, lng, radiusMeters } = req.query as any;
+    const result = await marketplace.listStores({
+      category,
+      search,
+      lat: lat != null ? Number(lat) : undefined,
+      lng: lng != null ? Number(lng) : undefined,
+      radiusMeters: radiusMeters != null ? Number(radiusMeters) : undefined,
+    });
+    res.json({ status: 'success', data: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
 app.get('/api/v1/marketplace/products', async (req: ExpressRequest, res: ExpressResponse) => {
-  res.json({ status: 'success', data: [] });
+  try {
+    const { MarketplaceService } = require('./services/marketplace.service');
+    const { PaymentService } = require('./services/payment.service');
+    const marketplace = new MarketplaceService(authDb, new PaymentService(authDb));
+    const q = req.query as any;
+    const data = await marketplace.searchProducts({
+      q: typeof q.q === 'string' ? q.q : typeof q.search === 'string' ? q.search : undefined,
+      category: typeof q.category === 'string' ? q.category : undefined,
+      storeId: typeof q.storeId === 'string' ? q.storeId : undefined,
+      minPrice: q.minPrice != null ? Number(q.minPrice) : undefined,
+      maxPrice: q.maxPrice != null ? Number(q.maxPrice) : undefined,
+      sort: typeof q.sort === 'string' ? q.sort : undefined,
+      limit: q.limit != null ? Number(q.limit) : undefined,
+      offset: q.offset != null ? Number(q.offset) : undefined,
+    });
+    res.json({ status: 'success', data: data.products, meta: { limit: data.limit, offset: data.offset } });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
 app.post('/api/v1/marketplace/orders', authenticateToken, async (req: ExpressRequest, res: ExpressResponse) => {
@@ -2126,15 +2206,30 @@ app.get('/api/v1/public/app-links', async (_req: ExpressRequest, res: ExpressRes
 });
 
 app.get('/api/v1/public/locales', async (_req: ExpressRequest, res: ExpressResponse) => {
+  const flagFor = (code: string) => {
+    const c = String(code || '')
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z]{2}$/.test(c)) return '';
+    return String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65, 0x1f1e6 + c.charCodeAt(1) - 65);
+  };
+  const withFlag = (row: any) => {
+    const flag = flagFor(row.country_code);
+    const base =
+      row.display_label ||
+      `${row.country_name || row.country_code}${row.language_label ? ` - ${row.language_label}` : ''}`;
+    const display_label = flag && !String(base).includes(flag) ? `${flag} ${base}` : base;
+    return { ...row, display_label, flag };
+  };
   const fallback = [
-    {
+    withFlag({
       country_code: 'GH',
       country_name: 'Ghana',
       language_code: 'en',
       language_label: 'English',
       display_label: 'Ghana - English',
       is_default: true,
-    },
+    }),
   ];
   try {
     const rows = await authDb.query(
@@ -2145,7 +2240,7 @@ app.get('/api/v1/public/locales', async (_req: ExpressRequest, res: ExpressRespo
        ORDER BY sort_order ASC, country_name ASC`
     );
     if (rows.rows.length) {
-      return res.json({ status: 'success', data: rows.rows });
+      return res.json({ status: 'success', data: rows.rows.map(withFlag) });
     }
 
     // Derive from countries table when site_locales is empty
@@ -2158,15 +2253,17 @@ app.get('/api/v1/public/locales', async (_req: ExpressRequest, res: ExpressRespo
     if (countries.rows.length) {
       return res.json({
         status: 'success',
-        data: countries.rows.map((c: any, i: number) => ({
-          country_code: c.country_code,
-          country_name: c.country_name,
-          language_code: 'en',
-          language_label: 'English',
-          display_label: `${c.country_name} - English`,
-          is_default: c.country_code === 'GH',
-          sort_order: i + 1,
-        })),
+        data: countries.rows.map((c: any, i: number) =>
+          withFlag({
+            country_code: c.country_code,
+            country_name: c.country_name,
+            language_code: 'en',
+            language_label: 'English',
+            display_label: `${c.country_name} - English`,
+            is_default: c.country_code === 'GH',
+            sort_order: i + 1,
+          })
+        ),
       });
     }
 

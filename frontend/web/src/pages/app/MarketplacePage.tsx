@@ -1,20 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Search, MapPin, Star } from 'lucide-react';
+import { Search, MapPin, Star, Heart } from 'lucide-react';
 import { mediaUrl } from '../../lib/media';
+import { formatCurrency } from '../../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
-/** Live marketplace — stores + shared category chips from API. */
+/** Live marketplace — stores + product search grid. */
 const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<'stores' | 'products'>('products');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<{ slug: string; name?: string }>({
     slug: 'all',
   });
+  const [sort, setSort] = useState('newest');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
   const [categories, setCategories] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -23,9 +29,12 @@ const MarketplacePage: React.FC = () => {
     (async () => {
       setLoading(true);
       try {
-        const [catRes, storeRes] = await Promise.all([
-          axios.get(`${API}/categories`),
-          axios.get(`${API}/stores`, {
+        const catRes = await axios.get(`${API}/categories`);
+        if (cancelled) return;
+        setCategories(catRes.data.data || []);
+
+        if (tab === 'stores') {
+          const storeRes = await axios.get(`${API}/stores`, {
             params: {
               search: searchQuery || undefined,
               category:
@@ -33,11 +42,25 @@ const MarketplacePage: React.FC = () => {
                   ? selectedCategory.name || selectedCategory.slug
                   : undefined,
             },
-          }),
-        ]);
-        if (cancelled) return;
-        setCategories(catRes.data.data || []);
-        setStores(storeRes.data.data || []);
+          });
+          if (cancelled) return;
+          setStores(storeRes.data.data || []);
+        } else {
+          const productRes = await axios.get(`${API}/products`, {
+            params: {
+              q: searchQuery || undefined,
+              category:
+                selectedCategory.slug !== 'all'
+                  ? selectedCategory.name || selectedCategory.slug
+                  : undefined,
+              sort,
+              minPrice: minPrice !== '' ? Number(minPrice) : undefined,
+              maxPrice: maxPrice !== '' ? Number(maxPrice) : undefined,
+            },
+          });
+          if (cancelled) return;
+          setProducts(productRes.data.data || []);
+        }
         setError('');
       } catch (e: any) {
         if (!cancelled) setError(e?.response?.data?.message || e.message || 'Failed to load');
@@ -48,7 +71,7 @@ const MarketplacePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, tab, sort, minPrice, maxPrice]);
 
   const chips = useMemo(
     () => [{ id: 'all', name: 'All', slug: 'all' }, ...categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug }))],
@@ -58,12 +81,37 @@ const MarketplacePage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="rounded-xl p-8 text-pure-white bg-movr-gradient">
-        <h1 className="text-4xl font-bold mb-2">Marketplace</h1>
-        <p className="text-pure-white/80">Shop from neighbourhood stores on Movr</p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Marketplace</h1>
+            <p className="text-pure-white/80">Search products or browse neighbourhood stores</p>
+          </div>
+          <Link
+            to="/wishlist"
+            className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/25"
+          >
+            <Heart size={16} /> Wishlist
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface p-6">
-        <div className="relative mb-6">
+        <div className="flex gap-2 mb-4">
+          {(['products', 'stores'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold capitalize ${
+                tab === t ? 'bg-motion-blue text-pure-white' : 'bg-surface-elevated text-text-secondary'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative mb-4">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
             size={20}
@@ -73,7 +121,7 @@ const MarketplacePage: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search stores..."
+            placeholder={tab === 'products' ? 'Search products…' : 'Search stores…'}
             className="w-full rounded-xl bg-surface-elevated border border-border pl-12 pr-4 py-3"
           />
         </div>
@@ -100,51 +148,134 @@ const MarketplacePage: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {tab === 'products' ? (
+          <div className="flex flex-wrap gap-3 mt-4">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              className="rounded-xl bg-surface-elevated border border-border px-3 py-2 text-sm"
+            >
+              <option value="newest">Newest</option>
+              <option value="rating">Top rated</option>
+              <option value="price_asc">Price: low to high</option>
+              <option value="price_desc">Price: high to low</option>
+            </select>
+            <input
+              type="number"
+              placeholder="Min price"
+              value={minPrice}
+              onChange={(e) => setMinPrice(e.target.value)}
+              className="w-28 rounded-xl bg-surface-elevated border border-border px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              placeholder="Max price"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              className="w-28 rounded-xl bg-surface-elevated border border-border px-3 py-2 text-sm"
+            />
+          </div>
+        ) : null}
       </div>
 
       {error ? <p className="text-error">{error}</p> : null}
-      {loading ? <p className="text-text-secondary">Loading stores…</p> : null}
+      {loading ? <p className="text-text-secondary">Loading…</p> : null}
 
-      {!loading && stores.length === 0 ? (
-        <p className="text-text-secondary">No stores found. Merchants can publish storefronts from the merchant portal.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stores.map((store) => (
-            <button
-              key={store.id}
-              type="button"
-              className="text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors"
-              onClick={() => navigate(`/store/${store.id}`)}
-            >
-              <div className="h-40 bg-surface-elevated flex items-center justify-center overflow-hidden">
-                {store.banner_url ? (
-                  <img
-                    src={mediaUrl(store.banner_url)}
-                    alt={store.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-4xl opacity-40">🏪</span>
-                )}
-              </div>
-              <div className="p-4 space-y-2">
-                <h3 className="font-semibold text-lg truncate">{store.name}</h3>
-                <p className="text-sm text-text-secondary truncate">{store.category || 'Store'}</p>
-                <div className="flex items-center justify-between text-sm text-text-secondary">
-                  <span className="inline-flex items-center gap-1">
-                    <Star size={14} className="text-warning" />
-                    {Number(store.rating || 0).toFixed(1)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin size={14} />
-                    Nearby
-                  </span>
+      {!loading && tab === 'stores' ? (
+        stores.length === 0 ? (
+          <p className="text-text-secondary">No stores found.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {stores.map((store) => (
+              <button
+                key={store.id}
+                type="button"
+                className="text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors"
+                onClick={() => navigate(`/store/${store.id}`)}
+              >
+                <div className="h-40 bg-surface-elevated flex items-center justify-center overflow-hidden">
+                  {store.banner_url ? (
+                    <img
+                      src={mediaUrl(store.banner_url)}
+                      alt={store.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-4xl opacity-40">🏪</span>
+                  )}
                 </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+                <div className="p-4 space-y-2">
+                  <h3 className="font-semibold text-lg truncate">{store.name}</h3>
+                  <p className="text-sm text-text-secondary truncate">{store.category || 'Store'}</p>
+                  <div className="flex items-center justify-between text-sm text-text-secondary">
+                    <span className="inline-flex items-center gap-1">
+                      <Star size={14} className="text-warning" />
+                      {Number(store.rating || 0).toFixed(1)}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin size={14} />
+                      Nearby
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )
+      ) : null}
+
+      {!loading && tab === 'products' ? (
+        products.length === 0 ? (
+          <p className="text-text-secondary">No products match your filters.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {products.map((p) => {
+              const img = p.images?.[0]?.url || p.image_url;
+              const currency = p.currency || 'NGN';
+              const price = Number(p.price ?? p.effective_price ?? 0);
+              const compare = p.compareAtPrice != null ? Number(p.compareAtPrice) : null;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="text-left rounded-2xl border border-border bg-surface overflow-hidden hover:border-electric-violet transition-colors"
+                  onClick={() => navigate(`/store/${p.store_id}/product/${p.id}`)}
+                >
+                  <div className="aspect-square bg-surface-elevated overflow-hidden">
+                    {img ? (
+                      <img src={mediaUrl(img)} alt={p.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-4xl opacity-40">
+                        {p.emoji || '🛍️'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 space-y-1">
+                    <p className="text-xs text-text-secondary truncate">{p.storeName || p.store_name}</p>
+                    <h3 className="font-semibold text-sm line-clamp-2">{p.name}</h3>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-bold">{formatCurrency(price, currency)}</span>
+                      {compare != null && compare > price ? (
+                        <span className="text-xs text-text-secondary line-through">
+                          {formatCurrency(compare, currency)}
+                        </span>
+                      ) : null}
+                      {p.onSale ? (
+                        <span className="text-[10px] font-bold uppercase text-error">Sale</span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-text-secondary inline-flex items-center gap-1">
+                      <Star size={12} className="text-warning" />
+                      {Number(p.rating || 0).toFixed(1)} ({p.reviewCount || 0})
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )
+      ) : null}
     </div>
   );
 };

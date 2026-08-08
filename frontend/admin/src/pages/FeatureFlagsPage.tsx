@@ -134,7 +134,7 @@ const styles: Record<string, React.CSSProperties> = {
   table: {
     background: '#111111',
     borderRadius: 16,
-    overflow: 'hidden',
+    overflowX: 'auto',
   },
   head: { color: 'rgba(255,255,255,0.45)', fontSize: 13 },
   row: {

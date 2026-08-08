@@ -15,39 +15,34 @@ function authHeaders(): Record<string, string> {
 
 /** Live order tracking — map, courier card, timeline, footer (mockup). */
 export default function OrderTrackingScreen({
-  orderId = 'MVR-20480',
-  storeName = 'Chicken Republic',
+  orderId,
+  storeName = '',
   onDetails,
 }: {
   orderId?: string;
   storeName?: string;
   onDetails?: () => void;
 }) {
-  const [orderRef, setOrderRef] = useState(
-    String(orderId).startsWith('MVR') ? String(orderId) : 'MVR-20480'
-  );
-  const [statusLabel, setStatusLabel] = useState('Preparing');
-  const [eta, setEta] = useState('Courier is 8 min away');
-  const [courier, setCourier] = useState({
-    name: 'Tunde Adeyemi',
-    role: 'Movr Courier',
-    rating: 4.7,
-    phone: '',
-  });
-  const [timeline, setTimeline] = useState([
-    { key: 'confirmed', label: 'Order confirmed', done: true, active: false },
-    { key: 'preparing', label: 'Restaurant preparing', icon: '🍳', done: false, active: true },
-    { key: 'pickup', label: 'Courier picking up', done: false, active: false },
-    { key: 'delivered', label: 'Delivered', done: false, active: false },
-  ]);
-  const [itemCount, setItemCount] = useState(2);
-  const [total, setTotal] = useState(8100);
+  const [orderRef, setOrderRef] = useState(orderId ? String(orderId) : '');
+  const [statusLabel, setStatusLabel] = useState('');
+  const [eta, setEta] = useState('');
+  const [courier, setCourier] = useState<any>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [itemCount, setItemCount] = useState(0);
+  const [total, setTotal] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [fromStore, setFromStore] = useState(storeName);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let socket: any = null;
     let cancelled = false;
+    if (!orderId) {
+      setLoading(false);
+      setError('Order not found');
+      return;
+    }
 
     fetch(`${API}/orders/${orderId}`, { headers: authHeaders() })
       .then((r) => r.json())
@@ -63,14 +58,14 @@ export default function OrderTrackingScreen({
         if (o.courier) {
           setCourier({
             name: o.courier.name,
-            role: o.courier.role || 'Movr Courier',
-            rating: Number(o.courier.rating || 4.7),
+            role: o.courier.role || '',
+            rating: Number(o.courier.rating || 0),
             phone: o.courier.phone || '',
           });
         }
         if (Array.isArray(o.timeline) && o.timeline.length) setTimeline(o.timeline);
-        setItemCount(Number(o.item_count || o.items?.length || 2));
-        setTotal(Number(o.total || 8100));
+        setItemCount(Number(o.item_count || o.items?.length || 0));
+        setTotal(Number(o.total || 0));
         setCurrency(o.currency || 'NGN');
 
         if (o.delivery_mode === 'movr_courier' || !o.delivery_mode) {
@@ -88,7 +83,8 @@ export default function OrderTrackingScreen({
           }
         }
       })
-      .catch(() => undefined);
+      .catch((e) => setError(e?.message || 'Could not load order'))
+      .finally(() => setLoading(false));
 
     return () => {
       cancelled = true;
@@ -111,6 +107,8 @@ export default function OrderTrackingScreen({
           <Text style={styles.etaText}>{eta}</Text>
         </View>
       </View>
+      {loading ? <Text style={styles.empty}>Loading order…</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.headerRow}>
         <Text style={styles.orderNum}>Order #{orderRef}</Text>
@@ -119,7 +117,7 @@ export default function OrderTrackingScreen({
         </View>
       </View>
 
-      <View style={styles.courierCard}>
+      {courier ? <View style={styles.courierCard}>
         <View style={styles.avatar}>
           <Text style={{ fontSize: 22 }}>🛵</Text>
         </View>
@@ -130,14 +128,14 @@ export default function OrderTrackingScreen({
         </View>
         <Pressable
           style={styles.square}
-          onPress={() => Linking.openURL(`tel:${courier.phone || '+234000000000'}`)}
+          onPress={() => courier.phone && Linking.openURL(`tel:${courier.phone}`)}
         >
           <Text>📞</Text>
         </Pressable>
         <Pressable style={styles.square}>
           <Text>💬</Text>
         </Pressable>
-      </View>
+      </View> : null}
 
       <View style={styles.timeline}>
         {timeline.map((step, i) => (
@@ -281,4 +279,6 @@ const styles = StyleSheet.create({
   footerMeta: { flex: 1, color: '#fff', fontWeight: '600' },
   details: { color: '#A855F7', fontWeight: '700' },
   from: { color: '#52525B', fontSize: 12, marginTop: 10, textAlign: 'center' },
+  empty: { color: '#71717A', textAlign: 'center', marginBottom: 12 },
+  error: { color: '#F87171', textAlign: 'center', marginBottom: 12 },
 });

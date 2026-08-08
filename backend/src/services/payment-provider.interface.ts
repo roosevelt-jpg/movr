@@ -63,7 +63,7 @@ export interface PreauthorizationResult {
 }
 
 export interface PaymentProvider {
-  readonly name: 'paystack' | 'flutterwave';
+  readonly name: 'paystack' | 'flutterwave' | 'stripe';
 
   initializePayment(input: InitializePaymentInput): Promise<InitializePaymentResult>;
   verifyPayment(reference: string): Promise<VerifyPaymentResult>;
@@ -86,4 +86,8 @@ export interface PaymentProvider {
 export const PAYSTACK_CURRENCIES = ['NGN', 'GHS', 'ZAR', 'KES', 'USD'] as const;
 export const FLUTTERWAVE_CURRENCIES = [
   'NGN', 'GHS', 'ZAR', 'KES', 'USD', 'UGX', 'TZS', 'RWF', 'XOF', 'XAF', 'EGP', 'MAD'
+] as const;
+/** Common Stripe settlement currencies (Checkout supports many more). */
+export const STRIPE_CURRENCIES = [
+  'USD', 'GBP', 'EUR', 'CAD', 'AUD', 'NGN', 'GHS', 'ZAR', 'KES', 'UGX', 'TZS', 'EGP', 'MAD'
 ] as const;

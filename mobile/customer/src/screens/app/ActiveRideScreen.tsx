@@ -41,18 +41,28 @@ export default function ActiveRideScreen({
   const [sosMsg, setSosMsg] = useState('');
   const [noticeAcked, setNoticeAcked] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const loadRide = async () => {
-    if (!rideId) return;
+    if (!rideId) {
+      setLoading(false);
+      setLoadError('Ride not found');
+      return;
+    }
     const res = await fetch(`${API}/rides/${rideId}`, { headers: authHeaders() });
     const json = await res.json();
-    if (json?.data) setRide(json.data);
+    if (!res.ok || !json?.data) throw new Error(json?.message || 'Ride not found');
+    setRide(json.data);
   };
 
   useEffect(() => {
     if (!rideId) return;
     setNoticeAcked(false);
-    loadRide().catch(() => undefined);
+    setLoading(true);
+    loadRide()
+      .catch((e) => setLoadError(e?.message || 'Could not load ride'))
+      .finally(() => setLoading(false));
     const t = setInterval(() => loadRide().catch(() => undefined), 8000);
     fetch(`${API}/rides/${rideId}/masked-session`, {
       method: 'POST',
@@ -105,16 +115,16 @@ export default function ActiveRideScreen({
   };
 
   const driver = ride?.driver;
-  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 2);
-  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 1200);
+  const eta = Number(ride?.eta_minutes ?? ride?.etaMinutes ?? 0);
+  const fare = Number(ride?.estimated_fare ?? ride?.fare ?? 0);
   const currency = ride?.currency || 'NGN';
-  const plate = (driver?.vehicle?.plate || 'LAG 294-HG').replace(/-/g, ' ');
-  const model = driver?.vehicle?.model || 'Toyota Corolla';
-  const color = driver?.vehicle?.color || 'Silver';
-  const rating = Number(driver?.rating ?? 4.9).toFixed(1);
-  const trips = Number(driver?.tripCount ?? 312);
+  const plate = (driver?.vehicle?.plate || '').replace(/-/g, ' ');
+  const model = driver?.vehicle?.model || '';
+  const color = driver?.vehicle?.color || '';
+  const rating = Number(driver?.rating ?? 0).toFixed(1);
+  const trips = Number(driver?.tripCount ?? 0);
   const banner = ride?.etaLabel || `Driver is ${eta} min away`;
-  const payment = ride?.paymentMethod || 'Movr Wallet';
+  const payment = ride?.paymentMethod || '';
 
   if (chatOpen && rideId) {
     return <RideChatScreen rideId={rideId} onBack={() => setChatOpen(false)} />;
@@ -122,6 +132,9 @@ export default function ActiveRideScreen({
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 28 }}>
+      {loading ? <Text style={styles.loadState}>Loading ride…</Text> : null}
+      {loadError ? <Text style={styles.sosMsg}>{loadError}</Text> : null}
+      {!ride ? null : <>
       {rideId ? (
         <RecordingNoticeModal
           visible={!noticeAcked}
@@ -154,7 +167,7 @@ export default function ActiveRideScreen({
           </View>
         )}
         <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{driver?.name || ride?.driver_name || 'Emeka Okafor'}</Text>
+          <Text style={styles.name}>{driver?.name || ride?.driver_name || ''}</Text>
           <Text style={styles.meta}>
             {model} · {color}
           </Text>
@@ -170,7 +183,10 @@ export default function ActiveRideScreen({
       <View style={styles.actions}>
         <Pressable
           style={styles.action}
-          onPress={() => Linking.openURL(`tel:${proxy || driver?.phone || '+234000000000'}`)}
+          onPress={() => {
+            const phone = proxy || driver?.phone;
+            if (phone) Linking.openURL(`tel:${phone}`);
+          }}
         >
           <Text style={styles.actionIcon}>📞</Text>
           <Text style={styles.actionLabel}>Call</Text>
@@ -206,6 +222,7 @@ export default function ActiveRideScreen({
           <Text style={styles.doneText}>Trip complete →</Text>
         </Pressable>
       ) : null}
+      </>}
     </ScrollView>
   );
 }
@@ -341,4 +358,5 @@ const styles = StyleSheet.create({
   cancelText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   doneLink: { marginTop: 12, alignItems: 'center' },
   doneText: { color: '#A855F7', fontWeight: '600' },
+  loadState: { color: '#A1A1AA', textAlign: 'center', marginVertical: spacing[4] },
 });

@@ -33,16 +33,17 @@ async function copyText(text: string) {
 
 /** Refer & Earn — code, share channels, stats (mockup). */
 export default function ReferralScreen({ onBack }: { onBack?: () => void }) {
-  const [code, setCode] = useState('KWAME50');
-  const [shareLink, setShareLink] = useState('https://movr.io/r/KWAME50');
-  const [headline, setHeadline] = useState('Give ₦500, Get 50 pts');
-  const [body, setBody] = useState(
-    'Share your code. When a friend completes their first ride, you both win.'
-  );
-  const [invited, setInvited] = useState(8);
-  const [joined, setJoined] = useState(5);
-  const [pts, setPts] = useState(250);
+  const [code, setCode] = useState('');
+  const [shareLink, setShareLink] = useState('');
+  const [headline, setHeadline] = useState('');
+  const [body, setBody] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
+  const [invited, setInvited] = useState(0);
+  const [joined, setJoined] = useState(0);
+  const [pts, setPts] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const h = authHeaders();
@@ -53,13 +54,15 @@ export default function ReferralScreen({ onBack }: { onBack?: () => void }) {
       if (c?.data?.code) setCode(c.data.code);
       if (c?.data?.shareLink) setShareLink(c.data.shareLink);
       if (p?.data) {
-        setInvited(Number(p.data.invitedCount ?? 8));
-        setJoined(Number(p.data.joinedCount ?? 5));
-        setPts(Number(p.data.ptsEarned ?? p.data.totalRewards ?? 250));
+        setInvited(Number(p.data.invitedCount ?? 0));
+        setJoined(Number(p.data.joinedCount ?? 0));
+        setPts(Number(p.data.ptsEarned ?? p.data.totalRewards ?? 0));
         if (p.data.promo?.headline) setHeadline(p.data.promo.headline);
         if (p.data.promo?.body) setBody(p.data.promo.body);
+        if (p.data.promo?.shareMessage) setShareMessage(p.data.promo.shareMessage);
       }
-    });
+    }).catch((e) => setError(e?.message || 'Could not load referrals'))
+      .finally(() => setLoading(false));
   }, []);
 
   const copyCode = async () => {
@@ -68,7 +71,10 @@ export default function ReferralScreen({ onBack }: { onBack?: () => void }) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const msg = `Join MOVR with my code ${code} and get ₦500 off. ${shareLink}`;
+  const msg =
+    shareMessage ||
+    body ||
+    `Join Movr with my code ${code} — fair fares, drivers keep 100%. ${shareLink}`.trim();
 
   const shareWhatsApp = () => Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`);
   const shareSms = () => Linking.openURL(`sms:?body=${encodeURIComponent(msg)}`);
@@ -96,12 +102,14 @@ export default function ReferralScreen({ onBack }: { onBack?: () => void }) {
 
       <Text style={styles.headline}>{headline}</Text>
       <Text style={styles.body}>{body}</Text>
+      {loading ? <Text style={styles.body}>Loading referral details…</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.codeCard} onPress={copyCode}>
+      {code ? <Pressable style={styles.codeCard} onPress={copyCode}>
         <Text style={styles.codeLabel}>YOUR REFERRAL CODE</Text>
         <Text style={styles.code}>{code}</Text>
         <Text style={styles.tapCopy}>{copied ? 'Copied!' : 'Tap to copy'}</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <View style={styles.shareGrid}>
         {[
@@ -215,4 +223,5 @@ const styles = StyleSheet.create({
   statDiv: { width: 1, height: 36, backgroundColor: '#27272A' },
   statNum: { color: '#FFF', fontSize: 22, fontWeight: '800' },
   statLab: { color: '#71717A', fontSize: 12, marginTop: 4 },
+  error: { color: '#F87171', textAlign: 'center', marginBottom: spacing[4] },
 });

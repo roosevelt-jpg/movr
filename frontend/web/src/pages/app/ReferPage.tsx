@@ -11,18 +11,18 @@ function authHeaders() {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-/** Refer & Earn (mockup). */
+/** Refer & Earn. */
 export default function ReferPage() {
-  const [code, setCode] = useState('KWAME50');
-  const [shareLink, setShareLink] = useState('https://movr.io/r/KWAME50');
-  const [headline, setHeadline] = useState('Give ₦500, Get 50 pts');
-  const [body, setBody] = useState(
-    'Share your code. When a friend completes their first ride, you both win.'
-  );
-  const [invited, setInvited] = useState(8);
-  const [joined, setJoined] = useState(5);
-  const [pts, setPts] = useState(250);
+  const [code, setCode] = useState('');
+  const [shareLink, setShareLink] = useState('');
+  const [headline, setHeadline] = useState('');
+  const [body, setBody] = useState('');
+  const [invited, setInvited] = useState(0);
+  const [joined, setJoined] = useState(0);
+  const [pts, setPts] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const h = authHeaders();
@@ -33,12 +33,14 @@ export default function ReferPage() {
       if (c?.data?.code) setCode(c.data.code);
       if (c?.data?.shareLink) setShareLink(c.data.shareLink);
       if (p?.data) {
-        setInvited(Number(p.data.invitedCount ?? 8));
-        setJoined(Number(p.data.joinedCount ?? 5));
-        setPts(Number(p.data.ptsEarned ?? p.data.totalRewards ?? 250));
+        setInvited(Number(p.data.invitedCount ?? 0));
+        setJoined(Number(p.data.joinedCount ?? 0));
+        setPts(Number(p.data.ptsEarned ?? p.data.totalRewards ?? 0));
         if (p.data.promo?.headline) setHeadline(p.data.promo.headline);
         if (p.data.promo?.body) setBody(p.data.promo.body);
       }
+      if (!c?.data && !p?.data) setError('Could not load referral details');
+      setLoading(false);
     });
   }, []);
 
@@ -58,6 +60,8 @@ export default function ReferPage() {
         </Link>
         <h1 className="text-xl font-extrabold">Refer & Earn</h1>
       </div>
+      {loading ? <p className="text-center text-zinc-400">Loading referral details…</p> : null}
+      {error ? <p className="text-center text-red-400">{error}</p> : null}
 
       <div className="flex justify-center my-6">
         <div className="w-28 h-28 rounded-full bg-violet-900 flex items-center justify-center text-5xl">
@@ -68,7 +72,7 @@ export default function ReferPage() {
       <h2 className="text-2xl font-extrabold text-center">{headline}</h2>
       <p className="text-zinc-400 text-center mt-2 mb-6 text-sm">{body}</p>
 
-      <button
+      {code ? <button
         type="button"
         onClick={() => copy(code)}
         className="w-full rounded-2xl border-2 border-dashed border-purple-500 bg-zinc-900 p-4 text-center mb-5"
@@ -76,9 +80,9 @@ export default function ReferPage() {
         <p className="text-[11px] tracking-wider text-zinc-500 font-bold">YOUR REFERRAL CODE</p>
         <p className="text-3xl font-extrabold my-2">{code}</p>
         <p className="text-xs text-zinc-400">{copied ? 'Copied!' : 'Tap to copy'}</p>
-      </button>
+      </button> : null}
 
-      <div className="grid grid-cols-2 gap-2.5 mb-6">
+      {code && shareLink ? <div className="grid grid-cols-2 gap-2.5 mb-6">
         {[
           {
             label: 'WhatsApp',
@@ -112,7 +116,7 @@ export default function ReferPage() {
             </button>
           )
         )}
-      </div>
+      </div> : null}
 
       <div className="rounded-2xl bg-zinc-900 p-4">
         <p className="text-[11px] tracking-wider text-zinc-500 font-bold mb-3">

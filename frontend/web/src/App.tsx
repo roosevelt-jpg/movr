@@ -34,6 +34,7 @@ import ClaimPage from './pages/app/ClaimPage';
 import RentalsPage from './pages/app/RentalsPage';
 import RentalConfirmPage from './pages/app/RentalConfirmPage';
 import ActiveRentalPage from './pages/app/ActiveRentalPage';
+import RentalOwnerListPage from './pages/app/RentalOwnerListPage';
 import ParcelTrackingPage from './pages/app/ParcelTrackingPage';
 import NotificationsPage from './pages/app/NotificationsPage';
 import RewardsPage from './pages/app/RewardsPage';
@@ -84,6 +85,8 @@ import SupportChatPage from './pages/app/SupportChatPage';
 import MovrAiPage from './pages/public/MovrAiPage';
 import WithdrawPage from './pages/app/WithdrawPage';
 import ProductDetailPage from './pages/app/ProductDetailPage';
+import WishlistPage from './pages/app/WishlistPage';
+import MerchantReturnsPage from './pages/merchant/MerchantReturnsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -188,6 +191,7 @@ const App: React.FC = () => {
                 <Route path="/store/:id" element={<StorePage />} />
                 <Route path="/store/:storeId/product/:productId" element={<ProductDetailPage />} />
                 <Route path="/cart" element={<CartPage />} />
+                <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/orders/:id/confirmed" element={<OrderConfirmedPage />} />
                 <Route path="/orders/:id" element={<OrderTrackingPage />} />
                 <Route path="/wallet" element={<WalletPage />} />
@@ -203,6 +207,7 @@ const App: React.FC = () => {
                 <Route path="/ride/:id/receipt" element={<RideReceiptPage />} />
                 <Route path="/staking" element={<StakingPage />} />
                 <Route path="/rentals" element={<RentalsPage />} />
+                <Route path="/rentals/list" element={<RentalOwnerListPage />} />
                 <Route path="/rentals/confirm" element={<RentalConfirmPage />} />
                 <Route path="/rentals/active" element={<ActiveRentalPage />} />
                 <Route path="/parcel/:ref" element={<ParcelTrackingPage />} />
@@ -229,6 +234,7 @@ const App: React.FC = () => {
               <Route path="/merchant/store" element={<MerchantStoreEditorPage />} />
               <Route path="/merchant/settings" element={<MerchantSettingsPage />} />
               <Route path="/merchant/products" element={<MerchantProductsPage />} />
+              <Route path="/merchant/returns" element={<MerchantReturnsPage />} />
               <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
               <Route path="/merchant/payouts" element={<MerchantPayoutsPage />} />
               <Route path="/merchant/coupons" element={<MerchantCouponsPage />} />

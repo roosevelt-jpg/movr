@@ -39,6 +39,12 @@ export default function RentalsPage() {
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4" data-force-dark>
       <h1 className="text-3xl font-extrabold">Rentals</h1>
       <p className="text-zinc-400 mt-1 mb-4">Self-drive & chauffeur options</p>
+      <Link
+        to="/rentals/list"
+        className="inline-flex mb-4 text-sm font-semibold text-purple-400 hover:text-purple-300"
+      >
+        List your car →
+      </Link>
 
       <div className="flex rounded-2xl bg-zinc-900 p-1 mb-4">
         {(['self_drive', 'chauffeur'] as const).map((m) => (

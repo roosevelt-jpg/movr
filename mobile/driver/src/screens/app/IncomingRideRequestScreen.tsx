@@ -134,7 +134,7 @@ export default function IncomingRideRequestScreen({
           <Text style={styles.metricVal}>
             {formatCurrency(Number(offer.earnings || 0), offer.currency || 'NGN')}
           </Text>
-          <Text style={[styles.metricLab, { color: '#A78BFA' }]}>Earnings</Text>
+          <Text style={[styles.metricLab, { color: '#A78BFA' }]}>You keep · 100%</Text>
         </View>
       </View>
 

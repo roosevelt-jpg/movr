@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatCountryLabel } from '@movr/format';
 import { FormField, fieldClassName } from './FormField';
 import { AFRICA_COUNTRIES } from '../../lib/africaLocales';
 
@@ -88,7 +89,7 @@ export default function CountrySelect({
         </option>
         {countries.map((c) => (
           <option key={c.code} value={c.code}>
-            {c.name}
+            {formatCountryLabel(c.code, c.name)}
             {c.currencyCode ? ` · ${c.currencyCode}` : ''}
           </option>
         ))}

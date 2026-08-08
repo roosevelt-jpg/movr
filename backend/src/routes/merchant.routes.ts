@@ -506,7 +506,8 @@ merchantRouter.get('/products', authenticateToken, requireMerchant, async (req: 
                       'id', pv.id,
                       'name', pv.name,
                       'price_delta', pv.price_delta,
-                      'sku', pv.sku
+                      'sku', pv.sku,
+                      'stock_qty', pv.stock_qty
                     )
                     ORDER BY pv.created_at ASC NULLS LAST, pv.name ASC
                   ),
@@ -515,6 +516,22 @@ merchantRouter.get('/products', authenticateToken, requireMerchant, async (req: 
                 FROM product_variants pv
                 WHERE pv.product_id = p.id
               ) AS variants,
+              (
+                SELECT COALESCE(
+                  json_agg(
+                    json_build_object(
+                      'id', pi.id,
+                      'url', pi.url,
+                      'alt', pi.alt,
+                      'sort_order', pi.sort_order
+                    )
+                    ORDER BY pi.sort_order ASC, pi.created_at ASC
+                  ),
+                  '[]'::json
+                )
+                FROM product_images pi
+                WHERE pi.product_id = p.id
+              ) AS images,
               (
                 SELECT pv.name FROM product_variants pv
                 WHERE pv.product_id = p.id
@@ -556,7 +573,7 @@ merchantRouter.get('/categories', authenticateToken, requireMerchant, async (_re
 merchantRouter.post('/products', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { storeId, name, description, price, currency, imageUrl, categoryId } = req.body;
+    const { storeId, name, description, price, currency, imageUrl, categoryId, salePrice, compareAtPrice } = req.body;
     assertDirectUploadUrl(imageUrl, 'imageUrl');
     const store = await db.query(
       `SELECT id FROM stores WHERE id = $1 AND merchant_id = $2`,
@@ -566,10 +583,28 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
       return res.status(404).json({ status: 'error', message: 'Store not found' });
     }
     const product = await db.query(
-      `INSERT INTO products (store_id, name, description, price, currency, image_url, category_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [storeId, name, description || null, price, currency || 'GHS', imageUrl || null, categoryId || null]
+      `INSERT INTO products (store_id, name, description, price, currency, image_url, category_id, sale_price, compare_at_price)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [
+        storeId,
+        name,
+        description || null,
+        price,
+        currency || 'GHS',
+        imageUrl || null,
+        categoryId || null,
+        salePrice != null ? Number(salePrice) : null,
+        compareAtPrice != null ? Number(compareAtPrice) : null,
+      ]
     );
+    if (imageUrl) {
+      await db
+        .query(
+          `INSERT INTO product_images (product_id, url, sort_order, alt) VALUES ($1,$2,0,$3)`,
+          [product.rows[0].id, imageUrl, name]
+        )
+        .catch(() => undefined);
+    }
     res.status(201).json({ status: 'success', data: product.rows[0] });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
@@ -579,7 +614,21 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
 merchantRouter.patch('/products/:id', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { name, description, price, currency, imageUrl, categoryId, inStock, stockQty, isFeatured, isAvailable, isActive } = req.body;
+    const {
+      name,
+      description,
+      price,
+      currency,
+      imageUrl,
+      categoryId,
+      inStock,
+      stockQty,
+      isFeatured,
+      isAvailable,
+      isActive,
+      salePrice,
+      compareAtPrice,
+    } = req.body;
     assertDirectUploadUrl(imageUrl, 'imageUrl');
     const product = await db.query(
       `UPDATE products p SET
@@ -594,9 +643,11 @@ merchantRouter.patch('/products/:id', authenticateToken, requireMerchant, async 
          is_featured = COALESCE($9, p.is_featured),
          is_available = COALESCE($10, p.is_available),
          is_active = COALESCE($11, p.is_active),
+         sale_price = CASE WHEN $14::boolean THEN $12 ELSE COALESCE($12, p.sale_price) END,
+         compare_at_price = CASE WHEN $15::boolean THEN $13 ELSE COALESCE($13, p.compare_at_price) END,
          updated_at = NOW()
        FROM stores s
-       WHERE p.id = $12 AND p.store_id = s.id AND s.merchant_id = $13
+       WHERE p.id = $16 AND p.store_id = s.id AND s.merchant_id = $17
        RETURNING p.*`,
       [
         name || null,
@@ -610,6 +661,18 @@ merchantRouter.patch('/products/:id', authenticateToken, requireMerchant, async 
         typeof isFeatured === 'boolean' ? isFeatured : null,
         typeof isAvailable === 'boolean' ? isAvailable : null,
         typeof isActive === 'boolean' ? isActive : null,
+        Object.prototype.hasOwnProperty.call(req.body, 'salePrice')
+          ? salePrice != null
+            ? Number(salePrice)
+            : null
+          : null,
+        Object.prototype.hasOwnProperty.call(req.body, 'compareAtPrice')
+          ? compareAtPrice != null
+            ? Number(compareAtPrice)
+            : null
+          : null,
+        Object.prototype.hasOwnProperty.call(req.body, 'salePrice'),
+        Object.prototype.hasOwnProperty.call(req.body, 'compareAtPrice'),
         req.params.id,
         merchant.id,
       ]
@@ -778,13 +841,230 @@ merchantRouter.post(
   requireMerchant,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { name, priceDelta, sku } = req.body;
+      const merchant = await getMerchantForUser(req.user!.id);
+      const owned = await db.query(
+        `SELECT p.id FROM products p JOIN stores s ON s.id = p.store_id
+         WHERE p.id = $1 AND s.merchant_id = $2`,
+        [req.params.id, merchant.id]
+      );
+      if (!owned.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Product not found' });
+      }
+      const { name, priceDelta, sku, stockQty } = req.body;
       const variant = await db.query(
-        `INSERT INTO product_variants (product_id, name, price_delta, sku)
-         VALUES ($1,$2,$3,$4) RETURNING *`,
-        [req.params.id, name, priceDelta || 0, sku || null]
+        `INSERT INTO product_variants (product_id, name, price_delta, sku, stock_qty)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [
+          req.params.id,
+          name,
+          priceDelta || 0,
+          sku || null,
+          stockQty != null ? Number(stockQty) : null,
+        ]
       );
       res.status(201).json({ status: 'success', data: variant.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.patch(
+  '/products/:productId/variants/:variantId',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const { name, priceDelta, sku, stockQty } = req.body;
+      const variant = await db.query(
+        `UPDATE product_variants pv SET
+           name = COALESCE($1, pv.name),
+           price_delta = COALESCE($2, pv.price_delta),
+           sku = COALESCE($3, pv.sku),
+           stock_qty = CASE WHEN $4::boolean THEN $5 ELSE COALESCE($5, pv.stock_qty) END
+         FROM products p
+         JOIN stores s ON s.id = p.store_id
+         WHERE pv.id = $6 AND pv.product_id = p.id AND p.id = $7 AND s.merchant_id = $8
+         RETURNING pv.*`,
+        [
+          name || null,
+          priceDelta != null ? Number(priceDelta) : null,
+          sku || null,
+          Object.prototype.hasOwnProperty.call(req.body, 'stockQty'),
+          Object.prototype.hasOwnProperty.call(req.body, 'stockQty')
+            ? stockQty != null
+              ? Number(stockQty)
+              : null
+            : null,
+          req.params.variantId,
+          req.params.productId,
+          merchant.id,
+        ]
+      );
+      if (!variant.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Variant not found' });
+      }
+      res.json({ status: 'success', data: variant.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.delete(
+  '/products/:productId/variants/:variantId',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const deleted = await db.query(
+        `DELETE FROM product_variants pv
+         USING products p, stores s
+         WHERE pv.id = $1 AND pv.product_id = p.id AND p.id = $2
+           AND p.store_id = s.id AND s.merchant_id = $3
+         RETURNING pv.id`,
+        [req.params.variantId, req.params.productId, merchant.id]
+      );
+      if (!deleted.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Variant not found' });
+      }
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.post(
+  '/products/:id/images',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const owned = await db.query(
+        `SELECT p.id, p.name FROM products p JOIN stores s ON s.id = p.store_id
+         WHERE p.id = $1 AND s.merchant_id = $2`,
+        [req.params.id, merchant.id]
+      );
+      if (!owned.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Product not found' });
+      }
+      const { url, alt, sortOrder } = req.body;
+      if (!url) {
+        return res.status(400).json({ status: 'error', message: 'url is required' });
+      }
+      assertDirectUploadUrl(url, 'url');
+      const image = await db.query(
+        `INSERT INTO product_images (product_id, url, alt, sort_order)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [
+          req.params.id,
+          url,
+          alt || owned.rows[0].name,
+          sortOrder != null ? Number(sortOrder) : 0,
+        ]
+      );
+      const count = await db.query(
+        `SELECT COUNT(*)::int AS c FROM product_images WHERE product_id = $1`,
+        [req.params.id]
+      );
+      if (Number(count.rows[0]?.c || 0) === 1) {
+        await db.query(`UPDATE products SET image_url = $1, updated_at = NOW() WHERE id = $2`, [
+          url,
+          req.params.id,
+        ]);
+      }
+      res.status(201).json({ status: 'success', data: image.rows[0] });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.delete(
+  '/products/:productId/images/:imageId',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const deleted = await db.query(
+        `DELETE FROM product_images pi
+         USING products p, stores s
+         WHERE pi.id = $1 AND pi.product_id = p.id AND p.id = $2
+           AND p.store_id = s.id AND s.merchant_id = $3
+         RETURNING pi.id`,
+        [req.params.imageId, req.params.productId, merchant.id]
+      );
+      if (!deleted.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Image not found' });
+      }
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+merchantRouter.get('/returns', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
+  try {
+    const merchant = await getMerchantForUser(req.user!.id);
+    const rows = await db.query(
+      `SELECT r.*,
+              o.public_ref, o.total AS order_total, o.status AS order_status,
+              s.name AS store_name,
+              TRIM(CONCAT(COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''))) AS customer_name
+       FROM marketplace_returns r
+       JOIN marketplace_orders o ON o.id = r.order_id
+       JOIN stores s ON s.id = o.store_id
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE s.merchant_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 100`,
+      [merchant.id]
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+merchantRouter.patch(
+  '/returns/:id',
+  authenticateToken,
+  requireMerchant,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const merchant = await getMerchantForUser(req.user!.id);
+      const status = String(req.body.status || '').toLowerCase();
+      if (!['approved', 'denied', 'refunded', 'requested'].includes(status)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid status' });
+      }
+      const updated = await db.query(
+        `UPDATE marketplace_returns r SET
+           status = $1,
+           refund_amount = COALESCE($2, r.refund_amount),
+           merchant_note = COALESCE($3, r.merchant_note),
+           updated_at = NOW()
+         FROM marketplace_orders o
+         JOIN stores s ON s.id = o.store_id
+         WHERE r.id = $4 AND r.order_id = o.id AND s.merchant_id = $5
+         RETURNING r.*`,
+        [
+          status,
+          req.body.refundAmount != null ? Number(req.body.refundAmount) : null,
+          req.body.merchantNote || null,
+          req.params.id,
+          merchant.id,
+        ]
+      );
+      if (!updated.rows[0]) {
+        return res.status(404).json({ status: 'error', message: 'Return not found' });
+      }
+      res.json({ status: 'success', data: updated.rows[0] });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }

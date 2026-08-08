@@ -23,12 +23,6 @@ type Pkg = {
   icon_key?: string;
 };
 
-const FALLBACK: Pkg[] = [
-  { code: 'document', name: 'Document', weight_label: 'Under 1kg', base_fee: 500, dvt_reward: 50, icon_key: 'document' },
-  { code: 'small_box', name: 'Small Box', weight_label: '1-5kg', base_fee: 800, dvt_reward: 80, icon_key: 'box' },
-  { code: 'large', name: 'Large', weight_label: '5-20kg', base_fee: 1500, dvt_reward: 150, icon_key: 'crate' },
-];
-
 function pkgIcon(key?: string) {
   if (key === 'document') return '📄';
   if (key === 'crate') return '🪑';
@@ -43,19 +37,20 @@ export default function ParcelHomeScreen({
   onTabChange?: (t: any) => void;
   onScheduled?: (id: string) => void;
 }) {
-  const [pkgs, setPkgs] = useState<Pkg[]>(FALLBACK);
-  const [selected, setSelected] = useState('small_box');
-  const [pickup, setPickup] = useState('24 Admiralty Way, Lekki Phase 1, Lagos.');
-  const [dropoff, setDropoff] = useState('Block C, Marina Square, Lagos Island.');
+  const [pkgs, setPkgs] = useState<Pkg[]>([]);
+  const [selected, setSelected] = useState('');
+  const [pickup, setPickup] = useState('');
+  const [dropoff, setDropoff] = useState('');
   const [currency, setCurrency] = useState('NGN');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
   useEffect(() => {
     fetch(`${API}/deliveries/quote?packageType=${selected}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
-        if (Array.isArray(j?.data?.packageTypes) && j.data.packageTypes.length) {
+        if (Array.isArray(j?.data?.packageTypes)) {
           setPkgs(
             j.data.packageTypes.map((p: any) => ({
               code: p.code,
@@ -69,12 +64,16 @@ export default function ParcelHomeScreen({
         }
         if (j?.data?.currency) setCurrency(j.data.currency);
       })
-      .catch(() => undefined);
+      .catch((e) => {
+        setPkgs([]);
+        setMsg(e?.message || 'Could not load delivery options');
+      })
+      .finally(() => setLoadingOptions(false));
   }, [selected]);
 
   const active = pkgs.find((p) => p.code === selected) || pkgs[1] || pkgs[0];
-  const fee = Number(active?.base_fee || 800);
-  const dvt = Number(active?.dvt_reward || Math.round(fee * 0.1));
+  const fee = Number(active?.base_fee || 0);
+  const dvt = Number(active?.dvt_reward || 0);
 
   const schedule = async () => {
     if (!pickup || !dropoff) {
@@ -128,6 +127,8 @@ export default function ParcelHomeScreen({
       </View>
 
       <Text style={styles.section}>PACKAGE TYPE</Text>
+      {loadingOptions ? <Text style={styles.empty}>Loading delivery options…</Text> : null}
+      {!loadingOptions && !pkgs.length ? <Text style={styles.empty}>No delivery options available.</Text> : null}
       <View style={styles.pkgRow}>
         {pkgs.map((p) => {
           const on = selected === p.code;
@@ -155,7 +156,7 @@ export default function ParcelHomeScreen({
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable style={styles.cta} onPress={schedule} disabled={loading}>
+      <Pressable style={styles.cta} onPress={schedule} disabled={loading || !selected}>
         <View style={styles.ctaA} />
         <View style={styles.ctaB} />
         <Text style={styles.ctaText}>{loading ? 'Scheduling…' : 'Schedule Pickup'}</Text>
@@ -235,4 +236,5 @@ const styles = StyleSheet.create({
     left: '40%',
   },
   ctaText: { color: '#fff', fontWeight: '800', fontSize: 17, zIndex: 1 },
+  empty: { color: '#71717A', marginBottom: 12 },
 });

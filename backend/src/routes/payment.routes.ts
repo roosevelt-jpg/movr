@@ -35,6 +35,18 @@ paymentWebhooksRouter.post('/flutterwave', async (req: any, res: Response) => {
   }
 });
 
+paymentWebhooksRouter.post('/stripe', async (req: any, res: Response) => {
+  try {
+    const signature = (req.headers['stripe-signature'] as string) || '';
+    // Prefer raw body (Buffer) set by express.raw on /webhooks/stripe
+    const payload = req.rawBody || req.body;
+    await paymentService.handleStripeWebhook(payload, signature);
+    res.sendStatus(200);
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 // --- Authenticated payment APIs ---
 
 paymentsRouter.post('/initialize', authenticateToken, async (req: AuthRequest, res: Response) => {
@@ -81,7 +93,7 @@ adminPaymentProvidersRouter.patch(
   async (req: AuthRequest, res: Response) => {
     try {
       const { provider } = req.body;
-      if (provider !== 'paystack' && provider !== 'flutterwave') {
+      if (provider !== 'paystack' && provider !== 'flutterwave' && provider !== 'stripe') {
         return res.status(400).json({ status: 'error', message: 'Invalid provider' });
       }
       const row = await paymentService.updateProviderConfig(req.params.id, provider, req.user?.id);

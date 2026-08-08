@@ -21,16 +21,18 @@ export default function OrderConfirmedScreen({
   onTrack?: () => void;
   onHome?: () => void;
 }) {
-  const [merchant, setMerchant] = useState('Chicken Republic');
-  const [orderRef, setOrderRef] = useState('MVR-20480');
-  const [arrival, setArrival] = useState('10:07 AM');
-  const [timeLeft, setTimeLeft] = useState('~26 min');
+  const [merchant, setMerchant] = useState('');
+  const [orderRef, setOrderRef] = useState('');
+  const [arrival, setArrival] = useState('');
+  const [timeLeft, setTimeLeft] = useState('');
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!orderId || String(orderId).startsWith('demo-')) {
-      const t = new Date(Date.now() + 26 * 60000);
-      setArrival(t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    if (!orderId) {
+      setLoading(false);
+      setError('Order not found');
       return;
     }
     fetch(`${API}/orders/${orderId}`, { headers: authHeaders() })
@@ -44,7 +46,8 @@ export default function OrderConfirmedScreen({
         if (o.time_left) setTimeLeft(o.time_left);
         else if (o.eta_minutes != null) setTimeLeft(`~${o.eta_minutes} min`);
       })
-      .catch(() => undefined);
+      .catch((e) => setError(e?.message || 'Could not load order'))
+      .finally(() => setLoading(false));
   }, [orderId]);
 
   const copy = async () => {
@@ -65,6 +68,25 @@ export default function OrderConfirmedScreen({
     { key: 'way', label: 'On the way', icon: '🛵', on: false },
     { key: 'delivered', label: 'Delivered', icon: '🏠', on: false },
   ];
+
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.sub}>Loading order…</Text>
+      </View>
+    );
+  }
+
+  if (error || !orderRef) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.error}>{error || 'Order not found'}</Text>
+        <Pressable style={styles.home} onPress={onHome}>
+          <Text style={styles.homeText}>Back to Home</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -233,4 +255,5 @@ const styles = StyleSheet.create({
     borderColor: '#3F3F46',
   },
   homeText: { color: '#fff', fontWeight: '700' },
+  error: { color: '#F87171', marginTop: 8, textAlign: 'center' },
 });

@@ -20,7 +20,7 @@ interface Integration {
 const SECTIONS: { title: string; keys: string[] }[] = [
   {
     title: 'PAYMENTS',
-    keys: ['paystack', 'flutterwave', 'twilio'],
+    keys: ['paystack', 'flutterwave', 'stripe', 'twilio'],
   },
   {
     title: 'AI & VOICE / MAPS / IDENTITY',
@@ -38,6 +38,7 @@ const SECTIONS: { title: string; keys: string[] }[] = [
 const SUBTITLE: Record<string, string> = {
   paystack: 'Payments',
   flutterwave: 'Payments',
+  stripe: 'Payments',
   twilio: 'Messaging',
   openai: 'AI & voice',
   google_maps: 'Maps & location',
@@ -196,6 +197,28 @@ export default function IntegrationsHubPage() {
               onChange={(e) => setCreds({ ...creds, public_key: e.target.value })}
             />
           </label>
+          {selected === 'stripe' || selected === 'flutterwave' ? (
+            <label style={styles.label}>
+              {selected === 'stripe' ? 'webhook_secret' : 'secret_hash'}
+              <input
+                style={styles.input}
+                type="password"
+                value={
+                  selected === 'stripe'
+                    ? creds.webhook_secret || ''
+                    : creds.secret_hash || ''
+                }
+                onChange={(e) =>
+                  setCreds({
+                    ...creds,
+                    ...(selected === 'stripe'
+                      ? { webhook_secret: e.target.value }
+                      : { secret_hash: e.target.value }),
+                  })
+                }
+              />
+            </label>
+          ) : null}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button style={styles.primary} onClick={save}>
               Save

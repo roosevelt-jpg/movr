@@ -36,6 +36,7 @@ import StoreProfileScreen from './StoreProfileScreen';
 import SupportChatScreen from './SupportChatScreen';
 import TokenScreen from './TokenScreen';
 import TransactionReceiptScreen from './TransactionReceiptScreen';
+import WishlistScreen from './WishlistScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
@@ -68,6 +69,7 @@ type Service =
   | 'support'
   | 'store'
   | 'product'
+  | 'wishlist'
   | 'redeem'
   | 'receipt';
 
@@ -227,6 +229,7 @@ export default function SuperAppHomeScreen({
           onDeals={() => setService('deals')}
           onPrivacy={() => setService('settings')}
           onHelp={() => setService('help')}
+          onWishlist={() => setService('wishlist')}
         />
         {tabBar}
       </View>
@@ -379,6 +382,20 @@ export default function SuperAppHomeScreen({
       </View>
     );
   }
+  if (service === 'wishlist') {
+    return (
+      <View style={styles.root}>
+        <WishlistScreen
+          onBack={() => setService('shop')}
+          onOpenProduct={(sid, pid) => {
+            setStoreId(sid);
+            setProductId(pid);
+            setService('product');
+          }}
+        />
+      </View>
+    );
+  }
   if (service === 'refer') {
     return (
       <View style={styles.root}>
@@ -438,6 +455,12 @@ export default function SuperAppHomeScreen({
             setService('store');
             onOpenStore?.(id);
           }}
+          onOpenProduct={(sid, pid) => {
+            setStoreId(sid);
+            setProductId(pid);
+            setService('product');
+          }}
+          onOpenWishlist={() => setService('wishlist')}
           userLat={data?.location?.lat}
           userLng={data?.location?.lng}
         />
@@ -565,6 +588,26 @@ export default function SuperAppHomeScreen({
                 <Pressable key={s.id} style={styles.service} onPress={() => setService(s.id)}>
                   <Text style={styles.serviceIcon}>{s.icon}</Text>
                   <Text style={styles.serviceLabel}>{s.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable style={styles.fairStrip} onPress={() => setService('ride')}>
+              <Text style={styles.fairStripText}>
+                Fair fares · driver keeps 100% · no commission
+              </Text>
+            </Pressable>
+
+            <View style={styles.crossSell}>
+              {[
+                { id: 'deliver' as Service, t: 'Send a parcel?', s: 'Same-day across town' },
+                { id: 'shop' as Service, t: 'Hungry?', s: 'Order from nearby stores' },
+                { id: 'rental' as Service, t: 'Need a car for the day?', s: 'Self-drive & chauffeur' },
+                { id: 'refer' as Service, t: 'Refer & earn', s: 'Invite friends to fair rides' },
+              ].map((x) => (
+                <Pressable key={x.id} style={styles.crossCard} onPress={() => setService(x.id)}>
+                  <Text style={styles.crossTitle}>{x.t}</Text>
+                  <Text style={styles.crossSub}>{x.s}</Text>
                 </Pressable>
               ))}
             </View>
@@ -720,6 +763,36 @@ const styles = StyleSheet.create({
   },
   serviceIcon: { fontSize: 22 },
   serviceLabel: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  fairStrip: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: '#052e16',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  fairStripText: {
+    color: '#86efac',
+    fontWeight: '700',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  crossSell: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  crossCard: {
+    width: '47%',
+    flexGrow: 1,
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 14,
+  },
+  crossTitle: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  crossSub: { color: '#888', fontSize: 11, marginTop: 4 },
   wallet: {
     marginHorizontal: 16,
     borderRadius: 18,

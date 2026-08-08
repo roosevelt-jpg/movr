@@ -164,7 +164,7 @@ export default function CustomerProfilePage() {
 
       {error ? <p style={styles.error}>{error}</p> : null}
 
-      <div style={styles.layout}>
+      <div style={styles.layout} data-admin-grid="profile" className="admin-split-grid">
         <div style={styles.leftCol}>
           <div style={styles.card}>
             <div style={styles.avatarLg}>{data.initials || 'C'}</div>
@@ -283,6 +283,7 @@ export default function CustomerProfilePage() {
                 ({data.activityTotal ?? data.activity?.length ?? 0} total)
               </span>
             </h3>
+            <div className="admin-table-scroll">
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -311,6 +312,7 @@ export default function CustomerProfilePage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </div>

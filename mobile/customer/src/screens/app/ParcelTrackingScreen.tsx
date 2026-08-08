@@ -16,44 +16,38 @@ function authHeaders(): Record<string, string> {
 
 /** Parcel tracking — map ETA, courier, timeline, share link (mockup). */
 export default function ParcelTrackingScreen({
-  parcelRef = 'MVR-P-8821',
+  parcelRef,
   onBack,
 }: {
   parcelRef?: string;
   onBack?: () => void;
 }) {
-  const [data, setData] = useState<any>({
-    label: 'Parcel #MVR-P-8821',
-    statusLabel: 'En Route',
-    scheduledLabel: 'Scheduled · 2 min ago',
-    etaLabel: 'Courier is 12 min away',
-    etaMinutes: 12,
-    courier: { name: 'Tunde Adeyemi', title: 'Movr Courier', rating: 4.7, phone: '+2348010008821' },
-    pickup: '24 Admiralty Way, Lekki',
-    dropoff: 'Marina Square, Lagos Island',
-    timeline: [
-      { id: 'picked_up', label: 'Parcel picked up', state: 'done' },
-      { id: 'in_transit', label: 'In transit · 12 min away', state: 'active' },
-      { id: 'delivered', label: 'Delivered & signed', state: 'pending' },
-    ],
-    shareUrl: 'https://movr.app/track/MVR-P-8821',
-  });
+  const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!parcelRef) {
+      setLoading(false);
+      setMsg('Parcel not found');
+      return;
+    }
     fetch(`${API}/deliveries/track/${encodeURIComponent(parcelRef)}`, {
       headers: authHeaders(),
     })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.data) setData((d: any) => ({ ...d, ...j.data }));
+        if (j?.data) setData(j.data);
+        else throw new Error('Parcel not found');
       })
-      .catch(() => undefined);
+      .catch((e) => setMsg(e?.message || 'Could not load parcel'))
+      .finally(() => setLoading(false));
   }, [parcelRef]);
 
   const share = async () => {
+    if (!data?.id) return;
     try {
-      const res = await fetch(`${API}/deliveries/${data.id || 'demo'}/share-link`, {
+      const res = await fetch(`${API}/deliveries/${data.id}/share-link`, {
         method: 'POST',
         headers: authHeaders(),
         body: '{}',
@@ -67,17 +61,20 @@ export default function ParcelTrackingScreen({
         await (navigator as any).clipboard.writeText(url);
         setMsg('Tracking link copied');
       }
-    } catch {
-      setMsg('Tracking link ready');
+    } catch (e: any) {
+      setMsg(e?.message || 'Could not create tracking link');
     }
   };
 
-  const c = data.courier || {};
-  const progress = Math.min(0.85, 0.35 + Number(data.etaMinutes || 12) / 40);
+  const c = data?.courier || {};
+  const progress = Math.min(0.85, Math.max(0, Number(data?.progress || 0)));
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        {loading ? <Text style={styles.msg}>Loading parcel…</Text> : null}
+        {!data ? <Text style={styles.msg}>{msg || 'No parcel data.'}</Text> : null}
+        {data ? <>
         <View style={styles.map}>
           <View style={styles.grid} />
           <Text style={styles.bike}>🛵</Text>
@@ -111,7 +108,7 @@ export default function ParcelTrackingScreen({
             <View style={{ flex: 1 }}>
               <Text style={styles.courierName}>{c.name}</Text>
               <Text style={styles.courierTitle}>
-                {c.title} · ★ {Number(c.rating || 4.7).toFixed(1)}
+                {c.title || ''} · ★ {Number(c.rating || 0).toFixed(1)}
               </Text>
             </View>
             <Pressable
@@ -161,12 +158,13 @@ export default function ParcelTrackingScreen({
         </View>
 
         {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+        </> : null}
       </ScrollView>
 
-      <Pressable style={styles.shareBar} onPress={share}>
+      {data ? <Pressable style={styles.shareBar} onPress={share}>
         <Text style={styles.shareLeft}>Share tracking link</Text>
         <Text style={styles.shareRight}>share ↗</Text>
-      </Pressable>
+      </Pressable> : null}
     </View>
   );
 }

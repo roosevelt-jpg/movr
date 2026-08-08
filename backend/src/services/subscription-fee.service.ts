@@ -13,7 +13,7 @@ export type ResolveContext = {
   city?: string | null;
   vehicleCategory?: string | null;
   vehicleTypeCode?: string | null;
-  interval?: 'weekly' | 'monthly';
+  interval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 };
 
 /**

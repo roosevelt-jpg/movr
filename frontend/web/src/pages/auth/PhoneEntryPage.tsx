@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { countryFlagEmoji } from '@movr/format';
+
+const DIAL_FLAG: Record<string, string> = {
+  '+234': countryFlagEmoji('NG'),
+  '+233': countryFlagEmoji('GH'),
+};
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -63,7 +69,7 @@ export default function PhoneEntryPage() {
             onClick={() => setCountryCode(countryCode === '+234' ? '+233' : '+234')}
             className="flex items-center gap-2 rounded-xl bg-zinc-900 px-3 py-3.5 text-white"
           >
-            <span>{countryCode === '+234' ? '🇳🇬' : '🇬🇭'}</span>
+            <span>{DIAL_FLAG[countryCode] || countryFlagEmoji('NG')}</span>
             <span className="font-semibold">{countryCode}</span>
             <span className="text-zinc-500 text-xs">▾</span>
           </button>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Moon, Sun } from 'lucide-react';
 import { adminBtn } from '../styles/adminButtons';
+import { setAdminAccess } from '../lib/rbac';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 
@@ -34,7 +35,8 @@ export default function AdminLoginPage() {
       localStorage.setItem('movr_admin_token', json.data.token);
       localStorage.setItem('movr_admin_email', email);
       const roles = json.data?.roles || json.data?.user?.roles || [];
-      localStorage.setItem('movr_admin_roles', JSON.stringify(roles));
+      const permissions = json.data?.permissions || json.data?.user?.permissions || [];
+      setAdminAccess(roles, permissions);
       toast.success('Signed in');
       navigate('/overview');
     } catch (err: any) {

@@ -4,6 +4,7 @@ import AdminShell from '../layouts/AdminShell';
 import AdminOpsNav from '../components/AdminOpsNav';
 import OnOffButton from '../components/OnOffButton';
 import { adminBtn } from '../styles/adminButtons';
+import { formatCountryLabel } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -209,15 +210,28 @@ export default function PricingEnginePage() {
           <h2 style={styles.h2}>New zone</h2>
           <div style={styles.form}>
             {(['name', 'centerLat', 'centerLng', 'radiusKm', 'maxSurgeCap', 'countryCode'] as const).map(
-              (k) => (
-                <input
-                  key={k}
-                  style={styles.input}
-                  placeholder={k}
-                  value={(zoneForm as any)[k]}
-                  onChange={(e) => setZoneForm({ ...zoneForm, [k]: e.target.value })}
-                />
-              )
+              (k) =>
+                k === 'countryCode' ? (
+                  <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      Country · {formatCountryLabel(zoneForm.countryCode)}
+                    </span>
+                    <input
+                      style={styles.input}
+                      placeholder="countryCode"
+                      value={zoneForm.countryCode}
+                      onChange={(e) => setZoneForm({ ...zoneForm, countryCode: e.target.value })}
+                    />
+                  </label>
+                ) : (
+                  <input
+                    key={k}
+                    style={styles.input}
+                    placeholder={k}
+                    value={(zoneForm as any)[k]}
+                    onChange={(e) => setZoneForm({ ...zoneForm, [k]: e.target.value })}
+                  />
+                )
             )}
             <button style={styles.newZone} onClick={() => createZone().catch((e) => setMessage(e.message))}>
               Save zone

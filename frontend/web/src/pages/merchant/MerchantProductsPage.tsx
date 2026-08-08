@@ -16,7 +16,7 @@ function stockLabel(p: any) {
   return { text: 'In stock', cls: 'bg-emerald-950 text-emerald-400' };
 }
 
-/** Products — searchable table + edit side panel matching merchant mockup. */
+/** Products — searchable table + edit side panel with sale, images, variants. */
 export default function MerchantProductsPage() {
   const { formatMoney } = useLocalCurrency();
   const [products, setProducts] = useState<any[]>([]);
@@ -30,6 +30,8 @@ export default function MerchantProductsPage() {
     storeId: '',
     name: '',
     price: '',
+    salePrice: '',
+    compareAtPrice: '',
     description: '',
     categoryId: '',
     imageUrl: '',
@@ -38,6 +40,9 @@ export default function MerchantProductsPage() {
     isActive: true,
     stockQty: '50',
   });
+  const [variantForm, setVariantForm] = useState({ name: '', priceDelta: '0', sku: '', stockQty: '' });
+  const [images, setImages] = useState<any[]>([]);
+  const [variants, setVariants] = useState<any[]>([]);
 
   const load = async () => {
     const [p, s, c] = await Promise.all([
@@ -79,10 +84,14 @@ export default function MerchantProductsPage() {
   const openEdit = (p: any) => {
     setCreating(false);
     setEditing(p);
+    setImages(Array.isArray(p.images) ? p.images : []);
+    setVariants(Array.isArray(p.variants) ? p.variants : []);
     setForm({
       storeId: p.store_id,
       name: p.name || '',
       price: String(p.price ?? ''),
+      salePrice: p.sale_price != null ? String(p.sale_price) : '',
+      compareAtPrice: p.compare_at_price != null ? String(p.compare_at_price) : '',
       description: p.description || '',
       categoryId: p.category_id || '',
       imageUrl: p.image_url || '',
@@ -96,10 +105,14 @@ export default function MerchantProductsPage() {
   const openCreate = () => {
     setEditing(null);
     setCreating(true);
+    setImages([]);
+    setVariants([]);
     setForm((f) => ({
       ...f,
       name: '',
       price: '',
+      salePrice: '',
+      compareAtPrice: '',
       description: '',
       categoryId: '',
       imageUrl: '',
@@ -121,9 +134,64 @@ export default function MerchantProductsPage() {
     try {
       const url = await uploadCatalogImage(file, token());
       setForm((f) => ({ ...f, imageUrl: url }));
+      if (editing?.id) {
+        const r = await axios.post(
+          `${API}/merchant/products/${editing.id}/images`,
+          { url },
+          { headers: headers() }
+        );
+        setImages((prev) => [...prev, r.data.data]);
+      }
       toast.success('Image uploaded');
     } catch (e: any) {
       toast.error(e.message);
+    }
+  };
+
+  const removeImage = async (imageId: string) => {
+    if (!editing?.id) return;
+    try {
+      await axios.delete(`${API}/merchant/products/${editing.id}/images/${imageId}`, {
+        headers: headers(),
+      });
+      setImages((prev) => prev.filter((i) => i.id !== imageId));
+      toast.success('Image removed');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const addVariant = async () => {
+    if (!editing?.id || !variantForm.name.trim()) return;
+    try {
+      const r = await axios.post(
+        `${API}/merchant/products/${editing.id}/variants`,
+        {
+          name: variantForm.name,
+          priceDelta: Number(variantForm.priceDelta || 0),
+          sku: variantForm.sku || undefined,
+          stockQty: variantForm.stockQty !== '' ? Number(variantForm.stockQty) : undefined,
+        },
+        { headers: headers() }
+      );
+      setVariants((prev) => [...prev, r.data.data]);
+      setVariantForm({ name: '', priceDelta: '0', sku: '', stockQty: '' });
+      toast.success('Variant added');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
+    }
+  };
+
+  const removeVariant = async (variantId: string) => {
+    if (!editing?.id) return;
+    try {
+      await axios.delete(`${API}/merchant/products/${editing.id}/variants/${variantId}`, {
+        headers: headers(),
+      });
+      setVariants((prev) => prev.filter((v) => v.id !== variantId));
+      toast.success('Variant removed');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e.message);
     }
   };
 
@@ -141,6 +209,8 @@ export default function MerchantProductsPage() {
         isActive: form.isActive,
         inStock: form.isAvailable && Number(form.stockQty) > 0,
         stockQty: Number(form.stockQty),
+        salePrice: form.salePrice !== '' ? Number(form.salePrice) : null,
+        compareAtPrice: form.compareAtPrice !== '' ? Number(form.compareAtPrice) : null,
       };
       if (editing) {
         await axios.patch(`${API}/merchant/products/${editing.id}`, payload, { headers: headers() });
@@ -161,6 +231,11 @@ export default function MerchantProductsPage() {
   };
 
   const panelOpen = Boolean(editing || creating);
+  const displayPrice = (p: any) => {
+    const sale = p.sale_price != null ? Number(p.sale_price) : null;
+    const price = Number(p.price || 0);
+    return sale != null && sale < price ? sale : price;
+  };
 
   return (
     <MerchantShell activePath="/merchant/products">
@@ -169,6 +244,9 @@ export default function MerchantProductsPage() {
           <h1 className="text-3xl font-bold text-white">Products</h1>
           <p className="text-[#888888] mt-1">
             {products.length} products · {activeCount} active
+          </p>
+          <p className="text-xs text-[#666] mt-1">
+            Coupons apply to the sale price (no double discount stacking beyond that).
           </p>
         </div>
         <button
@@ -180,7 +258,7 @@ export default function MerchantProductsPage() {
         </button>
       </div>
 
-      <div className={`grid gap-4 ${panelOpen ? 'lg:grid-cols-[1fr_340px]' : ''}`}>
+      <div className={`grid gap-4 ${panelOpen ? 'lg:grid-cols-[1fr_380px]' : ''}`}>
         <div>
           <div className="flex flex-wrap gap-3 mb-4">
             <input
@@ -231,6 +309,8 @@ export default function MerchantProductsPage() {
                   filtered.map((p) => {
                     const stock = stockLabel(p);
                     const active = p.is_active !== false && p.in_stock !== false;
+                    const price = displayPrice(p);
+                    const onSale = p.sale_price != null && Number(p.sale_price) < Number(p.price);
                     return (
                       <tr key={p.id} className="border-b border-white/5">
                         <td className="px-4 py-3">
@@ -247,7 +327,12 @@ export default function MerchantProductsPage() {
                             <span className="text-white font-medium">{p.name}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-white">{formatMoney(Number(p.price))}</td>
+                        <td className="px-4 py-3 text-white">
+                          {formatMoney(price)}
+                          {onSale ? (
+                            <span className="ml-2 text-xs text-orange-400">Sale</span>
+                          ) : null}
+                        </td>
                         <td className="px-4 py-3 text-[#AAAAAA]">{p.category_name || '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${stock.cls}`}>
@@ -283,11 +368,11 @@ export default function MerchantProductsPage() {
         </div>
 
         {panelOpen ? (
-          <form onSubmit={save} className="rounded-2xl bg-[#1A1A1A] p-5 h-fit sticky top-4">
+          <form onSubmit={save} className="rounded-2xl bg-[#1A1A1A] p-5 h-fit sticky top-4 max-h-[85vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-white mb-4">
               {editing ? `Edit: ${editing.name}` : 'Add Product'}
             </h2>
-            <label className="block w-24 h-24 rounded-xl bg-[#2A2A2A] overflow-hidden mb-4 cursor-pointer relative">
+            <label className="block w-24 h-24 rounded-xl bg-[#2A2A2A] overflow-hidden mb-2 cursor-pointer relative">
               {form.imageUrl ? (
                 <img src={mediaUrl(form.imageUrl)} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -302,6 +387,22 @@ export default function MerchantProductsPage() {
                 onChange={(e) => onImage(e.target.files?.[0])}
               />
             </label>
+            {editing && images.length > 0 ? (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {images.map((img) => (
+                  <div key={img.id} className="relative w-12 h-12 rounded-lg overflow-hidden bg-[#2A2A2A]">
+                    <img src={mediaUrl(img.url)} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      className="absolute inset-x-0 bottom-0 text-[9px] bg-black/70 text-red-300"
+                      onClick={() => removeImage(img.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {!editing ? (
               <select
                 className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
@@ -322,13 +423,33 @@ export default function MerchantProductsPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
-            <label className="text-xs text-[#888888]">Price</label>
+            <label className="text-xs text-[#888888]">List price</label>
             <input
               className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
               required
             />
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className="text-xs text-[#888888]">Sale price</label>
+                <input
+                  className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                  value={form.salePrice}
+                  onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[#888888]">Compare-at</label>
+                <input
+                  className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+                  value={form.compareAtPrice}
+                  onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })}
+                  placeholder="Strike-through"
+                />
+              </div>
+            </div>
             <label className="text-xs text-[#888888]">Category</label>
             <select
               className="w-full mb-3 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
@@ -370,6 +491,59 @@ export default function MerchantProductsPage() {
                 onChange={(e) => setForm({ ...form, isFeatured: e.target.checked })}
               />
             </label>
+
+            {editing ? (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <p className="text-sm font-semibold text-white mb-2">Variants</p>
+                <ul className="space-y-1 mb-3">
+                  {variants.map((v) => (
+                    <li key={v.id} className="flex justify-between text-xs text-[#ccc]">
+                      <span>
+                        {v.name} · Δ{formatMoney(Number(v.price_delta || 0))}
+                        {v.sku ? ` · ${v.sku}` : ''}
+                      </span>
+                      <button type="button" className="text-red-400" onClick={() => removeVariant(v.id)}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    className="rounded-lg bg-black/40 border border-white/10 px-2 py-1.5 text-white text-sm"
+                    placeholder="Name"
+                    value={variantForm.name}
+                    onChange={(e) => setVariantForm({ ...variantForm, name: e.target.value })}
+                  />
+                  <input
+                    className="rounded-lg bg-black/40 border border-white/10 px-2 py-1.5 text-white text-sm"
+                    placeholder="Price delta"
+                    value={variantForm.priceDelta}
+                    onChange={(e) => setVariantForm({ ...variantForm, priceDelta: e.target.value })}
+                  />
+                  <input
+                    className="rounded-lg bg-black/40 border border-white/10 px-2 py-1.5 text-white text-sm"
+                    placeholder="SKU"
+                    value={variantForm.sku}
+                    onChange={(e) => setVariantForm({ ...variantForm, sku: e.target.value })}
+                  />
+                  <input
+                    className="rounded-lg bg-black/40 border border-white/10 px-2 py-1.5 text-white text-sm"
+                    placeholder="Stock"
+                    value={variantForm.stockQty}
+                    onChange={(e) => setVariantForm({ ...variantForm, stockQty: e.target.value })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addVariant}
+                  className="w-full rounded-lg border border-white/15 py-2 text-sm text-white/80 mb-3"
+                >
+                  + Add variant
+                </button>
+              </div>
+            ) : null}
+
             <div className="flex gap-2 mt-4">
               <button
                 type="submit"

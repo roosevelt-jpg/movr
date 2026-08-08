@@ -66,29 +66,102 @@ export const CURRENCY_SYMBOL: Record<string, string> = {
 };
 
 export const COUNTRY_NAME: Record<string, string> = {
-  GH: 'Ghana',
-  NG: 'Nigeria',
-  KE: 'Kenya',
-  ZA: 'South Africa',
-  CI: "Côte d'Ivoire",
-  SN: 'Senegal',
-  TG: 'Togo',
-  BJ: 'Benin',
-  BF: 'Burkina Faso',
-  ML: 'Mali',
-  CM: 'Cameroon',
-  TZ: 'Tanzania',
-  UG: 'Uganda',
-  RW: 'Rwanda',
-  ET: 'Ethiopia',
-  EG: 'Egypt',
-  MA: 'Morocco',
+  DZ: 'Algeria',
   AO: 'Angola',
-  MZ: 'Mozambique',
-  ZM: 'Zambia',
+  BJ: 'Benin',
   BW: 'Botswana',
+  BF: 'Burkina Faso',
+  BI: 'Burundi',
+  CV: 'Cabo Verde',
+  CM: 'Cameroon',
+  CF: 'Central African Republic',
+  TD: 'Chad',
+  KM: 'Comoros',
+  CG: 'Congo',
+  CD: 'Democratic Republic of the Congo',
+  CI: "Côte d'Ivoire",
+  DJ: 'Djibouti',
+  EG: 'Egypt',
+  GQ: 'Equatorial Guinea',
+  ER: 'Eritrea',
+  SZ: 'Eswatini',
+  ET: 'Ethiopia',
+  GA: 'Gabon',
+  GM: 'Gambia',
+  GH: 'Ghana',
+  GN: 'Guinea',
+  GW: 'Guinea-Bissau',
+  KE: 'Kenya',
+  LS: 'Lesotho',
+  LR: 'Liberia',
+  LY: 'Libya',
+  MG: 'Madagascar',
+  MW: 'Malawi',
+  ML: 'Mali',
+  MR: 'Mauritania',
+  MU: 'Mauritius',
+  MA: 'Morocco',
+  MZ: 'Mozambique',
   NA: 'Namibia',
+  NE: 'Niger',
+  NG: 'Nigeria',
+  RW: 'Rwanda',
+  ST: 'São Tomé and Príncipe',
+  SN: 'Senegal',
+  SC: 'Seychelles',
+  SL: 'Sierra Leone',
+  SO: 'Somalia',
+  ZA: 'South Africa',
+  SS: 'South Sudan',
+  SD: 'Sudan',
+  TZ: 'Tanzania',
+  TG: 'Togo',
+  TN: 'Tunisia',
+  UG: 'Uganda',
+  ZM: 'Zambia',
+  ZW: 'Zimbabwe',
+  US: 'United States',
+  GB: 'United Kingdom',
+  CA: 'Canada',
+  AU: 'Australia',
 };
+
+/** Regional Indicator Symbol Letter A */
+const FLAG_A = 0x1f1e6;
+
+/**
+ * ISO 3166-1 alpha-2 → flag emoji (🇬🇭). Returns '' for invalid codes.
+ */
+export function countryFlagEmoji(countryCode?: string | null): string {
+  const code = String(countryCode || '')
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '';
+  return String.fromCodePoint(
+    FLAG_A + code.charCodeAt(0) - 65,
+    FLAG_A + code.charCodeAt(1) - 65
+  );
+}
+
+/**
+ * Flag + country name for UI labels/selects, e.g. "🇬🇭 Ghana".
+ * Pass `nameOverride` when the display name differs from COUNTRY_NAME.
+ */
+export function formatCountryLabel(
+  countryCode?: string | null,
+  nameOverride?: string | null
+): string {
+  const raw = String(countryCode || '').trim();
+  if (!raw || raw === '—' || raw.toLowerCase() === 'any') {
+    return nameOverride?.trim() || raw || '—';
+  }
+  const code = raw.toUpperCase();
+  const flag = countryFlagEmoji(code);
+  const name = (nameOverride || COUNTRY_NAME[code] || code).trim();
+  if (!flag) return name;
+  if (name.startsWith(flag)) return name;
+  return `${flag} ${name}`;
+}
 
 export function currencyForCountry(countryCode?: string | null): string {
   if (!countryCode) return 'GHS';

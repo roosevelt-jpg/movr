@@ -2,6 +2,8 @@
  * All African Union member states — used for footer locale + country select fallbacks.
  * Primary language is the common UI/business language for that market.
  */
+import { countryFlagEmoji } from '@movr/format';
+
 export type AfricaLocale = {
   country_code: string;
   country_name: string;
@@ -72,7 +74,7 @@ const ROWS: Array<Omit<AfricaLocale, 'display_label' | 'is_default'> & { is_defa
 
 export const AFRICA_LOCALES: AfricaLocale[] = ROWS.map((r) => ({
   ...r,
-  display_label: `${r.country_name} - ${r.language_label}`,
+  display_label: `${countryFlagEmoji(r.country_code)} ${r.country_name} - ${r.language_label}`.trim(),
   is_default: Boolean(r.is_default),
 })).sort((a, b) => a.country_name.localeCompare(b.country_name));
 

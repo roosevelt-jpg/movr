@@ -7,15 +7,17 @@ import {
   InitializeTransferInput,
   PAYSTACK_CURRENCIES,
   PaymentProvider,
+  STRIPE_CURRENCIES,
 } from './payment-provider.interface';
 import { PaystackService } from './paystack.service';
 import { FlutterwaveService } from './flutterwave.service';
+import { StripeService } from './stripe.service';
 import { IntegrationsService } from './integrations.service';
 
-type ProviderName = 'paystack' | 'flutterwave';
+type ProviderName = 'paystack' | 'flutterwave' | 'stripe';
 
 /**
- * Payment facade — resolves Paystack or Flutterwave from config (Phase 0A).
+ * Payment facade — resolves Paystack, Flutterwave, or Stripe from config.
  * All call sites must go through this service.
  */
 export class PaymentService {
@@ -23,6 +25,7 @@ export class PaymentService {
   private logger: winston.Logger;
   private paystack: PaystackService;
   private flutterwave: FlutterwaveService;
+  private stripe: StripeService;
   private integrations: IntegrationsService;
   private credentialsLoaded = false;
 
@@ -40,6 +43,7 @@ export class PaymentService {
 
     this.paystack = new PaystackService(onVerified);
     this.flutterwave = new FlutterwaveService(onVerified);
+    this.stripe = new StripeService(onVerified);
   }
 
   async initialize(): Promise<void> {
@@ -47,7 +51,8 @@ export class PaymentService {
     await this.refreshProviderCredentials();
     const hasPaystack = !!process.env.PAYSTACK_SECRET_KEY;
     const hasFlutterwave = !!process.env.FLUTTERWAVE_SECRET_KEY;
-    this.logger.info('Payment service ready', { hasPaystack, hasFlutterwave });
+    const hasStripe = !!process.env.STRIPE_SECRET_KEY;
+    this.logger.info('Payment service ready', { hasPaystack, hasFlutterwave, hasStripe });
   }
 
   /** Seed global + Paystack live-market country rows if missing (Phase 0A). */
@@ -81,7 +86,7 @@ export class PaymentService {
   }
 
   /**
-   * Resolve secrets via Integrations Hub first, then .env (Phase 0C).
+   * Resolve secrets via Integrations Hub first, then .env.
    */
   async refreshProviderCredentials(): Promise<void> {
     try {
@@ -97,13 +102,22 @@ export class PaymentService {
         (await this.integrations.getCredential('flutterwave', 'secret_hash')) ||
         process.env.FLUTTERWAVE_SECRET_HASH ||
         '';
+      const stripeSecret =
+        (await this.integrations.getCredential('stripe', 'secret_key')) ||
+        process.env.STRIPE_SECRET_KEY ||
+        '';
+      const stripeWebhook =
+        (await this.integrations.getCredential('stripe', 'webhook_secret')) ||
+        process.env.STRIPE_WEBHOOK_SECRET ||
+        '';
 
       this.paystack.setSecretKey(paystackSecret);
       this.flutterwave.setSecretKey(flutterwaveSecret);
       this.flutterwave.setSecretHash(flutterwaveHash);
+      this.stripe.setSecretKey(stripeSecret);
+      this.stripe.setWebhookSecret(stripeWebhook);
       this.credentialsLoaded = true;
 
-      // Reflect env-configured providers in the hub status without writing secrets back
       if (paystackSecret) {
         await this.db.query(
           `UPDATE integrations SET status = 'configured', updated_at = NOW()
@@ -114,6 +128,12 @@ export class PaymentService {
         await this.db.query(
           `UPDATE integrations SET status = 'configured', updated_at = NOW()
            WHERE key = 'flutterwave' AND status = 'not_configured'`
+        );
+      }
+      if (stripeSecret) {
+        await this.db.query(
+          `UPDATE integrations SET status = 'configured', updated_at = NOW()
+           WHERE key = 'stripe' AND status = 'not_configured'`
         );
       }
     } catch (e: any) {
@@ -155,14 +175,18 @@ export class PaymentService {
   }
 
   private resolve(name: ProviderName): PaymentProvider {
-    return name === 'paystack' ? this.paystack : this.flutterwave;
+    if (name === 'paystack') return this.paystack;
+    if (name === 'stripe') return this.stripe;
+    return this.flutterwave;
   }
 
   validateCurrency(provider: ProviderName, currency: string): void {
     const allowed =
       provider === 'paystack'
         ? (PAYSTACK_CURRENCIES as readonly string[])
-        : (FLUTTERWAVE_CURRENCIES as readonly string[]);
+        : provider === 'stripe'
+          ? (STRIPE_CURRENCIES as readonly string[])
+          : (FLUTTERWAVE_CURRENCIES as readonly string[]);
     if (!allowed.includes(currency.toUpperCase())) {
       throw new Error(
         `Currency ${currency} is not supported by ${provider}`
@@ -279,6 +303,10 @@ export class PaymentService {
 
   async handleFlutterwaveWebhook(payload: unknown, signature: string) {
     await this.flutterwave.handleWebhook(payload, signature);
+  }
+
+  async handleStripeWebhook(payload: unknown, signature: string) {
+    await this.stripe.handleWebhook(payload, signature);
   }
 
   private async markPaymentCompleted(reference: string, data: any) {

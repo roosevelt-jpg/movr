@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import DataTable, { DataTableColumn } from '../components/DataTable';
+import { formatCountryLabel } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -74,7 +75,7 @@ export default function MerchantsOversightPage() {
         <span style={{ textTransform: 'capitalize' }}>{r.kyc}</span>
       ),
     },
-    { key: 'country', header: 'Country' },
+    { key: 'country', header: 'Country', render: (r) => formatCountryLabel(r.country) },
     { key: 'joined', header: 'Joined' },
     {
       key: 'id',

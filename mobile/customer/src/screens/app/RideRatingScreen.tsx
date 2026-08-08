@@ -4,7 +4,6 @@ import { spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const DEMO_RIDE = 'f3000000-0000-4000-8000-0000000000a9';
 const TIP_PRESETS = [100, 200, 500];
 
 function authHeaders(): Record<string, string> {
@@ -19,8 +18,8 @@ function authHeaders(): Record<string, string> {
 
 /** Arrival receipt + rate + tip + DVT earned (mockup). */
 export default function RideRatingScreen({
-  rideId = DEMO_RIDE,
-  driverName = 'Emeka',
+  rideId,
+  driverName = '',
   onDone,
 }: {
   rideId?: string;
@@ -28,45 +27,53 @@ export default function RideRatingScreen({
   onDone?: () => void;
 }) {
   const [name, setName] = useState(driverName);
-  const [rating, setRating] = useState(4);
-  const [tip, setTip] = useState<number | 'custom'>(200);
+  const [rating, setRating] = useState(0);
+  const [tip, setTip] = useState<number | 'custom'>(0);
   const [customTip, setCustomTip] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingReceipt, setLoadingReceipt] = useState(true);
+  const [receiptLoaded, setReceiptLoaded] = useState(false);
   const [msg, setMsg] = useState('');
   const [receipt, setReceipt] = useState({
-    destination: 'Lekki Phase 1',
-    durationMinutes: 18,
-    distanceKm: 8.4,
-    baseFare: 900,
-    distanceFare: 240,
-    dvtDiscount: 60,
-    totalPaid: 1080,
-    dvtEarned: 120,
+    destination: '',
+    durationMinutes: 0,
+    distanceKm: 0,
+    baseFare: 0,
+    distanceFare: 0,
+    dvtDiscount: 0,
+    totalPaid: 0,
+    dvtEarned: 0,
     currency: 'NGN',
   });
 
   useEffect(() => {
-    if (!rideId) return;
+    if (!rideId) {
+      setLoadingReceipt(false);
+      setMsg('Ride not found');
+      return;
+    }
     fetch(`${API}/rides/${rideId}/receipt`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data;
         if (!d) return;
         setReceipt({
-          destination: d.destination || 'Lekki Phase 1',
-          durationMinutes: Number(d.durationMinutes || 18),
-          distanceKm: Number(d.distanceKm || 8.4),
-          baseFare: Number(d.baseFare || 900),
-          distanceFare: Number(d.distanceFare || 240),
-          dvtDiscount: Number(d.dvtDiscount || 60),
-          totalPaid: Number(d.totalPaid || 1080),
-          dvtEarned: Number(d.dvtEarned || 120),
+          destination: d.destination || '',
+          durationMinutes: Number(d.durationMinutes || 0),
+          distanceKm: Number(d.distanceKm || 0),
+          baseFare: Number(d.baseFare || 0),
+          distanceFare: Number(d.distanceFare || 0),
+          dvtDiscount: Number(d.dvtDiscount || 0),
+          totalPaid: Number(d.totalPaid || 0),
+          dvtEarned: Number(d.dvtEarned || 0),
           currency: d.currency || 'NGN',
         });
+        setReceiptLoaded(true);
         if (d.driverFirstName) setName(d.driverFirstName);
       })
-      .catch(() => undefined);
+      .catch((e) => setMsg(e?.message || 'Could not load receipt'))
+      .finally(() => setLoadingReceipt(false));
     fetch(`${API}/rides/${rideId}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -107,6 +114,22 @@ export default function RideRatingScreen({
   };
 
   const c = receipt.currency;
+
+  if (loadingReceipt) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.msg}>Loading receipt…</Text>
+      </View>
+    );
+  }
+
+  if (!receiptLoaded) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.msg}>{msg || 'Receipt not found'}</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>

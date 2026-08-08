@@ -13,13 +13,25 @@ publicLocalizeRouter.get('/countries', async (_req: Request, res: Response) => {
     const rows = await localization.listCountries();
     res.json({
       status: 'success',
-      data: rows.map((c: any) => ({
-        code: c.code,
-        name: c.name,
-        currencyCode: c.currency_code,
-        dialCode: c.dial_code,
-        emergencyNumber: c.emergency_number,
-      })),
+      data: rows.map((c: any) => {
+        const code = String(c.code || '').toUpperCase();
+        const flag =
+          /^[A-Z]{2}$/.test(code)
+            ? String.fromCodePoint(
+                0x1f1e6 + code.charCodeAt(0) - 65,
+                0x1f1e6 + code.charCodeAt(1) - 65
+              )
+            : '';
+        return {
+          code,
+          name: c.name,
+          flag,
+          label: flag ? `${flag} ${c.name}` : c.name,
+          currencyCode: c.currency_code,
+          dialCode: c.dial_code,
+          emergencyNumber: c.emergency_number,
+        };
+      }),
     });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });

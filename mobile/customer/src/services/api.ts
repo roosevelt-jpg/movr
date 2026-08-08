@@ -31,6 +31,14 @@ export const cartApi = {
   updateItem: (id: string, quantity: number) => api.patch(`/cart/items/${id}`, { quantity }),
   removeItem: (id: string) => api.delete(`/cart/items/${id}`),
   checkout: (data: any) => api.post('/cart/checkout', data),
+  wishlist: () => api.get('/cart/wishlist'),
+};
+
+export const productsApi = {
+  search: (params?: Record<string, unknown>) => api.get('/products', { params }),
+  get: (id: string) => api.get(`/products/${id}`),
+  reviews: (id: string) => api.get(`/products/${id}/reviews`),
+  createReview: (id: string, data: any) => api.post(`/products/${id}/reviews`, data),
 };
 
 export const ordersApi = {

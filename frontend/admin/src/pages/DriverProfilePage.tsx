@@ -159,7 +159,7 @@ export default function DriverProfilePage() {
 
       {error ? <p style={styles.error}>{error}</p> : null}
 
-      <div style={styles.layout}>
+      <div style={styles.layout} data-admin-grid="profile" className="admin-split-grid">
         <div style={styles.leftCol}>
           <div style={styles.card}>
             <div style={styles.avatarLg}>{data.initials || 'D'}</div>
@@ -277,6 +277,7 @@ export default function DriverProfilePage() {
 
           <div style={styles.tableWrap}>
             <h3 style={{ ...styles.sectionTitle, padding: '16px 14px 0' }}>Recent trips</h3>
+            <div className="admin-table-scroll">
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -315,6 +316,7 @@ export default function DriverProfilePage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           <div style={styles.footerActions}>

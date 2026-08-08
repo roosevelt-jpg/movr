@@ -115,9 +115,9 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
-      <header className="flex items-center justify-between px-6 py-4">
-        <div className="text-xl font-bold tracking-tight">Movr</div>
-        <div className="flex gap-2">
+      <header className="flex flex-wrap items-center gap-3 px-4 py-4 sm:flex-nowrap sm:justify-between sm:px-6">
+        <div className="shrink-0 text-lg font-bold tracking-tight sm:text-xl">Movr</div>
+        <div className="order-3 flex w-full gap-2 overflow-x-auto sm:order-none sm:w-auto">
           {SHORTCUTS.map((s) => (
             <button
               key={s.id}
@@ -126,7 +126,7 @@ const DashboardPage: React.FC = () => {
                 if (s.id === 'Home' || s.id === 'Work') applySaved(s.id);
                 else navigate('/history');
               }}
-              className="inline-flex items-center gap-2 rounded-full bg-[#1A1A1A] px-4 py-2 text-sm text-zinc-300 hover:text-white"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#1A1A1A] px-3 py-2 text-xs text-zinc-300 hover:text-white sm:px-4 sm:text-sm"
             >
               <s.icon size={14} /> {s.id}
             </button>
@@ -152,8 +152,8 @@ const DashboardPage: React.FC = () => {
                   onClick={() => {
                     setActiveModule(m.id);
                     if (m.id === 'Shop') navigate('/marketplace');
-                    if (m.id === 'Deliver') toast('Parcel delivery — switch to the Parcel tab in mobile');
-                    if (m.id === 'Rentals') toast('Rentals coming soon');
+                    if (m.id === 'Deliver') navigate('/explore');
+                    if (m.id === 'Rentals') navigate('/rentals');
                   }}
                   className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold ${
                     active

@@ -144,7 +144,7 @@ export default function TokensManagementPage() {
       {error ? <p style={styles.error}>{error}</p> : null}
       {message ? <p style={styles.message}>{message}</p> : null}
 
-      <div style={styles.cards}>
+      <div style={styles.cards} className="admin-kpi-grid" data-admin-grid="kpi">
         {cards.map((c) => (
           <div key={c.label} style={styles.card}>
             <div style={styles.label}>{c.label}</div>
@@ -154,7 +154,7 @@ export default function TokensManagementPage() {
         ))}
       </div>
 
-      <div style={styles.midRow}>
+      <div style={styles.midRow} className="admin-split-grid" data-admin-grid="split">
         <div style={styles.panel}>
           <div style={styles.panelHead}>
             <h2 style={styles.panelTitle}>Token Distribution</h2>
@@ -207,6 +207,7 @@ export default function TokensManagementPage() {
 
       <div style={styles.panel}>
         <h2 style={styles.panelTitle}>Recent Claims</h2>
+        <div className="admin-table-scroll">
         <table style={styles.table}>
           <thead>
             <tr>
@@ -247,6 +248,7 @@ export default function TokensManagementPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </AdminShell>
   );

@@ -67,6 +67,16 @@ async function main() {
     ['admin@movr.app', '+233200000001', hash]
   );
 
+  await pool
+    .query(
+      `INSERT INTO admin_roles (user_id, role)
+       SELECT id, v.role
+       FROM users, (VALUES ('super_admin'), ('trust_and_safety'), ('ops')) AS v(role)
+       WHERE lower(email) = 'admin@movr.app'
+       ON CONFLICT DO NOTHING`
+    )
+    .catch(() => undefined);
+
   for (const f of FLAGS) {
     await pool.query(
       `INSERT INTO feature_flags (key, enabled, rollout_pct, metadata, updated_at)

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useCmsPage } from '../../services/cms';
 import { CmsSections } from '../../cms/sections';
+import { CmsUnavailable } from '../../cms/CmsUnavailable';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -13,40 +14,19 @@ type Doc = {
   sections: Section[];
 };
 
-const TERMS_FALLBACK: Doc = {
-  title: 'Terms of Service',
-  updated_label: 'Last updated July 2026',
-  sections: [
-    {
-      section_number: 1,
-      title: 'Introduction',
-      body: 'these terms govern your use of the Movr platform across ride, shop, deliver, and rental services.',
-    },
-    {
-      section_number: 2,
-      title: 'Eligibility',
-      body: 'you must be verified to use certain features including payments and driving.',
-    },
-    {
-      section_number: 3,
-      title: 'Payments',
-      body: 'transactions are processed through our payment partners in accordance with local regulations.',
-    },
-  ],
-};
-
-/** Terms / Privacy — prefer CMS page, then legal_documents API. */
+/** Terms / Privacy — CMS first, then live legal_documents API (no hardcoded legal copy). */
 export default function TermsPage() {
   const location = useLocation();
   const slug = location.pathname.includes('privacy') ? 'privacy' : 'terms';
   const { page, loading: cmsLoading } = useCmsPage(slug);
-  const [doc, setDoc] = useState<Doc>(
-    slug === 'terms' ? TERMS_FALLBACK : { ...TERMS_FALLBACK, title: 'Privacy Policy', sections: [] }
-  );
+  const [doc, setDoc] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setLoading(true);
+    setError('');
+    setDoc(null);
     fetch(`${API}/public/legal/${slug}`)
       .then((r) => r.json())
       .then((body) => {
@@ -58,7 +38,7 @@ export default function TermsPage() {
           });
         }
       })
-      .catch(() => undefined)
+      .catch(() => setError('Could not load legal document'))
       .finally(() => setLoading(false));
   }, [slug]);
 
@@ -75,6 +55,15 @@ export default function TermsPage() {
       <div className="bg-surface text-text-primary">
         <CmsSections sections={page.sections} pageSlug={slug} />
       </div>
+    );
+  }
+
+  if (!doc?.sections?.length) {
+    return (
+      <CmsUnavailable
+        title={slug === 'privacy' ? 'Privacy policy unpublished' : 'Terms unpublished'}
+        message={error || 'Publish this page in CMS or add a legal document via the API.'}
+      />
     );
   }
 

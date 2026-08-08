@@ -13,30 +13,26 @@ function authHeaders() {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-/** Live order tracking (mockup). */
+/** Live order tracking. */
 export default function OrderTrackingPage() {
   const { id } = useParams();
-  const [orderRef, setOrderRef] = useState('MVR-20480');
-  const [statusLabel, setStatusLabel] = useState('Preparing');
-  const [eta, setEta] = useState('Courier is 8 min away');
-  const [courier, setCourier] = useState({
-    name: 'Tunde Adeyemi',
-    role: 'Movr Courier',
-    rating: 4.7,
-    phone: '',
-  });
-  const [timeline, setTimeline] = useState<any[]>([
-    { key: 'confirmed', label: 'Order confirmed', done: true },
-    { key: 'preparing', label: 'Restaurant preparing', icon: '🍳', active: true },
-    { key: 'pickup', label: 'Courier picking up' },
-    { key: 'delivered', label: 'Delivered' },
-  ]);
-  const [itemCount, setItemCount] = useState(2);
-  const [total, setTotal] = useState(8100);
+  const [orderRef, setOrderRef] = useState('');
+  const [statusLabel, setStatusLabel] = useState('');
+  const [eta, setEta] = useState('');
+  const [courier, setCourier] = useState<any>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [itemCount, setItemCount] = useState(0);
+  const [total, setTotal] = useState(0);
   const [currency, setCurrency] = useState('NGN');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id || String(id).startsWith('demo-')) return;
+    if (!id) {
+      setError('Order not found');
+      setLoading(false);
+      return;
+    }
     fetch(`${API}/orders/${id}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((j) => {
@@ -48,21 +44,24 @@ export default function OrderTrackingPage() {
         if (o.courier) {
           setCourier({
             name: o.courier.name,
-            role: o.courier.role || 'Movr Courier',
-            rating: Number(o.courier.rating || 4.7),
+            role: o.courier.role || '',
+            rating: Number(o.courier.rating || 0),
             phone: o.courier.phone || '',
           });
         }
         if (Array.isArray(o.timeline)) setTimeline(o.timeline);
-        setItemCount(Number(o.item_count || o.items?.length || 2));
-        setTotal(Number(o.total || 8100));
+        setItemCount(Number(o.item_count || o.items?.length || 0));
+        setTotal(Number(o.total || 0));
         setCurrency(o.currency || 'NGN');
       })
-      .catch(() => undefined);
+      .catch(() => setError('Could not load order'))
+      .finally(() => setLoading(false));
   }, [id]);
 
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto" data-force-dark>
+      {loading ? <p className="p-5 text-zinc-400">Loading order…</p> : null}
+      {error ? <p className="p-5 text-red-400">{error}</p> : null}
       <div className="relative h-52 bg-[#0c0c12] border-b border-zinc-800">
         <div
           className="absolute inset-0 opacity-30"
@@ -89,7 +88,7 @@ export default function OrderTrackingPage() {
           </span>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-4 flex items-center gap-3">
+        {courier ? <div className="rounded-2xl bg-zinc-900 p-4 flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-xl">🛵</div>
           <div className="flex-1">
             <p className="font-bold">{courier.name}</p>
@@ -102,7 +101,7 @@ export default function OrderTrackingPage() {
           <button type="button" className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
             <MessageCircle size={16} />
           </button>
-        </div>
+        </div> : null}
 
         <ol className="space-y-0 pl-1">
           {timeline.map((step: any, i: number) => (
@@ -135,6 +134,37 @@ export default function OrderTrackingPage() {
           <Link to={`/orders/${id}/confirmed`} className="text-purple-400 font-bold text-sm">
             Details
           </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            to="/marketplace"
+            className="rounded-xl border border-zinc-700 py-3 text-center text-sm font-bold"
+          >
+            Rate products
+          </Link>
+          <button
+            type="button"
+            className="rounded-xl bg-zinc-800 py-3 text-sm font-bold"
+            onClick={async () => {
+              const reason = window.prompt('Why are you returning this order?');
+              if (!reason?.trim()) return;
+              try {
+                const r = await fetch(`${API}/orders/${id}/returns`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                  body: JSON.stringify({ reason }),
+                });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j?.message || 'Return failed');
+                alert('Return requested');
+              } catch (e: any) {
+                alert(e.message || 'Could not request return');
+              }
+            }}
+          >
+            Request return
+          </button>
         </div>
       </div>
     </div>

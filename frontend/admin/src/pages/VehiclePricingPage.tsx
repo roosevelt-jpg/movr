@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, formatCountryLabel } from '../lib/currency';
 import { adminBtn } from '../styles/adminButtons';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
@@ -141,7 +141,7 @@ export default function VehiclePricingPage() {
   return (
     <AdminShell activeLabel="Vehicle pricing">
       <div style={styles.header}>
-        <h1 style={styles.h1}>Vehicle types & pricing · Ghana</h1>
+        <h1 style={styles.h1}>Vehicle types & pricing · {formatCountryLabel('GH')}</h1>
         <button
           type="button"
           style={styles.addBtn}
@@ -275,7 +275,7 @@ const styles: Record<string, React.CSSProperties> = {
   addBtn: { ...adminBtn.primary },
   tableWrap: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflowX: 'auto',
     background: '#0a0a0a',
   },
   thead: {
