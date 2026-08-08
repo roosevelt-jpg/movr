@@ -546,19 +546,55 @@ driverRouter.post(
         .query(`SELECT * FROM driver_payout_methods WHERE user_id = $1 LIMIT 1`, [driverId])
         .catch(() => ({ rows: [] }));
 
+      const rail = await db
+        .query(
+          `SELECT * FROM wallet_rail_methods WHERE user_id = $1
+           ORDER BY is_default DESC, updated_at DESC LIMIT 1`,
+          [driverId]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+
+      const reference = `WD-${Date.now()}`;
+      const accountNumber = rail.rows[0]?.account_number || method.rows[0]?.account_number;
+      const bankCode =
+        rail.rows[0]?.metadata?.bankCode ||
+        (String(method.rows[0]?.provider || channel).toLowerCase().includes('mtn') ? 'MTN' : 'MTN');
+
+      let transfer: any = { success: false, reference };
+      if (accountNumber) {
+        try {
+          transfer = await payments.initializeTransfer({
+            amount,
+            currency,
+            recipient: {
+              accountNumber: String(accountNumber),
+              bankCode,
+              accountBank: bankCode,
+            },
+            reference,
+            narration: 'Movr driver payout',
+            countryCode: 'GH',
+          });
+        } catch (e: any) {
+          transfer = { success: false, reference, error: e.message };
+        }
+      }
+
       const payout = await db.query(
         `INSERT INTO payouts (driver_id, amount, currency, status, reference_id, bank_account)
-         VALUES ($1, $2, $3, 'pending', $4, $5)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [
           driverId,
           amount,
           currency,
-          `WD-${Date.now()}`,
+          transfer.success ? 'processing' : 'pending',
+          reference,
           JSON.stringify({
             channel,
             provider: method.rows[0]?.provider || channel,
-            mask: method.rows[0]?.account_mask || null,
+            mask: method.rows[0]?.account_mask || rail.rows[0]?.account_mask || null,
+            transferSuccess: Boolean(transfer.success),
           }),
         ]
       );
@@ -571,10 +607,27 @@ driverRouter.post(
         );
       }
 
+      try {
+        const { TrustSettlementService } = require('../services/trust-settlement.service');
+        await new TrustSettlementService(db).createReceipt(driverId, {
+          kind: 'driver_payout',
+          amount,
+          currency,
+          channel: 'momo',
+          counterparty: channel,
+          status: transfer.success ? 'processing' : 'pending',
+          metadata: { reference, payoutId: payout.rows[0]?.id },
+        });
+      } catch {
+        /* optional */
+      }
+
       res.status(201).json({
         status: 'success',
-        message: 'Withdrawal requested — usually arrives in minutes via MoMo',
-        data: payout.rows[0],
+        message: transfer.success
+          ? 'Withdrawal sent — usually arrives in minutes via MoMo'
+          : 'Withdrawal queued — complete MoMo rail if payout is delayed',
+        data: { ...payout.rows[0], transfer },
       });
     } catch (error: any) {
       const msg = String(error.message || '');

@@ -31,6 +31,14 @@ const CartPage: React.FC = () => {
   const [currency, setCurrency] = useState('NGN');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [promise, setPromise] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+  }, []);
 
   const quote = async () => {
     if (!storeId) {
@@ -187,6 +195,10 @@ const CartPage: React.FC = () => {
           <span className="font-extrabold">{formatCurrency(total, currency)}</span>
         </div>
       </div>
+
+      {promise?.buyerProtectionNote ? (
+        <p className="mb-4 text-xs text-emerald-400/90 leading-relaxed">{promise.buyerProtectionNote}</p>
+      ) : null}
 
       <button
         type="button"

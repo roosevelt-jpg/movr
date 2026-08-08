@@ -191,6 +191,14 @@ const WithdrawPage: React.FC = () => {
       </div>
 
       {kycMsg ? <p className="text-center text-amber-400 mb-3 text-sm">{kycMsg}</p> : null}
+      {kycMsg ? (
+        <p className="text-center text-xs text-zinc-500 mb-3">
+          Complete verification to unlock large payouts →{' '}
+          <Link to="/safety" className="text-violet-400 font-semibold">
+            Safety / verify
+          </Link>
+        </p>
+      ) : null}
       {msg ? <p className="text-center text-purple-300 mb-3 text-sm">{msg}</p> : null}
 
       <button

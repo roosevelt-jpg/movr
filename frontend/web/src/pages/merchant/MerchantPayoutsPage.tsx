@@ -233,13 +233,21 @@ export default function MerchantPayoutsPage() {
 
         <div className="sticky bottom-0 mt-8 border-t border-zinc-900 bg-black/95 p-4">
           <div className="mx-auto max-w-lg">
-            {kycMsg ? <p className="mb-2 text-center text-sm text-amber-400">{kycMsg}</p> : null}
-            <button
-              type="button"
-              disabled={busy || summary.available <= 0 || Boolean(kycMsg)}
-              onClick={requestPayout}
-              className="w-full rounded-full bg-gradient-to-r from-blue-500 to-violet-600 py-3.5 font-bold disabled:opacity-40"
-            >
+        {kycMsg ? <p className="mb-2 text-center text-sm text-amber-400">{kycMsg}</p> : null}
+        {kycMsg ? (
+          <p className="mb-2 text-center text-xs text-zinc-500">
+            <a href="/merchant/onboarding" className="text-violet-400 font-semibold">
+              Complete merchant KYC
+            </a>{' '}
+            to unlock payouts above the threshold.
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={busy || summary.available <= 0 || Boolean(kycMsg)}
+          onClick={requestPayout}
+          className="w-full rounded-full bg-gradient-to-r from-blue-500 to-violet-600 py-3.5 font-bold disabled:opacity-40"
+        >
               {busy ? 'Requesting…' : `Request Payout · ${formatMoney(summary.available)}`}
             </button>
           </div>

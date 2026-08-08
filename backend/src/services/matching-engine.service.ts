@@ -432,9 +432,16 @@ export class MatchingEngineService {
 
     if (driverId && taskType === 'ride') {
       await this.db.query(
-        `UPDATE rides SET driver_id = $1, status = 'accepted', updated_at = NOW() WHERE id = $2`,
+        `UPDATE rides SET driver_id = $1, status = 'accepted', updated_at = NOW(),
+           accepted_at = COALESCE(accepted_at, NOW()) WHERE id = $2`,
         [driverId, taskId]
       );
+      try {
+        const { TrustSettlementService } = require('./trust-settlement.service');
+        await new TrustSettlementService(this.db).onRideAccepted(taskId);
+      } catch {
+        /* SLA credit non-blocking */
+      }
     }
 
     this.logger.info('assignNearestDriver', {
@@ -566,10 +573,18 @@ export class MatchingEngineService {
     try {
       const query = `
         UPDATE rides 
-        SET driver_id = $1, status = 'accepted'
+        SET driver_id = $1, status = 'accepted', updated_at = NOW(),
+            accepted_at = COALESCE(accepted_at, NOW())
         WHERE id = $2
       `;
       await this.db.query(query, [driverId, rideId]);
+
+      try {
+        const { TrustSettlementService } = require('./trust-settlement.service');
+        await new TrustSettlementService(this.db).onRideAccepted(rideId);
+      } catch {
+        /* SLA credit non-blocking */
+      }
 
       // Update counters
       await this.redis.incrementCounter('active:rides');

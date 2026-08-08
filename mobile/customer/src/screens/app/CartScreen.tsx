@@ -49,6 +49,14 @@ export default function CartScreen({
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingCart, setLoadingCart] = useState(true);
+  const [promise, setPromise] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+  }, []);
 
   const refreshQuote = async (nextItems?: CartItem[], code?: string) => {
     const list = nextItems || items;
@@ -264,6 +272,11 @@ export default function CartScreen({
       </View>
 
       {message ? <Text style={styles.msg}>{message}</Text> : null}
+      {promise?.buyerProtectionNote ? (
+        <Text style={{ color: '#6ee7b7', fontSize: 12, marginBottom: 10, lineHeight: 18 }}>
+          {promise.buyerProtectionNote}
+        </Text>
+      ) : null}
 
       <Pressable style={styles.cta} onPress={checkout} disabled={loading || items.length === 0}>
         <View style={styles.ctaA} />

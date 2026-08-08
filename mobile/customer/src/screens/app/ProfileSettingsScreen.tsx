@@ -31,6 +31,7 @@ export default function ProfileSettingsScreen({
   onSettings,
   onDeals,
   onWishlist,
+  onMerchantPayouts,
 }: {
   onSignOut?: () => void;
   onEditProfile?: () => void;
@@ -47,6 +48,7 @@ export default function ProfileSettingsScreen({
   onSettings?: () => void;
   onDeals?: () => void;
   onWishlist?: () => void;
+  onMerchantPayouts?: () => void;
 }) {
   const [name, setName] = useState('Kwame Asante');
   const [initials, setInitials] = useState('KA');
@@ -175,6 +177,7 @@ export default function ProfileSettingsScreen({
       <Text style={styles.section}>ACTIVITY</Text>
       <View style={styles.group}>
         <Row icon="♡" iconColor="#F472B6" label="Wishlist" onPress={onWishlist} />
+        <Row icon="🏦" iconColor="#34D399" label="Merchant payouts" onPress={onMerchantPayouts} />
         <Row icon="📋" iconColor="#60A5FA" label="Activity History" onPress={onHistory} />
         <Row icon="🛡" iconColor="#EF4444" label="Safety Center" onPress={onSafety} />
       </View>

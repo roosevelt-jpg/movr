@@ -34,6 +34,18 @@ const DashboardPage: React.FC = () => {
     longitude: number;
   } | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
+  const [promise, setPromise] = useState<any>(null);
+
+  useEffect(() => {
+    const API =
+      (import.meta as any).env?.VITE_API_URL ||
+      process.env.REACT_APP_API_URL ||
+      'http://localhost:3000/api/v1';
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+  }, []);
 
   const { data: addressesData } = useQuery('saved-addresses', () => walletApi.getAddresses());
 
@@ -202,6 +214,11 @@ const DashboardPage: React.FC = () => {
             >
               {isRequesting ? 'Requesting...' : 'Confirm pickup'}
             </button>
+            {promise ? (
+              <p className="text-[11px] text-zinc-500 leading-relaxed px-1">
+                {promise.matchSlaText} · {promise.noShowText} · {promise.keep100Note}
+              </p>
+            ) : null}
           </div>
         </aside>
 

@@ -124,8 +124,8 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
         const { TrustSettlementService } = require('../services/trust-settlement.service');
         const trust = new TrustSettlementService(db);
         reliability = await trust.compensateNoShow(userId, id, 'Driver no-show on cancel');
-      } catch {
-        /* non-blocking */
+      } catch (e: any) {
+        reliability = { error: e.message };
       }
     }
 

@@ -47,6 +47,14 @@ type TrustSos = {
   ride_id?: string;
   created_at?: string;
   customer_name?: string;
+  customer_phone?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  mapUrl?: string;
+  pickup_address?: string;
+  runbook?: string[];
+  emergencyContacts?: { contact_name?: string; phone_number?: string; relationship?: string }[];
+  notes?: string;
 };
 
 type TrustDispute = {
@@ -260,10 +268,11 @@ export default function DispatcherPanelPage() {
   };
 
   const resolveSos = async (id: string) => {
+    const note = window.prompt('Resolution notes (optional)') || 'Resolved from dispatcher';
     try {
       await axios.patch(
         `${API}/admin/trust/sos/${id}/resolve`,
-        { note: 'Resolved from dispatcher' },
+        { note },
         { headers: headers() }
       );
       setMessage('SOS resolved');
@@ -274,13 +283,23 @@ export default function DispatcherPanelPage() {
   };
 
   const patchDispute = async (id: string, status: string) => {
+    let refundAmount: number | undefined;
+    if (status === 'resolved') {
+      const raw = window.prompt('Refund amount to credit (0 for none)', '0');
+      if (raw == null) return;
+      refundAmount = Number(raw) || 0;
+    }
     try {
       await axios.patch(
         `${API}/admin/trust/disputes/${id}`,
-        { status },
+        { status, refundAmount, opsNote: status === 'resolved' ? 'Resolved from dispatcher' : undefined },
         { headers: headers() }
       );
-      setMessage(`Dispute marked ${status}`);
+      setMessage(
+        status === 'resolved' && refundAmount
+          ? `Dispute resolved · refund ${refundAmount}`
+          : `Dispute marked ${status}`
+      );
       await loadTrust();
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Dispute update failed');
@@ -655,19 +674,63 @@ export default function DispatcherPanelPage() {
                   </tr>
                 ) : (
                   trustSos.map((s) => (
-                    <tr key={s.id}>
-                      <td style={styles.td}>{s.customer_name || '—'}</td>
-                      <td style={styles.td}>{s.triggered_by || '—'}</td>
-                      <td style={styles.td}>{s.ride_id ? String(s.ride_id).slice(0, 8) : '—'}</td>
-                      <td style={styles.td}>
-                        {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
-                      </td>
-                      <td style={styles.td}>
-                        <button type="button" className="admin-btn" onClick={() => resolveSos(s.id)}>
-                          Resolve
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={s.id}>
+                      <tr>
+                        <td style={styles.td}>
+                          {s.customer_name || '—'}
+                          {s.customer_phone ? (
+                            <div style={{ fontSize: 11, color: '#a1a1aa' }}>{s.customer_phone}</div>
+                          ) : null}
+                        </td>
+                        <td style={styles.td}>{s.triggered_by || '—'}</td>
+                        <td style={styles.td}>
+                          {s.ride_id ? String(s.ride_id).slice(0, 8) : '—'}
+                          {s.pickup_address ? (
+                            <div style={{ fontSize: 11, color: '#a1a1aa' }}>{s.pickup_address}</div>
+                          ) : null}
+                        </td>
+                        <td style={styles.td}>
+                          {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                        </td>
+                        <td style={styles.td}>
+                          {s.mapUrl ? (
+                            <a
+                              href={s.mapUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ marginRight: 8, color: '#93c5fd' }}
+                            >
+                              Map
+                            </a>
+                          ) : null}
+                          <button type="button" className="admin-btn" onClick={() => resolveSos(s.id)}>
+                            Resolve
+                          </button>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: '#a1a1aa' }}>
+                          <strong style={{ color: '#fca5a5' }}>Runbook:</strong>{' '}
+                          {(s.runbook || []).join(' · ')}
+                          {s.emergencyContacts?.length ? (
+                            <div style={{ marginTop: 4 }}>
+                              Contacts:{' '}
+                              {s.emergencyContacts
+                                .map(
+                                  (c) =>
+                                    `${c.contact_name || 'Contact'} ${c.phone_number || ''}`
+                                )
+                                .join(' · ')}
+                            </div>
+                          ) : null}
+                          {s.driver_name ? (
+                            <div>
+                              Driver: {s.driver_name} {s.driver_phone || ''}
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   ))
                 )}
               </tbody>

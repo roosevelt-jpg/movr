@@ -210,6 +210,11 @@ export default function WithdrawEarningsScreen() {
       )}
 
       {kycMsg ? <Text style={[styles.msg, { color: '#fbbf24' }]}>{kycMsg}</Text> : null}
+      {kycMsg ? (
+        <Text style={{ color: '#a78bfa', marginBottom: 8, fontSize: 12 }}>
+          Complete driver verification to unlock large payouts.
+        </Text>
+      ) : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
       <Pressable

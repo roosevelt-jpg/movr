@@ -24,6 +24,7 @@ export default function SettlementHubPage() {
   const [amount, setAmount] = useState('1000');
   const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '' });
   const [dispute, setDispute] = useState({ domain: 'wallet', reason: '' });
+  const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -85,6 +86,26 @@ export default function SettlementHubPage() {
     const j = await res.json();
     setMsg(res.ok ? 'Dispute opened' : j.message || 'Failed');
     setDispute({ domain: 'wallet', reason: '' });
+    await load();
+  };
+
+  const confirmAgentCode = async () => {
+    const res = await fetch(`${API}/trust/cash-agent/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ code: confirmCode }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? j.data?.credited
+          ? 'Deposit credited'
+          : j.data?.collected
+            ? 'Pickup confirmed'
+            : 'Confirmed'
+        : j.message || 'Invalid code'
+    );
+    setConfirmCode('');
     await load();
   };
 
@@ -183,6 +204,16 @@ export default function SettlementHubPage() {
             Withdraw cash
           </button>
         </div>
+        <p className="text-xs text-zinc-500">Deposits credit only after the agent confirms your code.</p>
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          placeholder="Agent confirmation code"
+          value={confirmCode}
+          onChange={(e) => setConfirmCode(e.target.value)}
+        />
+        <button type="button" onClick={confirmAgentCode} className="rounded-xl bg-zinc-800 px-4 py-2 font-bold">
+          Confirm agent code
+        </button>
       </section>
 
       <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-white space-y-3">

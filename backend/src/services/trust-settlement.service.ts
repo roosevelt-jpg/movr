@@ -1,10 +1,26 @@
 import crypto from 'crypto';
 import { DatabaseService } from './database.service';
+import { InboxService } from './inbox.service';
 
 type RailType = 'wallet' | 'momo' | 'bank' | 'cash_agent';
 
 export class TrustSettlementService {
-  constructor(private db: DatabaseService) {}
+  private inbox: InboxService;
+
+  constructor(private db: DatabaseService) {
+    this.inbox = new InboxService(db);
+  }
+
+  private async notify(userId: string, title: string, body: string, deepLink?: string) {
+    await this.inbox
+      .sendInboxMessage(userId, 'system', title, body, deepLink)
+      .catch(() => undefined);
+  }
+
+  private genCode(len = 6) {
+    const n = Math.pow(10, len - 1);
+    return String(Math.floor(n + Math.random() * (9 * n)));
+  }
 
   private async setting(key: string, fallback: string) {
     const row = await this.db
@@ -23,14 +39,24 @@ export class TrustSettlementService {
     const sla = Number(await this.setting('trust_match_sla_seconds', '180'));
     const credit = Number(await this.setting('trust_no_show_credit', '500'));
     const kycThreshold = Number(await this.setting('trust_kyc_payout_threshold', '2000'));
+    const buyerNote = await this.setting(
+      'trust_buyer_protection_note',
+      'Buyer protection: dispute any shop issue from Wallet → Settle within 48h.'
+    );
+    const minWait = Number(await this.setting('trust_no_show_min_wait_seconds', '300'));
     return {
       countryCode: countryCode || 'GH',
       matchSlaSeconds: sla,
       matchSlaText: `Driver match in under ${Math.round(sla / 60)} min`,
       noShowCredit: credit,
-      noShowText: `If your driver no-shows, we credit ${credit} to your wallet automatically.`,
+      noShowMinWaitSeconds: minWait,
+      noShowText: `If your matched driver no-shows after ${Math.round(minWait / 60)} min wait, we credit ${credit} to your wallet.`,
       kycPayoutThreshold: kycThreshold,
+      kycUnlockPath: '/safety',
+      kycUnlockDriver: '/driver/verification',
+      kycUnlockMerchant: '/merchant/onboarding',
       keep100Note: 'Drivers keep 100% of the fare — Movr takes zero from the trip.',
+      buyerProtectionNote: buyerNote.replace(/^"|"$/g, ''),
       rails: ['wallet', 'momo', 'bank', 'cash_agent', 'ussd'],
     };
   }
@@ -209,16 +235,36 @@ export class TrustSettlementService {
     ]);
     if (!agent.rows[0]) throw new Error('Cash agent not found');
 
-    await this.creditWallet(userId, amount, `AGENT-IN-${Date.now()}`, 'topup');
+    const code = this.genCode(6);
     const receipt = await this.createReceipt(userId, {
       kind: 'cash_agent_deposit',
       amount,
       currency: data.currency || 'GHS',
       channel: 'cash_agent',
       counterparty: agent.rows[0].name,
-      metadata: { agentId: data.agentId, city: agent.rows[0].city },
+      status: 'pending_agent_confirm',
+      metadata: {
+        agentId: data.agentId,
+        city: agent.rows[0].city,
+        code,
+        instruction: `Pay cash to ${agent.rows[0].name}. Agent confirms code ${code} to credit your wallet.`,
+      },
     });
-    return { receipt, agent: agent.rows[0], message: 'Cash deposit credited to Movr Wallet' };
+    await this.db
+      .query(`UPDATE settlement_receipts SET confirm_code = $1 WHERE id = $2`, [code, receipt.id])
+      .catch(() => undefined);
+    await this.notify(
+      userId,
+      'Cash deposit pending',
+      `Show code ${code} at ${agent.rows[0].name}. Wallet credits after agent confirms.`,
+      '/wallet/settlement'
+    );
+    return {
+      receipt: { ...receipt, confirm_code: code },
+      agent: agent.rows[0],
+      code,
+      message: `Pending agent confirm — code ${code}`,
+    };
   }
 
   async cashAgentWithdraw(
@@ -246,6 +292,7 @@ export class TrustSettlementService {
       )
       .catch(() => undefined);
 
+    const code = this.genCode(6);
     const receipt = await this.createReceipt(userId, {
       kind: 'cash_agent_withdraw',
       amount,
@@ -255,11 +302,86 @@ export class TrustSettlementService {
       status: 'pending_pickup',
       metadata: {
         agentId: data.agentId,
-        code: String(Math.floor(100000 + Math.random() * 900000)),
+        code,
         instruction: 'Show this code + ID at the agent to collect cash',
       },
     });
-    return { receipt, agent: agent.rows[0], message: 'Withdrawal reserved — collect at agent' };
+    await this.db
+      .query(`UPDATE settlement_receipts SET confirm_code = $1 WHERE id = $2`, [code, receipt.id])
+      .catch(() => undefined);
+    await this.notify(
+      userId,
+      'Cash pickup ready',
+      `Collect ${amount} at ${agent.rows[0].name} with code ${code}.`,
+      '/wallet/settlement'
+    );
+    return {
+      receipt: { ...receipt, confirm_code: code },
+      agent: agent.rows[0],
+      code,
+      message: `Withdrawal reserved — collect with code ${code}`,
+    };
+  }
+
+  /** Agent or ops confirms deposit/pickup code → credit (deposit) or complete (withdraw). */
+  async confirmCashAgentCode(code: string, opts?: { agentPhone?: string }) {
+    const c = String(code || '').trim();
+    if (!c) throw new Error('Confirmation code required');
+    const row = await this.db.query(
+      `SELECT * FROM settlement_receipts
+       WHERE confirm_code = $1
+          OR metadata->>'code' = $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [c]
+    );
+    const receipt = row.rows[0];
+    if (!receipt) throw new Error('Invalid or expired code');
+    if (['completed', 'collected'].includes(String(receipt.status))) {
+      return { alreadyCompleted: true, receipt };
+    }
+
+    if (receipt.kind === 'cash_agent_deposit' && receipt.status === 'pending_agent_confirm') {
+      await this.creditWallet(
+        receipt.user_id,
+        Number(receipt.amount),
+        `AGENT-IN-${receipt.reference}`,
+        'topup'
+      );
+      const updated = await this.db.query(
+        `UPDATE settlement_receipts SET status = 'completed',
+           metadata = COALESCE(metadata,'{}'::jsonb) || $2::jsonb
+         WHERE id = $1 RETURNING *`,
+        [
+          receipt.id,
+          JSON.stringify({ confirmedAt: new Date().toISOString(), agentPhone: opts?.agentPhone || null }),
+        ]
+      );
+      await this.notify(
+        receipt.user_id,
+        'Cash deposit credited',
+        `${receipt.amount} added to your Movr Wallet.`,
+        '/wallet'
+      );
+      return { receipt: updated.rows[0], credited: true };
+    }
+
+    if (receipt.kind === 'cash_agent_withdraw' && receipt.status === 'pending_pickup') {
+      const updated = await this.db.query(
+        `UPDATE settlement_receipts SET status = 'collected',
+           metadata = COALESCE(metadata,'{}'::jsonb) || $2::jsonb
+         WHERE id = $1 RETURNING *`,
+        [receipt.id, JSON.stringify({ collectedAt: new Date().toISOString() })]
+      );
+      await this.notify(
+        receipt.user_id,
+        'Cash collected',
+        `Pickup of ${receipt.amount} marked complete.`,
+        '/wallet/settlement'
+      );
+      return { receipt: updated.rows[0], collected: true };
+    }
+
+    throw new Error(`Cannot confirm receipt in status ${receipt.status}`);
   }
 
   async listReceipts(userId: string) {
@@ -333,36 +455,93 @@ export class TrustSettlementService {
 
   async compensateNoShow(userId: string, rideId?: string, note?: string) {
     const credit = Number(await this.setting('trust_no_show_credit', '500'));
-    if (rideId) {
-      const existing = await this.db.query(
-        `SELECT id FROM reliability_events WHERE ride_id = $1 AND event_type = 'no_show' LIMIT 1`,
-        [rideId]
-      );
-      if (existing.rows[0]) {
-        return { alreadyCredited: true, amount: credit };
-      }
+    const minWait = Number(await this.setting('trust_no_show_min_wait_seconds', '300'));
+
+    if (!rideId) {
+      throw new Error('Ride ID required for no-show compensation');
     }
-    await this.creditWallet(userId, credit, `NOSHOW-${rideId || Date.now()}`, 'credit');
+
+    const existing = await this.db.query(
+      `SELECT id FROM reliability_events WHERE ride_id = $1 AND event_type = 'no_show' LIMIT 1`,
+      [rideId]
+    );
+    if (existing.rows[0]) {
+      return { alreadyCredited: true, amount: credit };
+    }
+
+    const ride = await this.db.query(
+      `SELECT id, customer_id, driver_id, status, created_at, updated_at, accepted_at
+       FROM rides WHERE id = $1 LIMIT 1`,
+      [rideId]
+    );
+    const r = ride.rows[0];
+    if (!r) throw new Error('Ride not found');
+    if (String(r.customer_id) !== String(userId)) {
+      throw new Error('Only the rider can claim no-show compensation for this trip');
+    }
+    if (!r.driver_id) {
+      throw new Error('No driver was matched — no-show credit only applies after a driver accepts');
+    }
+
+    const status = String(r.status || '').toLowerCase();
+    const eligibleStatus = ['accepted', 'arrived', 'en_route', 'driver_arrived', 'cancelled'].some(
+      (s) => status.includes(s)
+    );
+    if (!eligibleStatus && status !== 'requested') {
+      throw new Error(`Ride status ${status} is not eligible for no-show credit`);
+    }
+
+    const acceptedAt = r.accepted_at || r.updated_at || r.created_at;
+    const waitSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(acceptedAt).getTime()) / 1000)
+    );
+    if (waitSeconds < minWait) {
+      throw new Error(
+        `Wait at least ${Math.ceil(minWait / 60)} minutes after match before claiming no-show (${waitSeconds}s waited)`
+      );
+    }
+
+    await this.creditWallet(userId, credit, `NOSHOW-${rideId}`, 'credit');
     const event = await this.db.query(
       `INSERT INTO reliability_events
-         (user_id, ride_id, event_type, compensation_amount, status, note)
-       VALUES ($1,$2,'no_show',$3,'credited',$4)
+         (user_id, ride_id, event_type, wait_seconds, compensation_amount, status, note)
+       VALUES ($1,$2,'no_show',$3,$4,'credited',$5)
        RETURNING *`,
-      [userId, rideId || null, credit, note || 'Driver no-show compensation']
+      [
+        userId,
+        rideId,
+        waitSeconds,
+        credit,
+        note || `Driver no-show after ${waitSeconds}s wait`,
+      ]
     );
     const receipt = await this.createReceipt(userId, {
       kind: 'no_show_credit',
       amount: credit,
       channel: 'wallet',
       counterparty: 'Movr Reliability',
-      metadata: { rideId, eventId: event.rows[0].id },
+      metadata: { rideId, eventId: event.rows[0].id, waitSeconds, minWait },
     });
-    return { amount: credit, event: event.rows[0], receipt };
+    await this.notify(
+      userId,
+      'No-show credit applied',
+      `${credit} credited to your wallet. Sorry for the wait.`,
+      '/wallet'
+    );
+    return { amount: credit, event: event.rows[0], receipt, waitSeconds };
   }
 
   async recordSlaBreach(userId: string, rideId: string, waitSeconds: number) {
     const sla = Number(await this.setting('trust_match_sla_seconds', '180'));
     if (waitSeconds <= sla) return null;
+
+    const existing = await this.db.query(
+      `SELECT id FROM reliability_events WHERE ride_id = $1 AND event_type = 'sla_breach' LIMIT 1`,
+      [rideId]
+    );
+    if (existing.rows[0]) return { alreadyCredited: true, event: existing.rows[0] };
+
     const credit = Math.min(
       Number(await this.setting('trust_no_show_credit', '500')) / 2,
       300
@@ -375,7 +554,88 @@ export class TrustSettlementService {
        RETURNING *`,
       [userId, rideId, sla, waitSeconds, credit, 'Match SLA breach credit']
     );
+    await this.createReceipt(userId, {
+      kind: 'sla_credit',
+      amount: credit,
+      channel: 'wallet',
+      counterparty: 'Movr Reliability',
+      metadata: { rideId, waitSeconds, sla },
+    }).catch(() => undefined);
+    await this.notify(
+      userId,
+      'Match SLA credit',
+      `Matching took ${Math.round(waitSeconds / 60)} min (promise ${Math.round(sla / 60)}). ${credit} credited.`,
+      '/wallet'
+    );
     return event.rows[0];
+  }
+
+  /** Called when a driver accepts — credits rider if match exceeded SLA. */
+  async onRideAccepted(rideId: string) {
+    const ride = await this.db.query(
+      `SELECT id, customer_id, created_at FROM rides WHERE id = $1 LIMIT 1`,
+      [rideId]
+    );
+    const r = ride.rows[0];
+    if (!r?.customer_id) return null;
+    const waitSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000)
+    );
+    return this.recordSlaBreach(r.customer_id, rideId, waitSeconds);
+  }
+
+  async resolveDispute(
+    disputeId: string,
+    data: { status: string; refundAmount?: number; opsNote?: string; adminId?: string }
+  ) {
+    const status = String(data.status || '').toLowerCase();
+    if (!['open', 'investigating', 'resolved', 'rejected'].includes(status)) {
+      throw new Error('Invalid status');
+    }
+    const cur = await this.db.query(`SELECT * FROM unified_disputes WHERE id = $1`, [disputeId]);
+    const d = cur.rows[0];
+    if (!d) throw new Error('Dispute not found');
+
+    const refund =
+      data.refundAmount != null ? Number(data.refundAmount) : Number(d.refund_amount || 0);
+
+    const row = await this.db.query(
+      `UPDATE unified_disputes SET
+         status = $1,
+         refund_amount = COALESCE($2, refund_amount),
+         ops_note = COALESCE($3, ops_note),
+         updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [status, data.refundAmount != null ? refund : null, data.opsNote || null, disputeId]
+    );
+
+    if (status === 'resolved' && refund > 0) {
+      await this.creditWallet(d.user_id, refund, `DISPUTE-${disputeId}`, 'credit');
+      await this.createReceipt(d.user_id, {
+        kind: 'dispute_refund',
+        amount: refund,
+        channel: 'wallet',
+        counterparty: 'Movr Trust',
+        metadata: { disputeId, domain: d.domain, adminId: data.adminId },
+      }).catch(() => undefined);
+      await this.notify(
+        d.user_id,
+        'Dispute resolved — refund issued',
+        `${refund} credited for your ${d.domain} dispute.`,
+        '/wallet'
+      );
+    } else if (status === 'resolved' || status === 'rejected') {
+      await this.notify(
+        d.user_id,
+        status === 'resolved' ? 'Dispute resolved' : 'Dispute closed',
+        data.opsNote || `Your ${d.domain} dispute was marked ${status}.`,
+        '/wallet/settlement'
+      );
+    }
+
+    return row.rows[0];
   }
 
   async createTripShare(userId: string, rideId?: string) {
@@ -419,17 +679,57 @@ export class TrustSettlementService {
   }
 
   async listActiveSos(limit = 50) {
-    return this.db.query(
+    const result = await this.db.query(
       `SELECT s.*,
               COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'') AS customer_name,
-              u.phone AS customer_phone
+              u.phone AS customer_phone,
+              r.pickup_address, r.dropoff_address, r.status AS ride_status,
+              r.pickup_lat, r.pickup_lng,
+              COALESCE(d.first_name,'') || ' ' || COALESCE(d.last_name,'') AS driver_name,
+              d.phone AS driver_phone
        FROM sos_emergencies s
        LEFT JOIN users u ON u.id = s.customer_id
+       LEFT JOIN rides r ON r.id = s.ride_id
+       LEFT JOIN users d ON d.id = s.driver_id
        WHERE LOWER(COALESCE(s.status,'active')) IN ('active','open','pending')
        ORDER BY s.created_at DESC
        LIMIT $1`,
       [limit]
     );
+
+    const enriched = [];
+    for (const row of result.rows) {
+      const contacts = await this.db
+        .query(
+          `SELECT contact_name, phone_number, relationship, is_primary
+           FROM emergency_contacts
+           WHERE ($1::uuid IS NOT NULL AND user_id = $1)
+              OR ($2::uuid IS NOT NULL AND user_id = $2)
+           ORDER BY is_primary DESC NULLS LAST
+           LIMIT 8`,
+          [row.customer_id || null, row.driver_id || null]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      const loc = row.location || {};
+      enriched.push({
+        ...row,
+        lat: loc.lat ?? row.pickup_lat ?? null,
+        lng: loc.lng ?? row.pickup_lng ?? null,
+        mapUrl:
+          (loc.lat ?? row.pickup_lat) != null
+            ? `https://www.google.com/maps?q=${loc.lat ?? row.pickup_lat},${loc.lng ?? row.pickup_lng}`
+            : null,
+        emergencyContacts: contacts.rows,
+        runbook: [
+          '1. Call rider + driver proxy numbers',
+          '2. Open live map / share location with ops',
+          '3. Confirm emergency contacts were SMS’d',
+          '4. Escalate to local emergency if needed',
+          '5. Resolve with notes when safe',
+        ],
+      });
+    }
+    return { rows: enriched };
   }
 
   async resolveSos(sosId: string, adminId: string, note?: string) {

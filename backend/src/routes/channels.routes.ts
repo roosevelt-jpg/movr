@@ -607,34 +607,94 @@ async function handleUssdSession(opts: {
       };
     }
     if (choice === '5') {
-      const agents = await db
-        .query(
-          `SELECT name, city, phone FROM cash_agents WHERE is_active = TRUE ORDER BY city, name LIMIT 4`
-        )
-        .catch(() => ({ rows: [] as any[] }));
-      await save('menu', {});
-      if (!agents.rows.length) {
-        return {
-          type: 'END',
-          text: 'Cash agents: Open app Wallet → Settle, or dial *920*MOVR# later.',
-        };
-      }
-      const lines = agents.rows.map(
-        (a: any, i: number) => `${i + 1}. ${a.name} (${a.city}) ${a.phone || ''}`
-      );
+      await save('cash_menu', {});
       return {
-        type: 'END',
-        text: `Cash agents (deposit/withdraw):\n${lines.join('\n')}\n\nShow code in app Wallet → Settle`,
+        type: 'CON',
+        text: `Cash agents
+1. Deposit (get code)
+2. Withdraw (get code)
+3. Confirm agent code
+0. Menu`,
       };
     }
     if (choice === '6') {
       await save('menu', {});
       return {
         type: 'END',
-        text: 'Help: Call 0800-MOVR. Disputes: open app Wallet → Settle → Dispute. No-show credits auto-apply.',
+        text: 'Help: Call 0800-MOVR. Disputes: app Wallet → Settle. No-show credits after matched wait.',
       };
     }
     return { type: 'CON', text: `Invalid. Reply 1-6\n\n${USSD_MENU}` };
+  }
+
+  if (state === 'cash_menu') {
+    if (choice === '0') {
+      await save('menu', {});
+      return { type: 'CON', text: USSD_MENU };
+    }
+    if (choice === '1' || choice === '2') {
+      await save(choice === '1' ? 'cash_deposit_amt' : 'cash_withdraw_amt', {});
+      return { type: 'CON', text: 'Enter amount (e.g. 50)' };
+    }
+    if (choice === '3') {
+      await save('cash_confirm', {});
+      return { type: 'CON', text: 'Enter agent confirmation code' };
+    }
+    return {
+      type: 'CON',
+      text: `Cash agents
+1. Deposit (get code)
+2. Withdraw (get code)
+3. Confirm agent code
+0. Menu`,
+    };
+  }
+
+  if (state === 'cash_deposit_amt' || state === 'cash_withdraw_amt') {
+    const amount = Number(choice);
+    if (!amount || amount <= 0) {
+      return { type: 'CON', text: 'Invalid amount. Enter amount (e.g. 50)' };
+    }
+    const user = await findOrCreateUserByPhone(phone);
+    const agents = await db
+      .query(`SELECT id, name, city FROM cash_agents WHERE is_active = TRUE ORDER BY name LIMIT 1`)
+      .catch(() => ({ rows: [] as any[] }));
+    if (!agents.rows[0]) {
+      await save('menu', {});
+      return { type: 'END', text: 'No cash agents available. Try again later.' };
+    }
+    try {
+      const { TrustSettlementService } = require('../services/trust-settlement.service');
+      const trust = new TrustSettlementService(db);
+      const data =
+        state === 'cash_deposit_amt'
+          ? await trust.cashAgentDeposit(user.id, { agentId: agents.rows[0].id, amount })
+          : await trust.cashAgentWithdraw(user.id, { agentId: agents.rows[0].id, amount });
+      await save('menu', {});
+      return {
+        type: 'END',
+        text: `${data.message}\nAgent: ${agents.rows[0].name} (${agents.rows[0].city})\nCode: ${data.code}`,
+      };
+    } catch (e: any) {
+      await save('menu', {});
+      return { type: 'END', text: e.message || 'Cash agent request failed' };
+    }
+  }
+
+  if (state === 'cash_confirm') {
+    try {
+      const { TrustSettlementService } = require('../services/trust-settlement.service');
+      const trust = new TrustSettlementService(db);
+      const data = await trust.confirmCashAgentCode(choice, { agentPhone: phone });
+      await save('menu', {});
+      if (data.credited) return { type: 'END', text: 'Deposit confirmed. Wallet credited.' };
+      if (data.collected) return { type: 'END', text: 'Pickup confirmed. Cash collected.' };
+      if (data.alreadyCompleted) return { type: 'END', text: 'Code already used.' };
+      return { type: 'END', text: 'Confirmed.' };
+    } catch (e: any) {
+      await save('menu', {});
+      return { type: 'END', text: e.message || 'Invalid code' };
+    }
   }
 
   if (state === 'book_wait') {

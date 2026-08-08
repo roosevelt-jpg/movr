@@ -2,9 +2,11 @@ import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { LocalizationService } from '../services/localization.service';
+import { PaymentService } from '../services/payment.service';
 
 const db = new DatabaseService();
 const localization = new LocalizationService(db);
+const payments = new PaymentService(db);
 export const walletRouter = Router();
 
 walletRouter.use(authenticateToken);
@@ -402,6 +404,51 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
       return res.status(400).json({ status: 'error', message: 'Amount exceeds available balance' });
     }
 
+    const rail = await db
+      .query(
+        `SELECT * FROM wallet_rail_methods WHERE user_id = $1
+         ORDER BY is_default DESC, updated_at DESC LIMIT 1`,
+        [uid]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    const method = await db
+      .query(`SELECT * FROM customer_payment_methods WHERE id = $1 AND user_id = $2`, [
+        methodId,
+        uid,
+      ])
+      .catch(() => ({ rows: [] as any[] }));
+
+    const accountNumber =
+      rail.rows[0]?.account_number ||
+      method.rows[0]?.account_number ||
+      method.rows[0]?.last4 ||
+      null;
+    const bankCode =
+      rail.rows[0]?.metadata?.bankCode ||
+      method.rows[0]?.bank_code ||
+      (String(rail.rows[0]?.provider || methodLabel).toLowerCase().includes('mtn') ? 'MTN' : undefined);
+
+    const reference = `WD-${Date.now()}`;
+    let transfer: any = { success: false, reference };
+    if (accountNumber) {
+      try {
+        transfer = await payments.initializeTransfer({
+          amount,
+          currency,
+          recipient: {
+            accountNumber: String(accountNumber),
+            bankCode: bankCode || undefined,
+            accountBank: bankCode || undefined,
+          },
+          reference,
+          narration: `Movr wallet withdraw · ${methodLabel}`,
+          countryCode: (await resolveUserCurrency(uid)).country,
+        });
+      } catch (e: any) {
+        transfer = { success: false, reference, error: e.message };
+      }
+    }
+
     await db
       .query(`UPDATE wallets SET balance_fiat = balance_fiat - $1, last_updated = NOW() WHERE user_id = $2`, [
         amount,
@@ -411,8 +458,8 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
 
     const row = await db
       .query(
-        `INSERT INTO wallet_withdrawals (user_id, amount, fee, currency, method_id, method_label, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+        `INSERT INTO wallet_withdrawals (user_id, amount, fee, currency, method_id, method_label, status, reference)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           uid,
@@ -421,9 +468,28 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
           currency,
           methodId && String(methodId).includes('-') ? methodId : null,
           methodLabel,
+          transfer.success ? 'processing' : 'pending',
+          reference,
         ]
       )
-      .catch(() => ({ rows: [{ id: 'local', amount, status: 'pending' }] }));
+      .catch(() => ({
+        rows: [{ id: 'local', amount, status: transfer.success ? 'processing' : 'pending' }],
+      }));
+
+    try {
+      const { TrustSettlementService } = require('../services/trust-settlement.service');
+      await new TrustSettlementService(db).createReceipt(uid, {
+        kind: 'wallet_withdraw',
+        amount,
+        currency,
+        channel: rail.rows[0]?.rail_type || 'momo',
+        counterparty: methodLabel,
+        status: transfer.success ? 'processing' : 'pending',
+        metadata: { reference, transferSuccess: Boolean(transfer.success) },
+      });
+    } catch {
+      /* optional */
+    }
 
     res.status(201).json({
       status: 'success',
@@ -432,8 +498,11 @@ async function handleWithdraw(req: AuthRequest, res: Response) {
         amount,
         fee,
         currency,
-        status: 'pending',
-        message: 'Withdrawal requested — instant payout processing',
+        status: transfer.success ? 'processing' : 'pending',
+        transfer,
+        message: transfer.success
+          ? 'Withdrawal sent to MoMo/bank — usually arrives in minutes'
+          : 'Withdrawal queued — payout rail will retry',
         available: Math.max(0, balance - amount),
       },
     });

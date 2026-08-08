@@ -93,6 +93,14 @@ export default function HomeScreen({
   const [destination, setDestination] = useState(destProp || 'Lekki Phase 1...');
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState('');
+  const [promise, setPromise] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,7 +243,14 @@ export default function HomeScreen({
       </View>
 
       <View style={styles.banner}>
-        <Text style={styles.bannerText}>Driver keeps 100% of this fare · no commission</Text>
+        <Text style={styles.bannerText}>
+          {promise?.keep100Note || 'Driver keeps 100% of this fare · no commission'}
+        </Text>
+        {promise?.matchSlaText ? (
+          <Text style={[styles.bannerText, { color: '#a7f3d0', marginTop: 4, fontWeight: '600' }]}>
+            {promise.matchSlaText} · {promise.noShowText}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.field}>

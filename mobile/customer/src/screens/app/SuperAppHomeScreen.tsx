@@ -32,6 +32,9 @@ import StakingScreen from './StakingScreen';
 import HelpCentreScreen from './HelpCentreScreen';
 import WithdrawScreen from './WithdrawScreen';
 import SettlementHubScreen from './SettlementHubScreen';
+import MerchantPayoutScreen from './MerchantPayoutScreen';
+import MerchantReturnsScreen from './MerchantReturnsScreen';
+import MerchantIdentityOnboardingScreen from './MerchantIdentityOnboardingScreen';
 import ProductDetailScreen from './ProductDetailScreen';
 import StoreProfileScreen from './StoreProfileScreen';
 import SupportChatScreen from './SupportChatScreen';
@@ -61,6 +64,9 @@ type Service =
   | 'topup'
   | 'withdraw'
   | 'settlement'
+  | 'merchant_payouts'
+  | 'merchant_returns'
+  | 'merchant_kyc'
   | 'rewards'
   | 'safety'
   | 'history'
@@ -240,6 +246,7 @@ export default function SuperAppHomeScreen({
           onPrivacy={() => setService('settings')}
           onHelp={() => setService('help')}
           onWishlist={() => setService('wishlist')}
+          onMerchantPayouts={() => setService('merchant_payouts')}
         />
         {tabBar}
       </View>
@@ -370,6 +377,34 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <SettlementHubScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'merchant_payouts') {
+    return (
+      <View style={styles.root}>
+        <MerchantPayoutScreen
+          onBack={() => setService('hub')}
+          onReturns={() => setService('merchant_returns')}
+          onKyc={() => setService('merchant_kyc')}
+        />
+      </View>
+    );
+  }
+  if (service === 'merchant_returns') {
+    return (
+      <View style={styles.root}>
+        <MerchantReturnsScreen onBack={() => setService('merchant_payouts')} />
+      </View>
+    );
+  }
+  if (service === 'merchant_kyc') {
+    return (
+      <View style={styles.root}>
+        <Pressable onPress={() => setService('merchant_payouts')} style={styles.back}>
+          <Text style={styles.backText}>← Payouts</Text>
+        </Pressable>
+        <MerchantIdentityOnboardingScreen />
       </View>
     );
   }

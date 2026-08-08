@@ -55,6 +55,18 @@ trustRouter.get('/trip/:token', async (req: any, res: Response) => {
   }
 });
 
+/** Agent confirms deposit/pickup by code (no user auth — code is the secret). */
+trustRouter.post('/cash-agent/confirm', async (req: any, res: Response) => {
+  try {
+    const data = await trust.confirmCashAgentCode(String(req.body.code || ''), {
+      agentPhone: req.body.agentPhone,
+    });
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 trustRouter.use(authenticateToken);
 
 trustRouter.get('/rails', async (req: AuthRequest, res: Response) => {
@@ -241,27 +253,13 @@ trustAdminRouter.get('/disputes', async (_req: AuthRequest, res: Response) => {
 
 trustAdminRouter.patch('/disputes/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const status = String(req.body.status || '').toLowerCase();
-    if (!['open', 'investigating', 'resolved', 'rejected'].includes(status)) {
-      return res.status(400).json({ status: 'error', message: 'Invalid status' });
-    }
-    const row = await db.query(
-      `UPDATE unified_disputes SET
-         status = $1,
-         refund_amount = COALESCE($2, refund_amount),
-         ops_note = COALESCE($3, ops_note),
-         updated_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [
-        status,
-        req.body.refundAmount != null ? Number(req.body.refundAmount) : null,
-        req.body.opsNote || null,
-        req.params.id,
-      ]
-    );
-    if (!row.rows[0]) return res.status(404).json({ status: 'error', message: 'Dispute not found' });
-    res.json({ status: 'success', data: row.rows[0] });
+    const row = await trust.resolveDispute(req.params.id, {
+      status: String(req.body.status || ''),
+      refundAmount: req.body.refundAmount != null ? Number(req.body.refundAmount) : undefined,
+      opsNote: req.body.opsNote,
+      adminId: req.user!.id,
+    });
+    res.json({ status: 'success', data: row });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }
