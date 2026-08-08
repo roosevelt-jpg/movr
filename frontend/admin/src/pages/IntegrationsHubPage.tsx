@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import AdminOpsNav from '../components/AdminOpsNav';
-
-const API = process.env.REACT_APP_API_URL || '/api/v1';
+import { API } from '../lib/apiBase';
+import { friendlyApiError } from '../lib/apiError';
 
 interface Integration {
   id: string;
@@ -50,9 +50,9 @@ const SUBTITLE: Record<string, string> = {
   sendgrid: 'Transactional email',
   africastalking_ussd: 'USSD',
   openai: 'AI & voice',
-  google_maps: 'Maps & places',
+  google_maps: 'Maps & places · powers zone pickers',
   mapbox: 'Maps',
-  openweathermap: 'Pricing signals',
+  openweathermap: 'Pricing weather signals',
   nia_ghana_card: 'Identity verification',
   dvla_ghana: 'Identity verification',
   aws_s3: 'Asset storage',
@@ -89,7 +89,7 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: 'api_key', label: 'api_key' },
     { key: 'model', label: 'model (optional)' },
   ],
-  google_maps: [{ key: 'api_key', label: 'api_key' }],
+  google_maps: [{ key: 'api_key', label: 'api_key (Geocoding + Places)' }],
   mapbox: [{ key: 'access_token', label: 'access_token' }],
   openweathermap: [{ key: 'api_key', label: 'api_key' }],
   africastalking_ussd: [
@@ -115,6 +115,9 @@ function statusBadge(status: string) {
   const s = status.toLowerCase().replace(/\s+/g, '_');
   if (s.includes('connected') || s === 'active') {
     return { background: 'rgba(63,112,72,0.35)', color: 'var(--success)', label: 'Connected' };
+  }
+  if (s.includes('error') || s.includes('fail')) {
+    return { background: 'rgba(225,29,72,0.18)', color: 'var(--error)', label: 'Error' };
   }
   if (s.includes('configur') && !s.includes('not')) {
     return { background: 'rgba(255,184,0,0.2)', color: 'var(--warning)', label: 'Configured' };
@@ -143,7 +146,7 @@ export default function IntegrationsHubPage() {
       .then(() => setError(''))
       .catch((e) => {
         setItems([]);
-        setError(e?.response?.data?.message || e.message || 'Failed to load integrations');
+        setError(friendlyApiError(e, 'Failed to load integrations'));
       });
   }, []);
 
@@ -171,21 +174,34 @@ export default function IntegrationsHubPage() {
 
   const save = async () => {
     if (!selected) return;
-    await axios.put(
-      `${API}/admin/integrations/${selected}/credentials`,
-      { credentials: creds },
-      { headers }
-    );
-    setMessage('Credentials saved');
-    await open(selected);
-    await load();
+    try {
+      await axios.put(
+        `${API}/admin/integrations/${selected}/credentials`,
+        { credentials: creds },
+        { headers }
+      );
+      setMessage('Credentials saved');
+      setError('');
+      await open(selected);
+      await load();
+    } catch (e: any) {
+      setError(friendlyApiError(e, 'Save failed'));
+    }
   };
 
   const test = async () => {
     if (!selected) return;
-    const res = await axios.post(`${API}/admin/integrations/${selected}/test`, {}, { headers });
-    setMessage(`Test: ${res.data.data.status}`);
-    await load();
+    try {
+      const res = await axios.post(`${API}/admin/integrations/${selected}/test`, {}, { headers });
+      const st = res.data?.data?.status || 'unknown';
+      const err = res.data?.data?.lastError;
+      setMessage(err ? `Test: ${st} — ${err}` : `Test: ${st}`);
+      setError('');
+      await load();
+      await open(selected);
+    } catch (e: any) {
+      setError(friendlyApiError(e, 'Test failed'));
+    }
   };
 
   const renderCard = (item: Integration) => {
@@ -193,7 +209,7 @@ export default function IntegrationsHubPage() {
     return (
       <div key={item.key} style={styles.card}>
         <div style={styles.cardTop}>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <strong style={styles.cardTitle}>{item.display_name}</strong>
             <p style={styles.cardCat}>{SUBTITLE[item.key] || item.category}</p>
           </div>
@@ -201,7 +217,12 @@ export default function IntegrationsHubPage() {
             {badge.label}
           </span>
         </div>
-        <button style={styles.link} onClick={() => open(item.key)}>
+        {item.last_error && (item.status === 'error' || item.status === 'not_configured') ? (
+          <p style={styles.cardError} title={item.last_error}>
+            {item.last_error}
+          </p>
+        ) : null}
+        <button type="button" style={styles.link} onClick={() => open(item.key)}>
           Configure →
         </button>
       </div>
@@ -211,8 +232,17 @@ export default function IntegrationsHubPage() {
   return (
     <AdminShell activeLabel="Integrations" hidePageTitle>
       <AdminOpsNav />
+      <h1 style={styles.pageTitle}>Integrations</h1>
+      <p style={styles.pageSub}>
+        Google Maps & Places powers zone pickers on Pricing and Dispatcher. OpenWeatherMap feeds weather
+        surge — run Test connection after saving keys so badges reflect real status.
+      </p>
       {message ? <p style={styles.msg}>{message}</p> : null}
-      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
+      {error ? (
+        <div role="alert" style={styles.alert}>
+          <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: 13 }}>{error}</p>
+        </div>
+      ) : null}
 
       {items.length === 0 && !error ? (
         <p style={{ color: 'var(--text-secondary)' }}>No integrations configured</p>
@@ -238,11 +268,14 @@ export default function IntegrationsHubPage() {
 
       {selected && detail ? (
         <div style={styles.panel}>
-          <h3 style={{ marginTop: 0 }}>{detail.display_name}</h3>
+          <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>{detail.display_name}</h3>
           <p style={styles.cardCat}>
             Paste API keys only — runtime reads the Integrations Hub (env is fallback). Secrets are
             masked after save.
           </p>
+          {detail.last_error ? (
+            <p style={{ ...styles.cardError, marginBottom: 8 }}>Last error: {detail.last_error}</p>
+          ) : null}
           {(CREDENTIAL_FIELDS[selected] || [
             { key: 'secret_key', label: 'secret_key / api_key' },
             { key: 'public_key', label: 'public_key' },
@@ -263,14 +296,14 @@ export default function IntegrationsHubPage() {
               />
             </label>
           ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button style={styles.primary} onClick={save}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button type="button" style={styles.primary} onClick={save}>
               Save
             </button>
-            <button style={styles.primary} onClick={test}>
+            <button type="button" style={styles.primary} onClick={test}>
               Test connection
             </button>
-            <button style={styles.ghost} onClick={() => setSelected(null)}>
+            <button type="button" style={styles.ghost} onClick={() => setSelected(null)}>
               Close
             </button>
           </div>
@@ -281,7 +314,22 @@ export default function IntegrationsHubPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  pageTitle: { margin: '0 0 6px', fontSize: 28, fontWeight: 700, color: 'var(--text-primary)' },
+  pageSub: {
+    margin: '0 0 16px',
+    color: 'var(--text-secondary)',
+    fontSize: 14,
+    maxWidth: 720,
+    lineHeight: 1.45,
+  },
   msg: { color: 'var(--electric-violet)' },
+  alert: {
+    marginBottom: 12,
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: '1px solid rgba(225,29,72,0.35)',
+    background: 'rgba(225,29,72,0.08)',
+  },
   section: { marginTop: 28 },
   cat: {
     color: 'var(--text-secondary)',
@@ -302,10 +350,22 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 120,
     display: 'flex',
     flexDirection: 'column',
+    border: '1px solid var(--border)',
+    gap: 8,
   },
-  cardTop: { display: 'flex', justifyContent: 'space-between', gap: 8 },
-  cardTitle: { fontSize: 16 },
-  cardCat: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 },
+  cardTop: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' },
+  cardTitle: { fontSize: 16, color: 'var(--text-primary)' },
+  cardCat: { color: 'var(--text-secondary)', fontSize: 13, marginTop: 6, marginBottom: 0 },
+  cardError: {
+    margin: 0,
+    fontSize: 11,
+    color: 'var(--error)',
+    lineHeight: 1.35,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical' as any,
+    overflow: 'hidden',
+  },
   badge: {
     borderRadius: 999,
     padding: '4px 10px',
@@ -313,6 +373,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     height: 'fit-content',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   link: {
     marginTop: 'auto',
@@ -329,6 +390,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--surface-elevated)',
     borderRadius: 14,
     padding: 20,
+    border: '1px solid var(--border)',
   },
   label: { display: 'block', marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' },
   input: {
@@ -337,13 +399,14 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 6,
     background: 'var(--surface)',
     border: '1px solid var(--border)',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     borderRadius: 8,
     padding: '8px 12px',
+    boxSizing: 'border-box',
   },
   primary: {
     background: 'var(--movr-gradient)',
-    color: 'var(--pure-white)',
+    color: 'var(--brand-white)',
     border: 'none',
     borderRadius: 8,
     padding: '8px 14px',
@@ -352,7 +415,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ghost: {
     background: 'transparent',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     border: '1px solid var(--border)',
     borderRadius: 8,
     padding: '8px 14px',

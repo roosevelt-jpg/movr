@@ -5,6 +5,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import { MediaField } from '../components/CmsMediaField';
 import { HeroBackgroundField } from '../components/HeroBackgroundField';
 import { adminBtn } from '../styles/adminButtons';
+import { friendlyApiError } from '../lib/apiError';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -33,8 +34,10 @@ function Field({
   disabled?: boolean;
 }) {
   return (
-    <label style={styles.field}>
-      <span style={styles.label}>{label}</span>
+    <div style={styles.field}>
+      <label style={styles.label} htmlFor={undefined}>
+        {label}
+      </label>
       {multiline ? (
         <textarea
           style={styles.textarea}
@@ -51,7 +54,7 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-    </label>
+    </div>
   );
 }
 
@@ -1565,12 +1568,7 @@ export default function CmsPagesPage() {
       await loadPage(next);
       await loadSubmissions();
     } catch (e: any) {
-      const msg = e?.response?.data?.message || e.message;
-      setError(
-        msg === 'Route not found'
-          ? 'CMS API not loaded — restart the backend, then refresh.'
-          : msg
-      );
+      setError(friendlyApiError(e, 'CMS failed to load'));
     } finally {
       setBusy(false);
     }
@@ -1784,11 +1782,27 @@ export default function CmsPagesPage() {
       ) : null}
 
       {message ? <p style={{ color: 'var(--success)' }}>{message}</p> : null}
-      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
+      {error ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 16,
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(225,29,72,0.35)',
+            background: 'rgba(225,29,72,0.08)',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, color: 'var(--error)' }}>
+            CMS notice
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>{error}</p>
+        </div>
+      ) : null}
 
       <div style={styles.pageMeta}>
         <Field label="Page title" value={pageTitle} disabled={busy} onChange={setPageTitle} />
-        <label style={styles.field}>
+        <div style={styles.field}>
           <span style={styles.label}>Menu placement</span>
           <select
             style={styles.input}
@@ -1810,7 +1824,7 @@ export default function CmsPagesPage() {
             <option value="footer-services">Footer · Services</option>
             <option value="footer-support">Footer · Support</option>
           </select>
-        </label>
+        </div>
         <Field
           label="Menu label"
           value={meta.menuLabel || ''}
@@ -1903,7 +1917,7 @@ const styles: Record<string, React.CSSProperties> = {
   toolbar: { display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
   select: {
     background: 'var(--surface-elevated)',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
@@ -1913,7 +1927,7 @@ const styles: Record<string, React.CSSProperties> = {
   ghost: { ...adminBtn.secondary },
   danger: { ...adminBtn.dangerSoft },
   hint: { color: 'var(--text-secondary)', fontSize: 13 },
-  pageMeta: { marginBottom: 16, maxWidth: 720, display: 'grid', gap: 12 },
+  pageMeta: { marginBottom: 16, maxWidth: 720, display: 'grid', gap: 10 },
   createBox: {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
@@ -1939,27 +1953,40 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionHeading: { margin: 0, fontSize: 18, fontWeight: 700 },
   toggle: { display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 },
-  field: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, flex: 1 },
-  label: { fontSize: 12, color: 'var(--text-secondary)', letterSpacing: 0.3 },
+  field: { display: 'flex', flexDirection: 'column', gap: 6, margin: 0, flex: 1, minWidth: 0 },
+  label: {
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    letterSpacing: 0.3,
+    fontWeight: 600,
+    margin: 0,
+    lineHeight: 1.3,
+  },
   input: {
-    background: 'var(--surface)',
-    color: 'var(--pure-white)',
+    background: 'var(--surface-elevated)',
+    color: 'var(--text-primary)',
     border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
     fontSize: 14,
     fontFamily: 'Poppins, Montserrat, sans-serif',
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    margin: 0,
   },
   textarea: {
-    background: 'var(--surface)',
-    color: 'var(--pure-white)',
+    background: 'var(--surface-elevated)',
+    color: 'var(--text-primary)',
     border: '1px solid var(--border)',
     borderRadius: 10,
     padding: '10px 12px',
     fontSize: 14,
     fontFamily: 'Poppins, Montserrat, sans-serif',
     lineHeight: 1.5,
-    resize: 'vertical',
+    resize: 'vertical' as const,
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    margin: 0,
   },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' },
   group: { marginBottom: 12 },

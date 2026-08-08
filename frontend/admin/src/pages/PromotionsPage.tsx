@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, CURRENCY_SYMBOL } from '../lib/currency';
 
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
@@ -37,10 +37,10 @@ const TABS: { key: FilterKey; label: string }[] = [
 
 function statusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
-  if (s === 'active' || s === 'permanent') return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
+  if (s === 'active' || s === 'permanent') return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
   if (s === 'scheduled') return { background: 'rgba(59,130,246,0.25)', color: '#93c5fd' };
-  if (s === 'expired') return { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' };
-  return { background: 'rgba(142,45,226,0.25)', color: '#c4b5fd' };
+  if (s === 'expired') return { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' };
+  return { background: 'rgba(142,45,226,0.25)', color: 'var(--accent-purple)' };
 }
 
 function formatCompact(n: number) {
@@ -49,6 +49,14 @@ function formatCompact(n: number) {
   if (v >= 1_000_000) return `${sign}${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (v >= 1_000) return `${sign}${(v / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
   return `${sign}${v.toLocaleString()}`;
+}
+
+/** Compact money for tight stat cards (e.g. GH₵-4.2M). */
+function formatCurrencyCompact(n: number, currencyCode = 'GHS') {
+  const symbol = CURRENCY_SYMBOL[(currencyCode || 'GHS').toUpperCase()] || currencyCode;
+  const abs = Math.abs(Number(n) || 0);
+  const sign = n < 0 ? '-' : '';
+  return `${symbol}${sign}${formatCompact(abs)}`;
 }
 
 const emptyForm = {
@@ -164,7 +172,7 @@ export default function PromotionsPage() {
           ? `+${Number(stats.redemptionsDelta).toFixed(1)}%`
           : undefined,
     },
-    { label: 'Revenue Impact', value: formatCurrency(stats.revenueImpact || 0) },
+    { label: 'Revenue Impact', value: formatCurrencyCompact(stats.revenueImpact || 0) },
     { label: 'DVT Bonuses', value: formatCompact(stats.dvtBonuses || 0) },
   ];
 
@@ -399,9 +407,21 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     padding: 16,
     border: '1px solid var(--border)',
+    minWidth: 0,
+    overflow: 'hidden',
   },
   label: { color: 'var(--text-secondary)', fontSize: 13 },
-  value: { fontSize: 26, fontWeight: 700, marginTop: 8 },
+  value: {
+    fontSize: 22,
+    fontWeight: 700,
+    marginTop: 8,
+    lineHeight: 1.2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+    fontVariantNumeric: 'tabular-nums',
+  },
   meta: { color: 'var(--success)', fontSize: 12, marginTop: 6, fontWeight: 600 },
   toolbar: { marginBottom: 12 },
   tabs: { display: 'flex', gap: 6, flexWrap: 'wrap' },

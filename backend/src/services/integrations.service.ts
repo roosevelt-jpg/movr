@@ -208,11 +208,17 @@ export class IntegrationsService {
           status = 'not_configured';
           lastError = 'Missing Google Maps api_key';
         } else {
-          await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+          const geo = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
             params: { address: 'Accra', key: apiKey },
             timeout: 10000,
           });
-          status = 'connected';
+          const gStatus = String(geo.data?.status || '');
+          if (gStatus !== 'OK' && gStatus !== 'ZERO_RESULTS') {
+            status = 'error';
+            lastError = geo.data?.error_message || `Geocode status: ${gStatus || 'unknown'}`;
+          } else {
+            status = 'connected';
+          }
         }
       } else if (key === 'mapbox') {
         const token = await this.resolveSecret(
@@ -300,11 +306,19 @@ export class IntegrationsService {
           status = 'not_configured';
           lastError = 'Missing OpenWeatherMap api_key';
         } else {
-          await axios.get('https://api.openweathermap.org/data/2.5/weather', {
+          const weather = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
             params: { q: 'Accra', appid: apiKey },
             timeout: 10000,
+            validateStatus: () => true,
           });
-          status = 'connected';
+          if (weather.status >= 400 || weather.data?.cod === 401 || weather.data?.cod === '401') {
+            status = 'error';
+            lastError =
+              weather.data?.message ||
+              `OpenWeatherMap HTTP ${weather.status} — check api_key`;
+          } else {
+            status = 'connected';
+          }
         }
       } else {
         const hasCreds = (detail.credentials || []).length > 0;
@@ -357,6 +371,130 @@ export class IntegrationsService {
         `Required integration not configured: ${row.display_name} (${row.key})`
       );
     }
+  }
+
+  /** Google Maps / Places key from hub, with env fallback. */
+  async resolveGoogleMapsKey(): Promise<string | null> {
+    return this.resolveSecret(
+      'google_maps',
+      ['api_key', 'secret_key'],
+      ['GOOGLE_MAPS_API_KEY', 'GOOGLE_PLACES_API_KEY']
+    );
+  }
+
+  async placesAutocomplete(input: string, opts?: { country?: string; sessionToken?: string }) {
+    const apiKey = await this.resolveGoogleMapsKey();
+    if (!apiKey) {
+      throw Object.assign(new Error('Google Maps is not configured'), { statusCode: 400 });
+    }
+    const q = String(input || '').trim();
+    if (q.length < 2) return [];
+
+    const axios = require('axios');
+    const params: Record<string, string> = {
+      input: q,
+      key: apiKey,
+    };
+    if (opts?.country) params.components = `country:${String(opts.country).toLowerCase()}`;
+    if (opts?.sessionToken) params.sessiontoken = opts.sessionToken;
+
+    const res = await axios.get('https://maps.googleapis.com/maps/api/place/autocomplete/json', {
+      params,
+      timeout: 10000,
+    });
+    const status = String(res.data?.status || '');
+    if (status !== 'OK' && status !== 'ZERO_RESULTS') {
+      throw Object.assign(
+        new Error(res.data?.error_message || `Places autocomplete failed (${status})`),
+        { statusCode: 400 }
+      );
+    }
+    return (res.data?.predictions || []).map((p: any) => ({
+      placeId: p.place_id,
+      description: p.description,
+      mainText: p.structured_formatting?.main_text || p.description,
+      secondaryText: p.structured_formatting?.secondary_text || '',
+    }));
+  }
+
+  async placeDetails(placeId: string) {
+    const apiKey = await this.resolveGoogleMapsKey();
+    if (!apiKey) {
+      throw Object.assign(new Error('Google Maps is not configured'), { statusCode: 400 });
+    }
+    const id = String(placeId || '').trim();
+    if (!id) throw Object.assign(new Error('placeId is required'), { statusCode: 400 });
+
+    const axios = require('axios');
+    const res = await axios.get('https://maps.googleapis.com/maps/api/place/details/json', {
+      params: {
+        place_id: id,
+        fields: 'place_id,name,formatted_address,geometry,address_component',
+        key: apiKey,
+      },
+      timeout: 10000,
+    });
+    const status = String(res.data?.status || '');
+    if (status !== 'OK') {
+      throw Object.assign(
+        new Error(res.data?.error_message || `Place details failed (${status})`),
+        { statusCode: 400 }
+      );
+    }
+    const r = res.data.result || {};
+    const components: any[] = r.address_components || [];
+    const country = components.find((c) => (c.types || []).includes('country'));
+    const locality =
+      components.find((c) => (c.types || []).includes('locality')) ||
+      components.find((c) => (c.types || []).includes('administrative_area_level_2')) ||
+      components.find((c) => (c.types || []).includes('sublocality'));
+
+    return {
+      placeId: r.place_id || id,
+      name: r.name || locality?.long_name || r.formatted_address || 'Zone',
+      formattedAddress: r.formatted_address || '',
+      lat: Number(r.geometry?.location?.lat),
+      lng: Number(r.geometry?.location?.lng),
+      countryCode: country?.short_name || null,
+      locality: locality?.long_name || null,
+    };
+  }
+
+  async geocodeAddress(address: string) {
+    const apiKey = await this.resolveGoogleMapsKey();
+    if (!apiKey) {
+      throw Object.assign(new Error('Google Maps is not configured'), { statusCode: 400 });
+    }
+    const q = String(address || '').trim();
+    if (!q) throw Object.assign(new Error('address is required'), { statusCode: 400 });
+
+    const axios = require('axios');
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { address: q, key: apiKey },
+      timeout: 10000,
+    });
+    const status = String(res.data?.status || '');
+    if (status !== 'OK' || !res.data?.results?.[0]) {
+      throw Object.assign(
+        new Error(res.data?.error_message || `Geocode failed (${status || 'no results'})`),
+        { statusCode: 400 }
+      );
+    }
+    const r = res.data.results[0];
+    const components: any[] = r.address_components || [];
+    const country = components.find((c) => (c.types || []).includes('country'));
+    const locality =
+      components.find((c) => (c.types || []).includes('locality')) ||
+      components.find((c) => (c.types || []).includes('administrative_area_level_2'));
+    return {
+      placeId: r.place_id || null,
+      name: locality?.long_name || r.formatted_address || q,
+      formattedAddress: r.formatted_address || q,
+      lat: Number(r.geometry?.location?.lat),
+      lng: Number(r.geometry?.location?.lng),
+      countryCode: country?.short_name || null,
+      locality: locality?.long_name || null,
+    };
   }
 
   private safeDecrypt(value: string): string {

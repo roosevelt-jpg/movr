@@ -106,8 +106,8 @@ const DriverVerificationDashboard: React.FC = () => {
             onClick={() => setFilterStatus(status)}
             style={{
               padding: '8px 16px',
-              backgroundColor: filterStatus === status ? 'var(--jet-black)' : 'var(--pure-white)',
-              color: filterStatus === status ? 'var(--pure-white)' : 'var(--jet-black)',
+              backgroundColor: filterStatus === status ? 'var(--text-primary)' : 'var(--surface)',
+              color: filterStatus === status ? 'var(--surface)' : 'var(--text-primary)',
               border: '0.5px solid var(--border)',
               borderRadius: '8px',
               cursor: 'pointer',
@@ -126,12 +126,13 @@ const DriverVerificationDashboard: React.FC = () => {
             key={driver.id}
             onClick={() => setSelectedDriver(driver)}
             style={{
-              backgroundColor: 'var(--pure-white)',
-              border: '0.5px solid var(--text-primary)',
+              backgroundColor: 'var(--surface)',
+              border: '0.5px solid var(--border)',
               borderRadius: '12px',
               padding: '1.5rem',
               cursor: 'pointer',
-              boxShadow: selectedDriver?.id === driver.id ? '0 0 0 2px var(--jet-black)' : 'none',
+              boxShadow: selectedDriver?.id === driver.id ? '0 0 0 2px var(--motion-blue)' : 'none',
+              color: 'var(--text-primary)',
             }}
           >
             <div style={{ marginBottom: '1rem' }}>
@@ -203,7 +204,7 @@ const DriverVerificationDashboard: React.FC = () => {
 
       {/* Detailed View */}
       {selectedDriver && (
-        <div style={{ backgroundColor: 'var(--pure-white)', borderRadius: '12px', padding: '2rem', borderLeft: '4px solid var(--jet-black)' }}>
+        <div style={{ backgroundColor: 'var(--surface)', borderRadius: '12px', padding: '2rem', borderLeft: '4px solid var(--text-primary)', color: 'var(--text-primary)' }}>
           <h2 style={{ fontSize: '20px', fontWeight: 500, marginBottom: '1.5rem' }}>
             {selectedDriver.name} - Detailed Verification
           </h2>
@@ -311,7 +312,7 @@ const DriverVerificationDashboard: React.FC = () => {
                   const reason = prompt('Suspension reason:');
                   if (reason) rejectDriver.mutate({ driverId: selectedDriver.id, reason });
                 }}
-                style={{ ...adminBtn.dangerSoft, background: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.5)', color: '#fbbf24' }}
+                style={{ ...adminBtn.dangerSoft, background: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.5)', color: 'var(--accent-warn)' }}
               >
                 ⚠ Suspend Driver
               </button>

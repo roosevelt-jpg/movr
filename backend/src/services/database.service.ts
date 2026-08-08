@@ -7,26 +7,48 @@ interface QueryResult<T> {
   rowCount: number;
 }
 
+/**
+ * One shared Pool for the whole process. Creating a Pool per `new DatabaseService()`
+ * exhausted Postgres ("remaining connection slots are reserved for ... SUPERUSER").
+ */
+let sharedPool: Pool | null = null;
+
+function getSharedPool(): Pool {
+  if (sharedPool) return sharedPool;
+
+  const max = Math.max(2, parseInt(process.env.DB_POOL_MAX || '20', 10) || 20);
+  const min = Math.max(0, parseInt(process.env.DB_POOL_MIN || '0', 10) || 0);
+
+  sharedPool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USER || 'movr_user',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME || 'movr_platform',
+    max,
+    min,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    allowExitOnIdle: true,
+  });
+
+  sharedPool.on('error', (err) => {
+    // Avoid crashing the process on idle client errors
+    console.error('Unexpected Postgres pool error', err);
+  });
+
+  return sharedPool;
+}
+
 export class DatabaseService {
   private pool: Pool;
   private logger: winston.Logger;
 
   constructor() {
     this.logger = winston.createLogger({
-      defaultMeta: { service: 'database' }
+      defaultMeta: { service: 'database' },
     });
-
-    this.pool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      user: process.env.DB_USER || 'movr_user',
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME || 'movr_platform',
-      max: parseInt(process.env.DB_POOL_MAX || '10'),
-      min: parseInt(process.env.DB_POOL_MIN || '2'),
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    this.pool = getSharedPool();
   }
 
   async connect(): Promise<void> {
@@ -41,10 +63,7 @@ export class DatabaseService {
     }
   }
 
-  async query<T = any>(
-    text: string,
-    values?: any[]
-  ): Promise<QueryResult<T>> {
+  async query<T = any>(text: string, values?: any[]): Promise<QueryResult<T>> {
     const start = Date.now();
     try {
       const result = await this.pool.query(text, values);
@@ -52,7 +71,7 @@ export class DatabaseService {
       this.logger.debug(`Query completed in ${duration}ms`);
       return {
         rows: result.rows as T[],
-        rowCount: result.rowCount || 0
+        rowCount: result.rowCount || 0,
       };
     } catch (error) {
       this.logger.error('Query failed:', { text, error });
@@ -60,9 +79,7 @@ export class DatabaseService {
     }
   }
 
-  async transaction<T>(
-    callback: (client: PoolClient) => Promise<T>
-  ): Promise<T> {
+  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -96,10 +113,10 @@ export class DatabaseService {
       data.lastName,
       data.password,
       data.avatarUrl || null,
-      data.userType || 'customer', // 'customer', 'driver', 'merchant'
+      data.userType || 'customer',
       data.country || 'GH',
       data.city,
-      data.language || 'en'
+      data.language || 'en',
     ];
     return this.query(query, values);
   }
@@ -136,10 +153,19 @@ export class DatabaseService {
       RETURNING *
     `;
     const values = [
-      data.customerId, data.driverId || null, data.pickupLat, data.pickupLng,
-      data.dropoffLat, data.dropoffLng, data.pickupAddress, data.dropoffAddress,
-      data.rideType || 'standard', 'requested', data.estimatedFare,
-      data.distanceKm, data.estimatedDurationMinutes
+      data.customerId,
+      data.driverId || null,
+      data.pickupLat,
+      data.pickupLng,
+      data.dropoffLat,
+      data.dropoffLng,
+      data.pickupAddress,
+      data.dropoffAddress,
+      data.rideType || 'standard',
+      'requested',
+      data.estimatedFare,
+      data.distanceKm,
+      data.estimatedDurationMinutes,
     ];
     return this.query(query, values);
   }
@@ -209,9 +235,14 @@ export class DatabaseService {
       RETURNING *
     `;
     const values = [
-      data.userId, data.amount, data.currency || 'GHS', data.method,
-      data.gateway || 'flutterwave', 'pending', data.referenceId,
-      JSON.stringify(data.metadata || {})
+      data.userId,
+      data.amount,
+      data.currency || 'GHS',
+      data.method,
+      data.gateway || 'flutterwave',
+      'pending',
+      data.referenceId,
+      JSON.stringify(data.metadata || {}),
     ];
     return this.query(query, values);
   }
@@ -233,8 +264,14 @@ export class DatabaseService {
       RETURNING *
     `;
     const values = [
-      data.merchantId, data.name, data.description || null,
-      data.category, 5.0, true, data.latitude, data.longitude
+      data.merchantId,
+      data.name,
+      data.description || null,
+      data.category,
+      5.0,
+      true,
+      data.latitude,
+      data.longitude,
     ];
     return this.query(query, values);
   }
@@ -272,8 +309,13 @@ export class DatabaseService {
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
     const values = [
-      data.userId, data.planId, 'active', data.amount, 'GHS',
-      nextBillingDate, data.autoRenew !== false
+      data.userId,
+      data.planId,
+      'active',
+      data.amount,
+      'GHS',
+      nextBillingDate,
+      data.autoRenew !== false,
     ];
     return this.query(query, values);
   }
@@ -305,7 +347,7 @@ export class DatabaseService {
     const fieldMap: Record<string, string> = {
       fiat: 'balance_fiat',
       points: 'balance_points',
-      tokens: 'balance_tokens'
+      tokens: 'balance_tokens',
     };
 
     const field = fieldMap[type];
@@ -333,7 +375,10 @@ export class DatabaseService {
   }
 
   async disconnect(): Promise<void> {
-    await this.pool.end();
+    if (sharedPool) {
+      await sharedPool.end();
+      sharedPool = null;
+    }
     this.logger.info('Database pool closed');
   }
 }

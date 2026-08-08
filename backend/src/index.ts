@@ -103,6 +103,27 @@ app.use(cors({
   credentials: true
 }));
 
+/**
+ * Compat: some clients call `/admin/trust/*` or `/admin/ai/tickets` on the API host
+ * without the `/api/v1` prefix (produces catch-all "Route not found").
+ * Do not rewrite `/admin/ai-support` (SPA path).
+ */
+app.use((req: ExpressRequest, _res: ExpressResponse, next: ExpressNextFunction) => {
+  const url = req.url || '';
+  const pathOnly = url.split('?')[0];
+  if (
+    pathOnly === '/admin/trust' ||
+    pathOnly.startsWith('/admin/trust/') ||
+    pathOnly === '/admin/ai/tickets' ||
+    pathOnly.startsWith('/admin/ai/tickets/') ||
+    pathOnly === '/admin/ai/rankings/refresh' ||
+    pathOnly.startsWith('/admin/ai/rankings/')
+  ) {
+    req.url = '/api/v1' + url;
+  }
+  next();
+});
+
 // Stripe webhooks need the raw body for signature verification (before JSON parser)
 app.post(
   '/webhooks/stripe',
@@ -180,6 +201,8 @@ app.use('/webhooks', paymentWebhooksRouter);
 app.use('/api/v1/payments', paymentsRouter);
 app.use('/api/v1/admin/payment-providers', adminPaymentProvidersRouter);
 app.use('/api/v1/admin/integrations', adminIntegrationsRouter);
+const { adminMapsRouter } = require('./routes/admin-maps.routes');
+app.use('/api/v1/admin/maps', adminMapsRouter);
 // Transfer routes (incl. public claim-preview) before walletRouter auth wall
 app.use('/api/v1/wallet', walletTransferRouter);
 app.use('/api/v1/wallet', walletRouter);
@@ -280,9 +303,10 @@ const {
 
 app.use('/api/v1/rides', rideBookingRouter);
 app.use('/api/v1/voice', voiceRouter);
-  app.use('/api/v1/ai', require('./routes/ai.routes').aiRouter);
-  app.use('/api/v1/admin/ai', require('./routes/ai.routes').aiAdminRouter);
-  app.use('/webhooks', channelWebhooksRouter);
+const { aiRouter, aiAdminRouter } = require('./routes/ai.routes');
+app.use('/api/v1/ai', aiRouter);
+app.use('/api/v1/admin/ai', aiAdminRouter);
+app.use('/webhooks', channelWebhooksRouter);
 app.use('/api/v1/admin', adminVehicleRouter);
 app.use('/api/v1/admin/channels', adminChannelsRouter);
 
@@ -316,7 +340,7 @@ const authenticateToken = (req: AuthRequest, res: ExpressResponse, next: Express
       });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err: any, user: any) => {
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', async (err: any, user: any) => {
       if (err) {
         logger.warn(`Invalid token: ${err.message}`);
         return res.status(403).json({
@@ -325,7 +349,12 @@ const authenticateToken = (req: AuthRequest, res: ExpressResponse, next: Express
         });
       }
 
-      req.user = user;
+      try {
+        const { normalizeAuthUser } = require('./middleware/auth.middleware');
+        req.user = await normalizeAuthUser(user);
+      } catch {
+        req.user = user;
+      }
       next();
     });
   } catch (error) {
@@ -494,6 +523,8 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
       { expiresIn: '7d' }
     );
 
+    const verification = await deliverOnboardingComms(dbUser);
+
     res.status(201).json({
       status: 'success',
       message: 'Account created successfully',
@@ -502,6 +533,7 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
         email: dbUser.email,
         phone: dbUser.phone,
         token,
+        verification,
         user: {
           id: dbUser.id,
           email: dbUser.email,
@@ -627,10 +659,13 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
       { expiresIn: '7d' }
     );
 
+    const verification = await deliverOnboardingComms(dbUser);
+
     res.status(201).json({
       status: 'success',
       data: {
         token,
+        verification,
         user: {
           id: dbUser.id,
           email: dbUser.email,
@@ -876,6 +911,51 @@ async function persistOtp(opts: {
   return entry;
 }
 
+async function deliverOnboardingComms(user: {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  first_name?: string | null;
+  user_type?: string | null;
+}) {
+  try {
+    const { getUserOnboardingComms } = require('./services/user-onboarding-comms.service');
+    return await getUserOnboardingComms(authDb).afterSignup(user, persistOtp);
+  } catch (e: any) {
+    logger.warn(`onboarding comms skipped: ${e.message}`);
+    return null;
+  }
+}
+
+async function deliverAuthOtp(opts: {
+  identifier: string;
+  code: string;
+  purpose: 'reset' | 'signup';
+  firstName?: string | null;
+}) {
+  const id = String(opts.identifier || '').trim();
+  const { getEmailService } = require('./services/email.service');
+  const { getOtpDeliveryService } = require('./services/otp-delivery.service');
+  const emailSvc = getEmailService(authDb);
+  const otpDelivery = getOtpDeliveryService(authDb);
+
+  if (id.includes('@')) {
+    if (opts.purpose === 'reset') {
+      return emailSvc.sendPasswordReset({ to: id, code: opts.code });
+    }
+    return emailSvc.sendEmailVerification({
+      to: id,
+      firstName: opts.firstName,
+      code: opts.code,
+    });
+  }
+
+  if (opts.purpose === 'reset') {
+    return otpDelivery.sendPasswordResetSms(id, opts.code);
+  }
+  return otpDelivery.sendPhoneVerificationOtp(id, opts.code);
+}
+
 async function findUserForPasswordReset(identifier: string) {
   const raw = String(identifier || '').trim();
   if (!raw) return null;
@@ -913,11 +993,15 @@ app.post('/api/v1/auth/send-code', async (req: ExpressRequest, res: ExpressRespo
       purpose: 'signup',
     });
     logger.info(`Phone entry OTP for ${full}: ${code}`);
+    await deliverAuthOtp({ identifier: full, code, purpose: 'signup' }).catch((e: any) =>
+      logger.warn(`Phone OTP delivery failed: ${e.message}`)
+    );
     const data: any = {
       phone: full,
       countryCode,
       expiresInSeconds: 600,
       autoFillFromSim: Boolean(req.body.autoFillFromSim),
+      channels: ['sms', 'whatsapp'],
     };
     if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
       data.devCode = code;
@@ -1295,6 +1379,11 @@ app.post('/api/v1/auth/forgot-password', async (req: ExpressRequest, res: Expres
     });
 
     logger.info(`Password reset OTP for ${identifier}: ${code}`);
+    if (user) {
+      await deliverAuthOtp({ identifier, code, purpose: 'reset' }).catch((e: any) =>
+        logger.warn(`Reset OTP delivery failed: ${e.message}`)
+      );
+    }
 
     const payload: any = {
       status: 'success',
@@ -1339,6 +1428,9 @@ app.post('/api/v1/auth/resend-otp', async (req: ExpressRequest, res: ExpressResp
     await persistOtp({ identifier, code, purpose: purpose as 'reset' | 'signup', userId });
 
     logger.info(`Resend OTP (${purpose}) for ${identifier}: ${code}`);
+    await deliverAuthOtp({ identifier, code, purpose: purpose as 'reset' | 'signup' }).catch(
+      (e: any) => logger.warn(`Resend OTP delivery failed: ${e.message}`)
+    );
     const data: any = { identifier: storeKey, phone: storeKey, expiresInSeconds: 600 };
     if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
       data.devCode = code;
@@ -1454,6 +1546,18 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
         .catch(() => undefined);
     }
 
+    if (purpose !== 'reset' && entry!.purpose !== 'reset' && identifier.includes('@')) {
+      await authDb
+        .query(
+          `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()),
+             is_verified = TRUE,
+             updated_at = NOW()
+           WHERE lower(email) = lower($1)`,
+          [identifier]
+        )
+        .catch(() => undefined);
+    }
+
     if (purpose === 'reset' || entry!.purpose === 'reset') {
       if (!entry!.userId) {
         return res.status(400).json({
@@ -1476,6 +1580,227 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
     res.json({ status: 'success', message: 'Verified', data: { verified: true, purpose: 'signup' } });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message || 'Verification failed' });
+  }
+});
+
+/** Explicit email verification. */
+app.post('/api/v1/auth/verify-email', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const identifier = String(req.body.email || req.body.identifier || '')
+      .trim()
+      .toLowerCase();
+    const code = String(req.body.code || '').trim();
+    if (!identifier || !identifier.includes('@') || !code) {
+      return res.status(400).json({ status: 'error', message: 'Email and code are required' });
+    }
+
+    let entry: { code: string; expires: number; userId?: string; purpose: 'reset' | 'signup' } | undefined;
+    for (const key of otpLookupKeys(identifier)) {
+      const found = otpStore.get(key);
+      if (found) {
+        entry = found;
+        break;
+      }
+    }
+    if (!entry) {
+      try {
+        const dbOtp = await authDb.query(
+          `SELECT * FROM auth_otps
+           WHERE identifier = ANY($1::text[])
+             AND purpose = 'signup'
+             AND consumed_at IS NULL
+             AND expires_at > NOW()
+           ORDER BY created_at DESC LIMIT 1`,
+          [otpLookupKeys(identifier)]
+        );
+        const row = dbOtp.rows[0];
+        if (row && row.code_hash === hashOtp(code)) {
+          entry = {
+            code,
+            expires: new Date(row.expires_at).getTime(),
+            userId: row.user_id || undefined,
+            purpose: 'signup',
+          };
+          await authDb.query(`UPDATE auth_otps SET consumed_at = NOW() WHERE id = $1`, [row.id]);
+        }
+      } catch (e: any) {
+        logger.warn(`verify-email otp lookup skipped: ${e.message}`);
+      }
+    }
+
+    const valid = entry && entry.expires > Date.now() && entry.code === code;
+    if (!valid) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired code' });
+    }
+
+    for (const key of otpLookupKeys(identifier)) otpStore.delete(key);
+    await authDb
+      .query(
+        `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()),
+           is_verified = TRUE,
+           updated_at = NOW()
+         WHERE lower(email) = lower($1)`,
+        [identifier]
+      )
+      .catch(() => undefined);
+
+    res.json({
+      status: 'success',
+      message: 'Email verified',
+      data: { verified: true, email: identifier },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Email verification failed' });
+  }
+});
+
+/** Explicit phone verification — same number used for WhatsApp later. */
+app.post('/api/v1/auth/verify-phone', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const identifier = String(req.body.phone || req.body.identifier || '').trim();
+    const code = String(req.body.code || '').trim();
+    if (!identifier || !code) {
+      return res.status(400).json({ status: 'error', message: 'Phone and code are required' });
+    }
+    if (identifier.includes('@')) {
+      return res.status(400).json({ status: 'error', message: 'Use verify-email for email addresses' });
+    }
+
+    // Reuse verify-otp logic by forwarding body
+    req.body.purpose = 'signup';
+    req.body.phone = identifier;
+    req.body.identifier = identifier;
+
+    let entry: { code: string; expires: number; userId?: string; purpose: 'reset' | 'signup' } | undefined;
+    for (const key of otpLookupKeys(identifier)) {
+      const found = otpStore.get(key);
+      if (found) {
+        entry = found;
+        break;
+      }
+    }
+    if (!entry) {
+      try {
+        const dbOtp = await authDb.query(
+          `SELECT * FROM auth_otps
+           WHERE identifier = ANY($1::text[])
+             AND purpose = 'signup'
+             AND consumed_at IS NULL
+             AND expires_at > NOW()
+           ORDER BY created_at DESC LIMIT 1`,
+          [otpLookupKeys(identifier)]
+        );
+        const row = dbOtp.rows[0];
+        if (row && row.code_hash === hashOtp(code)) {
+          entry = {
+            code,
+            expires: new Date(row.expires_at).getTime(),
+            userId: row.user_id || undefined,
+            purpose: 'signup',
+          };
+          await authDb.query(`UPDATE auth_otps SET consumed_at = NOW() WHERE id = $1`, [row.id]);
+        }
+      } catch (e: any) {
+        logger.warn(`verify-phone otp lookup skipped: ${e.message}`);
+      }
+    }
+
+    const valid = entry && entry.expires > Date.now() && entry.code === code;
+    if (!valid) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired code' });
+    }
+
+    for (const key of otpLookupKeys(identifier)) otpStore.delete(key);
+    await authDb
+      .query(
+        `UPDATE users SET phone_verified_at = COALESCE(phone_verified_at, NOW()),
+           onboarding_step = GREATEST(COALESCE(onboarding_step, 1), 1),
+           updated_at = NOW()
+         WHERE phone = ANY($1::text[]) OR regexp_replace(COALESCE(phone,''), '\\D', '', 'g')
+           = regexp_replace($2, '\\D', '', 'g')`,
+        [otpLookupKeys(identifier), identifier]
+      )
+      .catch(() => undefined);
+
+    res.json({
+      status: 'success',
+      message: 'Phone verified — this number can receive WhatsApp messages from Movr',
+      data: { verified: true, phone: normalizeAuthIdentifier(identifier), channel: 'whatsapp' },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Phone verification failed' });
+  }
+});
+
+/** Resend welcome/verification for an existing account. */
+app.post('/api/v1/auth/resend-verification', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const channel = String(req.body.channel || 'all').toLowerCase(); // email | phone | all
+    const email = req.body.email ? String(req.body.email).trim().toLowerCase() : '';
+    const phone = req.body.phone
+      ? String(req.body.phone).replace(/[\s\-()]/g, '')
+      : '';
+    if (!email && !phone) {
+      return res.status(400).json({ status: 'error', message: 'Email or phone is required' });
+    }
+
+    let user: any = null;
+    if (email) {
+      const r = await authDb.query(
+        `SELECT id, email, phone, first_name, user_type FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+        [email]
+      );
+      user = r.rows[0] || null;
+    }
+    if (!user && phone) {
+      const r = await authDb.query(
+        `SELECT id, email, phone, first_name, user_type FROM users
+         WHERE phone = $1 OR regexp_replace(COALESCE(phone,''), '\\D', '', 'g') = regexp_replace($2, '\\D', '', 'g')
+         LIMIT 1`,
+        [phone, phone]
+      );
+      user = r.rows[0] || null;
+    }
+
+    if (!user) {
+      return res.json({
+        status: 'success',
+        message: 'If an account exists, verification was resent',
+        data: {},
+      });
+    }
+
+    const { getEmailService } = require('./services/email.service');
+    const { getOtpDeliveryService } = require('./services/otp-delivery.service');
+    const emailSvc = getEmailService(authDb);
+    const otpDelivery = getOtpDeliveryService(authDb);
+    const result: any = {};
+
+    if ((channel === 'all' || channel === 'email') && user.email && !String(user.email).endsWith('@phone.movr')) {
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      await persistOtp({ identifier: user.email, code, purpose: 'signup', userId: user.id });
+      result.email = await emailSvc.sendEmailVerification({
+        to: user.email,
+        firstName: user.first_name,
+        code,
+      });
+      if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
+        result.emailDevCode = code;
+      }
+    }
+
+    if ((channel === 'all' || channel === 'phone') && user.phone) {
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      await persistOtp({ identifier: user.phone, code, purpose: 'signup', userId: user.id });
+      result.phone = await otpDelivery.sendPhoneVerificationOtp(user.phone, code);
+      if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
+        result.phoneDevCode = code;
+      }
+    }
+
+    res.json({ status: 'success', message: 'Verification resent', data: result });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message || 'Could not resend verification' });
   }
 });
 

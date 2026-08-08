@@ -43,17 +43,17 @@ const TABS: { key: FilterKey; label: string }[] = [
 
 function statusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
-  if (s === 'online') return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
-  if (s === 'suspended') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
-  if (s === 'kyc') return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
-  return { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' };
+  if (s === 'online') return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
+  if (s === 'suspended') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
+  if (s === 'kyc') return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
+  return { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' };
 }
 
 function subStyle(sub: string): React.CSSProperties {
   const s = sub.toLowerCase();
-  if (s === 'monthly' || s === 'weekly') return { background: 'rgba(142,45,226,0.25)', color: '#c4b5fd' };
+  if (s === 'monthly' || s === 'weekly') return { background: 'rgba(142,45,226,0.25)', color: 'var(--accent-purple)' };
   if (s === 'trial') return { background: 'rgba(59,130,246,0.25)', color: '#93c5fd' };
-  if (s === 'expired') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
+  if (s === 'expired') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
   return { background: 'var(--surface)', color: 'var(--text-secondary)' };
 }
 

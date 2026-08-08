@@ -192,7 +192,7 @@ export default function BroadcastCenterPage() {
                       <td style={styles.td}>{r.title}</td>
                       <td style={styles.td}>{r.target}</td>
                       <td style={styles.td}>{Number(r.sentTo || 0).toLocaleString()}</td>
-                      <td style={{ ...styles.td, color: '#4ade80' }}>{r.openRate}%</td>
+                      <td style={{ ...styles.td, color: 'var(--success)' }}>{r.openRate}%</td>
                       <td style={styles.td}>{r.type}</td>
                       <td style={styles.td}>
                         {r.date
@@ -200,7 +200,7 @@ export default function BroadcastCenterPage() {
                           : '—'}
                       </td>
                       <td style={styles.td}>
-                        <span style={{ color: '#a78bfa', cursor: 'pointer' }}>View</span>
+                        <span style={{ color: 'var(--electric-violet)', cursor: 'pointer' }}>View</span>
                       </td>
                     </tr>
                   ))
@@ -276,8 +276,8 @@ const styles: Record<string, React.CSSProperties> = {
   actions: { display: 'flex', gap: 10 },
   primaryBtn: { ...adminBtn.primary },
   secondaryBtn: { ...adminBtn.secondary },
-  error: { color: '#f87171' },
-  message: { color: '#4ade80' },
+  error: { color: 'var(--error)' },
+  message: { color: 'var(--success)' },
   muted: { color: 'var(--text-secondary)', fontSize: 13 },
   kpiRow: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 16 },
   kpi: {

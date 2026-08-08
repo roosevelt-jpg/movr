@@ -357,7 +357,7 @@ const styles: Record<string, React.CSSProperties> = {
   sub: { color: 'var(--text-secondary)', margin: '6px 0 0', fontSize: 14 },
   muted: { color: 'var(--text-secondary)', fontSize: 13 },
   error: { color: 'var(--error)', marginBottom: 12 },
-  ok: { color: '#4ade80', marginBottom: 12 },
+  ok: { color: 'var(--success)', marginBottom: 12 },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',

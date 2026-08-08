@@ -78,6 +78,7 @@ adminPaymentProvidersRouter.get(
   requireAdmin,
   async (_req: AuthRequest, res: Response) => {
     try {
+      await paymentService.ensureProviderDefaults();
       const result = await paymentService.listProviderConfig();
       res.json({ status: 'success', data: result.rows });
     } catch (error: any) {

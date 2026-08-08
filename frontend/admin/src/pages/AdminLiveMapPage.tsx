@@ -423,7 +423,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 14px',
     background: 'rgba(249,115,22,0.2)',
     border: '1px solid #F97316',
-    color: '#FDBA74',
+    color: 'var(--text-primary)',
     fontWeight: 700,
     fontSize: 13,
   },

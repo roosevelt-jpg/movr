@@ -24,6 +24,11 @@ button {
   font-family: inherit;
 }
 
+/* Page copy inherits theme text — prevents invisible white-on-light leftovers */
+.admin-main {
+  color: var(--text-primary);
+}
+
 /* Compact, responsive action buttons across admin pages */
 .admin-main button {
   transition: transform 0.12s ease, opacity 0.12s ease, filter 0.12s ease;

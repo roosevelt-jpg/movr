@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
+import { friendlyApiError } from '../lib/apiError';
+import { API } from '../lib/apiBase';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({
   Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}`,
   'Content-Type': 'application/json',
@@ -49,19 +50,52 @@ function relativeTime(iso?: string) {
 function actionPill(action: string, actionRaw?: string): React.CSSProperties {
   const s = `${actionRaw || ''} ${action}`.toLowerCase();
   if (s.includes('suspend') || s.includes('cancel') || s.includes('reject') || s.includes('ban')) {
-    return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
+    return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
   }
   if (s.includes('approve') || s.includes('enable') || s.includes('create')) {
-    return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
+    return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
   }
   if (s.includes('adjust') || s.includes('config') || s.includes('change') || s.includes('update')) {
-    return { background: 'rgba(59,130,246,0.2)', color: '#93c5fd' };
+    return { background: 'rgba(59,130,246,0.18)', color: 'var(--motion-blue)' };
   }
   if (s.includes('warn') || s.includes('flag')) {
-    return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
+    return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
   }
-  return { background: 'rgba(148,163,184,0.2)', color: '#cbd5e1' };
+  return { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' };
 }
+
+const DEFAULT_FLAGS: Flag[] = [
+  {
+    key: 'surge_pricing',
+    enabled: false,
+    label: 'Surge pricing',
+    description: 'Allow demand-based fare multipliers',
+  },
+  {
+    key: 'dvt_rewards',
+    enabled: false,
+    label: 'DVT rewards',
+    description: 'Earn and redeem DVT on completed trips',
+  },
+  {
+    key: 'merchant_kyc_approval',
+    enabled: false,
+    label: 'Merchant KYC approval',
+    description: 'Require ops approval before merchants go live',
+  },
+  {
+    key: 'maintenance_mode',
+    enabled: false,
+    label: 'Maintenance mode',
+    description: 'Show maintenance banner and block new bookings',
+  },
+  {
+    key: 'token_claims',
+    enabled: false,
+    label: 'Token claims',
+    description: 'Allow users to claim airdrop / reward tokens',
+  },
+];
 
 const PRICING_FIELDS: { key: keyof Pricing; label: string; step?: string }[] = [
   { key: 'base_fare_per_km', label: 'Base fare / km' },
@@ -74,7 +108,7 @@ const PRICING_FIELDS: { key: keyof Pricing; label: string; step?: string }[] = [
 
 /** System Settings & Audit Log — platform flags, pricing, live audit. */
 export default function AdminSettingsPage() {
-  const [flags, setFlags] = useState<Flag[]>([]);
+  const [flags, setFlags] = useState<Flag[]>(DEFAULT_FLAGS);
   const [pricing, setPricing] = useState<Pricing>({
     base_fare_per_km: 120,
     merchant_fee_pct: 5,
@@ -93,12 +127,12 @@ export default function AdminSettingsPage() {
     try {
       const res = await axios.get(`${API}/admin/platform-settings`, { headers: headers() });
       const data = res.data?.data;
-      if (data?.flags) setFlags(data.flags);
+      if (Array.isArray(data?.flags) && data.flags.length) setFlags(data.flags);
       if (data?.pricing) setPricing((prev) => ({ ...prev, ...data.pricing }));
       if (Array.isArray(data?.audit)) setAudit(data.audit);
       setError('');
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Failed to load settings');
+      setError(friendlyApiError(e, 'Failed to load settings'));
     }
   }, []);
 
@@ -124,7 +158,7 @@ export default function AdminSettingsPage() {
       setMessage('Settings saved');
       await load();
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Save failed');
+      setError(friendlyApiError(e, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -143,12 +177,12 @@ export default function AdminSettingsPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Export failed');
+      setError(friendlyApiError(e, 'Export failed'));
     }
   };
 
   return (
-    <AdminShell activeLabel="Settings">
+    <AdminShell activeLabel="Settings" hidePageTitle>
       <div
         style={{
           display: 'flex',
@@ -160,7 +194,9 @@ export default function AdminSettingsPage() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>System Settings & Audit Log</h1>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: 'var(--text-primary)' }}>
+            System Settings & Audit Log
+          </h1>
           <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0' }}>
             Platform toggles, pricing, and a live stream of admin actions.
           </p>
@@ -175,15 +211,23 @@ export default function AdminSettingsPage() {
         </div>
       </div>
 
-      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
-      {message ? <p style={{ color: 'var(--success, #4ade80)' }}>{message}</p> : null}
+      {error ? (
+        <div style={styles.alert} role="alert">
+          <div style={styles.alertTitle}>Settings notice</div>
+          <p style={styles.alertBody}>{error}</p>
+          <button type="button" style={styles.retry} onClick={() => load()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {message ? <p style={{ color: 'var(--success)', marginBottom: 12 }}>{message}</p> : null}
 
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 0.9fr)',
           gap: 20,
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -246,8 +290,11 @@ export default function AdminSettingsPage() {
               }}
             >
               {PRICING_FIELDS.map((field) => (
-                <label key={field.key} style={{ display: 'block', fontSize: 13, minWidth: 0 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>{field.label}</span>
+                <label
+                  key={field.key}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, minWidth: 0 }}
+                >
+                  <span style={styles.fieldLabel}>{field.label}</span>
                   <input
                     type="number"
                     step={field.step || '1'}
@@ -259,8 +306,8 @@ export default function AdminSettingsPage() {
                   />
                 </label>
               ))}
-              <label style={{ display: 'block', fontSize: 13, minWidth: 0 }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Currency</span>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, minWidth: 0 }}>
+                <span style={styles.fieldLabel}>Currency</span>
                 <input
                   value={pricing.currency || ''}
                   onChange={(e) => setPricing((p) => ({ ...p, currency: e.target.value }))}
@@ -271,7 +318,7 @@ export default function AdminSettingsPage() {
           </section>
         </div>
 
-        <section style={{ ...styles.card, maxHeight: '70vh', overflow: 'auto' }}>
+        <section style={{ ...styles.card, maxHeight: '70vh', overflow: 'auto', minHeight: 280 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Live Audit Log</h2>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Polling 15s</span>
@@ -331,6 +378,31 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 0 16px',
     fontSize: 16,
     fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
+  fieldLabel: {
+    color: 'var(--text-secondary)',
+    fontWeight: 600,
+    fontSize: 12,
+  },
+  alert: {
+    marginBottom: 16,
+    padding: '12px 14px',
+    borderRadius: 12,
+    border: '1px solid rgba(225,29,72,0.35)',
+    background: 'rgba(225,29,72,0.08)',
+  },
+  alertTitle: { fontWeight: 700, fontSize: 13, marginBottom: 4, color: 'var(--error)' },
+  alertBody: { margin: '0 0 10px', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 },
+  retry: {
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '6px 10px',
+    fontWeight: 600,
+    fontSize: 12,
+    cursor: 'pointer',
   },
   primaryBtn: { ...adminBtn.primary },
   secondaryBtn: { ...adminBtn.secondary },
@@ -338,7 +410,6 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     minWidth: 0,
     maxWidth: '100%',
-    marginTop: 6,
     padding: '10px 12px',
     borderRadius: 10,
     border: '1px solid var(--border)',
@@ -363,7 +434,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 20,
     height: 20,
     borderRadius: '50%',
-    background: '#fff',
+    background: 'var(--brand-white)',
     transition: 'transform 0.15s ease',
   },
 };

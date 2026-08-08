@@ -284,7 +284,7 @@ const styles: Record<string, React.CSSProperties> = {
   amount: {
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     borderRadius: 10,
     padding: '10px 12px',
     minWidth: 160,
@@ -327,7 +327,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 'auto',
     background: 'var(--surface-elevated)',
     border: '1px solid var(--border)',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     borderRadius: 10,
     padding: '12px 14px',
   },

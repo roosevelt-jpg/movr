@@ -45,10 +45,10 @@ const TABS: { key: FilterKey; label: string }[] = [
 
 function tierStyle(tier: string): React.CSSProperties {
   const t = tier.toLowerCase();
-  if (t === 'platinum') return { background: 'rgba(168,85,247,0.25)', color: '#e9d5ff' };
-  if (t === 'gold') return { background: 'rgba(234,179,8,0.25)', color: '#facc15' };
-  if (t === 'silver') return { background: 'rgba(148,163,184,0.3)', color: '#e2e8f0' };
-  return { background: 'rgba(180,83,9,0.25)', color: '#fdba74' };
+  if (t === 'platinum') return { background: 'rgba(168,85,247,0.2)', color: '#7c3aed' };
+  if (t === 'gold') return { background: 'rgba(234,179,8,0.22)', color: '#a16207' };
+  if (t === 'silver') return { background: 'rgba(100,116,139,0.22)', color: '#475569' };
+  return { background: 'rgba(180,83,9,0.2)', color: '#9a3412' };
 }
 
 /** Customer management — stats, tiers, add, export. */
@@ -257,7 +257,7 @@ export default function CustomersManagementPage() {
                   <td style={styles.td}>{c.city}</td>
                   <td style={styles.td}>{c.rides}</td>
                   <td style={styles.td}>{formatCurrency(c.spend)}</td>
-                  <td style={{ ...styles.td, color: '#c4b5fd', fontWeight: 600 }}>
+                  <td style={{ ...styles.td, color: 'var(--accent-purple)', fontWeight: 600 }}>
                     {Number(c.points || 0).toLocaleString()}
                   </td>
                   <td style={styles.td}>

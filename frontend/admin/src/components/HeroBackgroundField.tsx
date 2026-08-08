@@ -75,7 +75,7 @@ export function HeroBackgroundField({
                 overflow: 'hidden',
                 border: active ? '2px solid var(--motion-blue, #0055FF)' : '1px solid var(--border)',
                 cursor: disabled ? 'default' : 'pointer',
-                background: '#111',
+                background: 'var(--surface)',
               }}
             >
               <img

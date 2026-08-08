@@ -4,8 +4,9 @@ import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
 import { formatCurrency } from '../lib/currency';
+import { friendlyApiError } from '../lib/apiError';
+import { API } from '../lib/apiBase';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
 const SPLIT_COLORS = ['#8E2DE2', '#3B82F6', '#22C55E', '#EAB308', '#F97316', '#94A3B8'];
@@ -31,6 +32,10 @@ export default function AdminOverviewPage() {
   const [recentRides, setRecentRides] = useState<RideRow[]>([]);
   const [topMerchants, setTopMerchants] = useState<MerchantRow[]>([]);
   const [announcing, setAnnouncing] = useState(false);
+  const [showAnnounce, setShowAnnounce] = useState(false);
+  const [announceTitle, setAnnounceTitle] = useState('');
+  const [announceBody, setAnnounceBody] = useState('');
+  const [announceMsg, setAnnounceMsg] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -54,7 +59,7 @@ export default function AdminOverviewPage() {
       setTopMerchants(widgets.topMerchants || []);
       setError('');
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Failed to load dashboard');
+      setError(friendlyApiError(e, 'Failed to load dashboard'));
     } finally {
       setLoading(false);
     }
@@ -103,21 +108,30 @@ export default function AdminOverviewPage() {
     URL.revokeObjectURL(url);
   };
 
-  const createAnnouncement = async () => {
-    const title = window.prompt('Announcement title');
-    if (!title?.trim()) return;
-    const body = window.prompt('Announcement body');
-    if (!body?.trim()) return;
+  const createAnnouncement = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const title = announceTitle.trim();
+    const body = announceBody.trim();
+    if (!title || !body) {
+      setError('Title and body are required');
+      return;
+    }
     setAnnouncing(true);
+    setAnnounceMsg('');
+    setError('');
     try {
       await axios.post(
         `${API}/admin/announcements`,
-        { title: title.trim(), body: body.trim(), audience: 'all', status: 'published' },
+        { title, body, audience: 'all', status: 'published' },
         { headers: headers() }
       );
+      setAnnounceMsg('Announcement published');
+      setAnnounceTitle('');
+      setAnnounceBody('');
+      setShowAnnounce(false);
       await load();
-    } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Failed to create announcement');
+    } catch (err: any) {
+      setError(friendlyApiError(err, 'Failed to create announcement'));
     } finally {
       setAnnouncing(false);
     }
@@ -141,14 +155,89 @@ export default function AdminOverviewPage() {
           <button type="button" style={styles.secondaryBtn} onClick={exportDashboard}>
             Export
           </button>
-          <button type="button" style={styles.primaryBtn} onClick={createAnnouncement} disabled={announcing}>
+          <button
+            type="button"
+            style={styles.primaryBtn}
+            onClick={() => {
+              setShowAnnounce(true);
+              setError('');
+              setAnnounceMsg('');
+            }}
+            disabled={announcing}
+          >
             {announcing ? 'Posting…' : '+ Announcement'}
           </button>
         </div>
       </div>
 
-      {error ? <p style={styles.error}>{error}</p> : null}
+      {announceMsg ? <p style={styles.ok}>{announceMsg}</p> : null}
+      {error ? (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12,
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(225,29,72,0.35)',
+            background: 'rgba(225,29,72,0.08)',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, color: 'var(--error)' }}>
+            Dashboard notice
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)' }}>{error}</p>
+        </div>
+      ) : null}
       {loading ? <p style={styles.sub}>Loading dashboard…</p> : null}
+
+      {showAnnounce ? (
+        <div style={styles.modalBackdrop} onClick={() => !announcing && setShowAnnounce(false)}>
+          <form
+            style={styles.modal}
+            onClick={(ev) => ev.stopPropagation()}
+            onSubmit={createAnnouncement}
+          >
+            <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>New announcement</h2>
+            <p style={{ ...styles.sub, marginBottom: 16 }}>
+              Published to the admin announcements feed. For push/SMS campaigns use Broadcasts.
+            </p>
+            <label style={styles.fieldLabel}>
+              Title
+              <input
+                style={styles.input}
+                value={announceTitle}
+                onChange={(e) => setAnnounceTitle(e.target.value)}
+                placeholder="e.g. Double DVT weekend"
+                required
+                autoFocus
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              Body
+              <textarea
+                style={{ ...styles.input, minHeight: 100, resize: 'vertical' }}
+                value={announceBody}
+                onChange={(e) => setAnnounceBody(e.target.value)}
+                placeholder="Message shown to operators / users"
+                required
+              />
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                style={styles.secondaryBtn}
+                disabled={announcing}
+                onClick={() => setShowAnnounce(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" style={styles.primaryBtn} disabled={announcing}>
+                {announcing ? 'Publishing…' : 'Publish'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       <div style={styles.cards} className="admin-kpi-grid" data-admin-grid="kpi">
         {cards.map((c) => (
@@ -316,6 +405,45 @@ const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 28, fontWeight: 700, margin: 0 },
   sub: { color: 'var(--text-secondary)', marginTop: 6, marginBottom: 0 },
   error: { color: 'var(--error)', marginBottom: 12 },
+  ok: { color: 'var(--success)', marginBottom: 12 },
+  modalBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 80,
+    padding: 16,
+  },
+  modal: {
+    width: '100%',
+    maxWidth: 440,
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    borderRadius: 16,
+    padding: 20,
+    color: 'var(--text-primary)',
+  },
+  fieldLabel: {
+    display: 'block',
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    marginBottom: 12,
+  },
+  input: {
+    display: 'block',
+    width: '100%',
+    marginTop: 6,
+    boxSizing: 'border-box',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '10px 12px',
+    color: 'var(--text-primary)',
+    fontSize: 14,
+    fontFamily: 'inherit',
+  },
   actions: { display: 'flex', gap: 10 },
   primaryBtn: { ...adminBtn.primary },
   secondaryBtn: { ...adminBtn.secondary },

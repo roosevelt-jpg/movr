@@ -219,16 +219,33 @@ adminTeamRouter.post(
       });
 
       const acceptPath = `/admin/invite/accept?token=${rawToken}`;
+      const acceptAbsoluteUrl = `${(process.env.ADMIN_URL || 'http://localhost:3002').replace(/\/$/, '')}/admin/invite/accept?token=${rawToken}`;
+
+      let emailDelivery: { sent: boolean; skipped?: string } | null = null;
+      try {
+        const { getEmailService } = require('../services/email.service');
+        emailDelivery = await getEmailService(db).sendAdminInvite({
+          to: email,
+          acceptUrl: acceptAbsoluteUrl,
+          roles,
+        });
+      } catch (e: any) {
+        emailDelivery = { sent: false, skipped: e?.message || 'send_failed' };
+      }
+
       res.status(201).json({
         status: 'success',
         data: {
           invite: inserted.rows[0],
-          /** Raw token returned once for sharing (email delivery optional). */
+          /** Raw token returned once for sharing if email delivery fails. */
           inviteToken: rawToken,
           acceptUrl: acceptPath,
-          acceptAbsoluteUrl: `${(process.env.ADMIN_URL || 'http://localhost:3002').replace(/\/$/, '')}/admin/invite/accept?token=${rawToken}`,
+          acceptAbsoluteUrl,
+          emailDelivery,
         },
-        message: 'Invite created — share the accept link with the teammate',
+        message: emailDelivery?.sent
+          ? 'Invite emailed to teammate'
+          : 'Invite created — share the accept link (email not sent)',
       });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

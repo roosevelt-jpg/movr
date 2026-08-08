@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import winston from 'winston';
 
 const logger = winston.createLogger({
-  defaultMeta: { service: 'auth-middleware' }
+  defaultMeta: { service: 'auth-middleware' },
 });
 
 export interface AuthRequest extends Request {
@@ -14,6 +14,58 @@ export interface AuthRequest extends Request {
     userType: string;
     roles?: string[];
   };
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(value?: string | null): boolean {
+  return Boolean(value && UUID_RE.test(String(value)));
+}
+
+/**
+ * Replace legacy/demo JWT ids (e.g. user_admin_demo) with the real users.id UUID.
+ * Falls back to email lookup so admin FK writes don't blow up on UUID columns.
+ */
+export async function normalizeAuthUser(user: any): Promise<any> {
+  if (!user) return user;
+  if (isUuid(user.id)) return user;
+
+  const email = user.email ? String(user.email).trim().toLowerCase() : '';
+  if (!email) {
+    logger.warn('JWT has non-UUID id and no email — FK writes may fail', { id: user.id });
+    return user;
+  }
+
+  try {
+    const { DatabaseService } = await import('../services/database.service');
+    const db = new DatabaseService();
+    const row = await db.query(
+      `SELECT id, email, user_type FROM users WHERE lower(email) = $1 LIMIT 1`,
+      [email]
+    );
+    if (row.rows[0]?.id) {
+      logger.info('Normalized stale JWT user id via email', {
+        from: user.id,
+        to: row.rows[0].id,
+        email,
+      });
+      return {
+        ...user,
+        id: String(row.rows[0].id),
+        email: row.rows[0].email || user.email,
+        userType: user.userType || row.rows[0].user_type,
+      };
+    }
+  } catch (error: any) {
+    logger.warn('normalizeAuthUser failed', { error: error?.message });
+  }
+  return user;
+}
+
+/** Safe actor id for UUID columns — null when still not resolvable. */
+export function actorUserId(user?: { id?: string } | null): string | null {
+  return isUuid(user?.id) ? String(user!.id) : null;
 }
 
 /**
@@ -31,27 +83,31 @@ export const authenticateToken = (
     if (!token) {
       return res.status(401).json({
         status: 'error',
-        message: 'No authentication token provided'
+        message: 'No authentication token provided',
       });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err: any, user: any) => {
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', async (err: any, user: any) => {
       if (err) {
         logger.warn(`Invalid token: ${err.message}`);
         return res.status(403).json({
           status: 'error',
-          message: 'Invalid or expired token'
+          message: 'Invalid or expired token',
         });
       }
 
-      req.user = user;
+      try {
+        req.user = await normalizeAuthUser(user);
+      } catch {
+        req.user = user;
+      }
       next();
     });
   } catch (error) {
     logger.error('Authentication error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Authentication failed'
+      message: 'Authentication failed',
     });
   }
 };
@@ -67,7 +123,7 @@ export const requireDriver = (
   if (!req.user || req.user.userType !== 'driver') {
     return res.status(403).json({
       status: 'error',
-      message: 'Only drivers can access this resource'
+      message: 'Only drivers can access this resource',
     });
   }
   next();
@@ -84,7 +140,7 @@ export const requireCustomer = (
   if (!req.user || req.user.userType !== 'customer') {
     return res.status(403).json({
       status: 'error',
-      message: 'Only customers can access this resource'
+      message: 'Only customers can access this resource',
     });
   }
   next();
@@ -101,7 +157,7 @@ export const requireAdmin = (
   if (!req.user || req.user.userType !== 'admin') {
     return res.status(403).json({
       status: 'error',
-      message: 'Admin access required'
+      message: 'Admin access required',
     });
   }
   next();
@@ -112,10 +168,7 @@ export const requireAdmin = (
  */
 export const requireRole = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    const claimed = [
-      req.user?.userType,
-      ...(req.user?.roles || []),
-    ].filter(Boolean) as string[];
+    const claimed = [req.user?.userType, ...(req.user?.roles || [])].filter(Boolean) as string[];
 
     const ok = roles.some((r) => claimed.includes(r));
     if (!req.user || !ok) {
@@ -148,11 +201,15 @@ export const requireTrustAndSafety = async (
   let roles = req.user.roles || [];
   if (!roles.includes('trust_and_safety') && !roles.includes('super_admin')) {
     try {
-      const { DatabaseService } = await import('../services/database.service');
-      const db = new DatabaseService();
-      const rr = await db.query(`SELECT role FROM admin_roles WHERE user_id = $1`, [req.user.id]);
-      roles = rr.rows.map((r: any) => r.role);
-      req.user.roles = roles;
+      if (isUuid(req.user.id)) {
+        const { DatabaseService } = await import('../services/database.service');
+        const db = new DatabaseService();
+        const rr = await db.query(`SELECT role FROM admin_roles WHERE user_id = $1`, [
+          req.user.id,
+        ]);
+        roles = rr.rows.map((r: any) => r.role);
+        req.user.roles = roles;
+      }
     } catch {
       /* keep JWT roles */
     }
@@ -168,6 +225,7 @@ export const requireTrustAndSafety = async (
 
 /** Load roles for an admin from DB (and cache on req.user). */
 export async function loadAdminRoles(userId: string): Promise<string[]> {
+  if (!isUuid(userId)) return [];
   const { DatabaseService } = await import('../services/database.service');
   const db = new DatabaseService();
   const rr = await db.query(`SELECT role FROM admin_roles WHERE user_id = $1`, [userId]);

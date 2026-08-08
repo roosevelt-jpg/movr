@@ -4,7 +4,7 @@ import { Menu, Moon, Sun, X } from 'lucide-react';
 import { clearAdminAccess } from '../lib/rbac';
 import { useTheme } from '../theme/ThemeProvider';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
+import { API } from '../lib/apiBase';
 const AVATAR_KEY = 'movr_admin_avatar_url';
 
 type NavItem = { label: string; to: string };

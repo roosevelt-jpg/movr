@@ -154,8 +154,8 @@ export default function FinanceDashboardPage() {
       <div style={styles.headerRow}>
         <div>
           <h1 style={styles.h1}>Finance & GMV Dashboard</h1>
-          <p style={{ margin: '8px 0 0', color: '#a1a1aa', fontSize: 13 }}>
-            <Link to="/trust" style={{ color: '#a78bfa', fontWeight: 700 }}>
+          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>
+            <Link to="/trust" style={{ color: 'var(--electric-violet)', fontWeight: 700 }}>
               Trust Ops
             </Link>{' '}
             — SOS, disputes, agent codes, reliability credits

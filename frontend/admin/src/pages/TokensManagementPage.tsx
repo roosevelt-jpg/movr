@@ -21,9 +21,9 @@ function truncateWallet(w: string) {
 
 function claimStatusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
-  if (s === 'completed') return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
-  if (s === 'failed') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
-  return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
+  if (s === 'completed') return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
+  if (s === 'failed') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
+  return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
 }
 
 type Dist = { label: string; pct: number; color?: string; category?: string };
@@ -338,7 +338,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   poolName: { fontWeight: 700, fontSize: 14 },
   poolMeta: { color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 },
-  apy: { color: '#c4b5fd', fontWeight: 700, fontSize: 14 },
+  apy: { color: 'var(--accent-purple)', fontWeight: 700, fontSize: 14 },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: {
     textAlign: 'left',

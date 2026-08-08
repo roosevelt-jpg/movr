@@ -38,12 +38,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: 28,
     marginBottom: 24,
-    borderBottom: '1px solid #222',
+    borderBottom: '1px solid var(--border)',
     flexWrap: 'wrap',
   },
   tab: {
     padding: '10px 0',
-    color: '#888',
+    color: 'var(--text-secondary)',
     textDecoration: 'none',
     fontSize: 15,
     fontWeight: 500,
@@ -51,8 +51,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: -1,
   },
   tabActive: {
-    color: '#fff',
-    borderBottomColor: '#3B82F6',
+    color: 'var(--text-primary)',
+    borderBottomColor: 'var(--motion-blue)',
     fontWeight: 600,
   },
 };

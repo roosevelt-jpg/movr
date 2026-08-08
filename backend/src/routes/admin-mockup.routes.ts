@@ -2,7 +2,7 @@
  * Admin APIs for Customer Management, DVT Tokens, Marketplace, Live Dispatch mockups.
  */
 import { Router, Response } from 'express';
-import { authenticateToken, AuthRequest, requireAdmin } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest, requireAdmin, actorUserId } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 
@@ -736,7 +736,7 @@ adminMockupRouter.post('/dispatch/broadcast', authenticateToken, requireAdmin, a
     const r = await db.query(
       `INSERT INTO dispatch_broadcasts (title, body, zone, audience, created_by)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [title, body, zone || null, audience || 'drivers', req.user?.id || null]
+      [title, body, zone || null, audience || 'drivers', actorUserId(req.user)]
     );
     res.status(201).json({ status: 'success', data: r.rows[0] });
   } catch (error: any) {
@@ -760,7 +760,7 @@ adminMockupRouter.post('/dispatch/shift-report', authenticateToken, requireAdmin
        RETURNING *`,
       [
         req.body?.zone || 'Lagos Zone',
-        req.user?.id || null,
+        actorUserId(req.user),
         b.active_rides || 0,
         b.queued || 0,
         b.online || 0,
@@ -776,26 +776,84 @@ adminMockupRouter.post('/dispatch/shift-report', authenticateToken, requireAdmin
 
 // ??? Platform settings + audit export ???
 
+function parsePlatformSettingValue(value: any): any {
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s) return null;
+  // Plain prose accidentally stored as a setting (e.g. "Buyer protection…")
+  if (!(s.startsWith('{') || s.startsWith('['))) {
+    return { raw: s };
+  }
+  try {
+    return JSON.parse(s);
+  } catch {
+    return { raw: s };
+  }
+}
+
+const PLATFORM_FLAG_META: Record<string, { label: string; description: string }> = {
+  surge_pricing: {
+    label: 'Surge pricing',
+    description: 'Allow demand-based fare multipliers',
+  },
+  dvt_rewards: {
+    label: 'DVT rewards',
+    description: 'Earn and redeem DVT on completed trips',
+  },
+  merchant_kyc_approval: {
+    label: 'Merchant KYC approval',
+    description: 'Require ops approval before merchants go live',
+  },
+  maintenance_mode: {
+    label: 'Maintenance mode',
+    description: 'Show maintenance banner and block new bookings',
+  },
+  token_claims: {
+    label: 'Token claims',
+    description: 'Allow users to claim airdrop / reward tokens',
+  },
+};
+
 adminMockupRouter.get('/platform-settings', authenticateToken, requireAdmin, async (_req, res: Response) => {
   try {
     const rows = await safeQuery(`SELECT key, value, updated_at FROM platform_settings ORDER BY key`);
     const map: Record<string, any> = {};
     for (const r of rows.rows) {
-      map[r.key] = typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
+      map[r.key] = parsePlatformSettingValue(r.value);
     }
-    const flags = [
-      'surge_pricing',
-      'dvt_rewards',
-      'merchant_kyc_approval',
-      'maintenance_mode',
-      'token_claims',
-    ].map((key) => ({
-      key,
-      enabled: Boolean(map[key]?.enabled),
-      label: map[key]?.label || key,
-      description: map[key]?.description || '',
-    }));
-    const pricing = map.pricing_fees || {
+
+    const flagRows = await safeQuery(
+      `SELECT key, enabled, metadata FROM feature_flags WHERE key = ANY($1::text[])`,
+      [Object.keys(PLATFORM_FLAG_META)]
+    ).catch(() => ({ rows: [] as any[] }));
+    const flagByKey: Record<string, any> = {};
+    for (const r of flagRows.rows || []) {
+      const meta =
+        typeof r.metadata === 'string' ? parsePlatformSettingValue(r.metadata) : r.metadata || {};
+      flagByKey[r.key] = { enabled: Boolean(r.enabled), ...(meta && typeof meta === 'object' ? meta : {}) };
+    }
+
+    const flags = Object.keys(PLATFORM_FLAG_META).map((key) => {
+      const fromSettings = map[key] && typeof map[key] === 'object' ? map[key] : {};
+      const fromFlags = flagByKey[key] || {};
+      const meta = PLATFORM_FLAG_META[key];
+      const enabled =
+        typeof fromSettings.enabled === 'boolean'
+          ? fromSettings.enabled
+          : typeof fromFlags.enabled === 'boolean'
+            ? fromFlags.enabled
+            : false;
+      return {
+        key,
+        enabled,
+        label: fromSettings.label || fromFlags.label || meta.label,
+        description: fromSettings.description || fromFlags.description || meta.description,
+      };
+    });
+
+    const pricing = {
       base_fare_per_km: 120,
       merchant_fee_pct: 5,
       surge_max_multiplier: 3,
@@ -803,8 +861,10 @@ adminMockupRouter.get('/platform-settings', authenticateToken, requireAdmin, asy
       driver_sub_monthly: 7000,
       merchant_store_monthly: 5000,
       currency: 'NGN',
+      ...(map.pricing_fees && typeof map.pricing_fees === 'object' ? map.pricing_fees : {}),
     };
     if (pricing.merchant_store_monthly == null) pricing.merchant_store_monthly = 5000;
+
     const audit = await safeQuery(
       `SELECT a.created_at, a.action, a.resource_type, a.resource_id, a.reason,
               COALESCE(NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)), ''), u.email, 'System') AS admin_name
@@ -847,7 +907,7 @@ adminMockupRouter.put('/platform-settings', authenticateToken, requireAdmin, asy
               label: f.label,
               description: f.description,
             }),
-            req.user?.id || null,
+            actorUserId(req.user),
           ]
         );
         await db
@@ -860,7 +920,7 @@ adminMockupRouter.put('/platform-settings', authenticateToken, requireAdmin, asy
         `INSERT INTO platform_settings (key, value, updated_at, updated_by)
          VALUES ('pricing_fees', $1::jsonb, NOW(), $2)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = $2`,
-        [JSON.stringify(pricing), req.user?.id || null]
+        [JSON.stringify(pricing), actorUserId(req.user)]
       );
       // Keep subscription plan matrix in sync with settings knobs
       try {
@@ -882,7 +942,7 @@ adminMockupRouter.put('/platform-settings', authenticateToken, requireAdmin, asy
       .query(
         `INSERT INTO audit_log (admin_id, action, resource_type, reason, created_at)
          VALUES ($1, 'config_changed', 'platform_settings', 'Config changed', NOW())`,
-        [req.user?.id || null]
+        [actorUserId(req.user)]
       )
       .catch(() => undefined);
     res.json({ status: 'success' });

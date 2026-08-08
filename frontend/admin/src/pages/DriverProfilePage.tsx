@@ -61,6 +61,9 @@ export default function DriverProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [messageBody, setMessageBody] = useState('');
+  const [messageOk, setMessageOk] = useState('');
+  const [showMessage, setShowMessage] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -81,16 +84,36 @@ export default function DriverProfilePage() {
     load();
   }, [id]);
 
-  const sendMessage = async () => {
-    if (!id) return;
-    const body = window.prompt('Message to driver:');
-    if (!body?.trim()) return;
+  const openMessage = () => {
+    setShowMessage(true);
+    setMessageOk('');
+    setError('');
+    window.requestAnimationFrame(() => {
+      document.getElementById('driver-message-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      document.getElementById('driver-message-body')?.focus();
+    });
+  };
+
+  const sendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!id || !messageBody.trim()) {
+      setShowMessage(true);
+      setError('Enter a message before sending');
+      return;
+    }
     setBusy(true);
+    setMessageOk('');
     try {
-      await axios.post(`${API}/admin/drivers/${id}/message`, { body: body.trim() }, { headers: headers() });
+      await axios.post(
+        `${API}/admin/drivers/${id}/message`,
+        { body: messageBody.trim() },
+        { headers: headers() }
+      );
+      setMessageBody('');
+      setMessageOk('Message sent to driver inbox');
       setError('');
-    } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Message failed');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err.message || 'Message failed');
     } finally {
       setBusy(false);
     }
@@ -148,7 +171,7 @@ export default function DriverProfilePage() {
           </h1>
         </div>
         <div style={styles.actions} className="admin-actions">
-          <button type="button" style={styles.secondaryBtn} onClick={sendMessage} disabled={busy}>
+          <button type="button" style={styles.secondaryBtn} onClick={openMessage} disabled={busy}>
             Message
           </button>
           <button type="button" style={styles.dangerBtn} onClick={suspend} disabled={busy || data.suspended}>
@@ -158,6 +181,7 @@ export default function DriverProfilePage() {
       </div>
 
       {error ? <p style={styles.error}>{error}</p> : null}
+      {messageOk ? <p style={styles.ok}>{messageOk}</p> : null}
 
       <div style={styles.layout} data-admin-grid="profile" className="admin-split-grid">
         <div style={styles.leftCol}>
@@ -210,7 +234,7 @@ export default function DriverProfilePage() {
               </div>
               <div style={styles.perfItem}>
                 <span style={styles.metricLabel}>Cancellations</span>
-                <span style={{ ...styles.metricVal, color: '#f87171' }}>
+                <span style={{ ...styles.metricVal, color: 'var(--error)' }}>
                   {Number(data.performance?.cancellations || 0).toFixed(1)}%
                 </span>
               </div>
@@ -220,7 +244,7 @@ export default function DriverProfilePage() {
               </div>
               <div style={styles.perfItem}>
                 <span style={styles.metricLabel}>Compliments</span>
-                <span style={{ ...styles.metricVal, color: '#4ade80' }}>
+                <span style={{ ...styles.metricVal, color: 'var(--success)' }}>
                   {data.performance?.compliments ?? 0}
                 </span>
               </div>
@@ -252,6 +276,56 @@ export default function DriverProfilePage() {
               </div>
             </dl>
           </div>
+
+          {showMessage ? (
+            <form id="driver-message-form" style={styles.card} onSubmit={sendMessage}>
+              <div style={styles.messageHead}>
+                <h3 style={{ ...styles.sectionTitle, margin: 0 }}>Send message</h3>
+                <button
+                  type="button"
+                  style={styles.textBtn}
+                  onClick={() => {
+                    setShowMessage(false);
+                    setMessageBody('');
+                    setMessageOk('');
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <p style={styles.messageHint}>
+                Delivered to {data.name || 'this driver'}’s in-app inbox.
+              </p>
+              <label style={styles.field}>
+                <span style={styles.fieldLabel}>Message</span>
+                <textarea
+                  id="driver-message-body"
+                  style={styles.textarea}
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  placeholder="Write a short note for the driver…"
+                  rows={5}
+                  required
+                />
+              </label>
+              <div style={styles.messageActions}>
+                <button
+                  type="button"
+                  style={styles.secondaryBtn}
+                  disabled={busy}
+                  onClick={() => {
+                    setShowMessage(false);
+                    setMessageBody('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" style={styles.primaryBtn} disabled={busy || !messageBody.trim()}>
+                  {busy ? 'Sending…' : 'Send message'}
+                </button>
+              </div>
+            </form>
+          ) : null}
         </div>
 
         <div style={styles.rightCol}>
@@ -264,7 +338,7 @@ export default function DriverProfilePage() {
               </div>
               <div>
                 <div style={styles.metricLabel}>DVT</div>
-                <div style={{ ...styles.metricVal, color: '#c4b5fd' }}>
+                <div style={{ ...styles.metricVal, color: 'var(--accent-purple)' }}>
                   {Number(data.earnings?.dvt || 0).toLocaleString()}
                 </div>
               </div>
@@ -323,7 +397,7 @@ export default function DriverProfilePage() {
             <button type="button" style={styles.dangerBtn} onClick={suspend} disabled={busy || data.suspended}>
               Suspend
             </button>
-            <button type="button" style={styles.secondaryBtn} onClick={sendMessage} disabled={busy}>
+            <button type="button" style={styles.secondaryBtn} onClick={openMessage} disabled={busy}>
               Message
             </button>
             <Link to="/live-map" style={styles.primaryLink}>
@@ -350,10 +424,56 @@ const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 24, fontWeight: 700, margin: 0 },
   muted: { color: 'var(--text-secondary)' },
   error: { color: 'var(--error)', marginBottom: 12 },
+  ok: { color: 'var(--success)', marginBottom: 12 },
   actions: { display: 'flex', gap: 10, flexWrap: 'wrap' },
   primaryBtn: { ...adminBtn.primary },
   secondaryBtn: { ...adminBtn.secondary },
   dangerBtn: { ...adminBtn.dangerSoft },
+  textBtn: {
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 600,
+    padding: 0,
+  },
+  messageHead: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  messageHint: {
+    margin: '0 0 12px',
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.4,
+  },
+  field: { display: 'flex', flexDirection: 'column', gap: 6 },
+  fieldLabel: { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 },
+  textarea: {
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text-primary)',
+    padding: '10px 12px',
+    fontSize: 14,
+    fontFamily: 'inherit',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
+    resize: 'vertical',
+    lineHeight: 1.4,
+  },
+  messageActions: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
   layout: {
     display: 'grid',
     gridTemplateColumns: 'minmax(260px, 320px) 1fr',
@@ -390,10 +510,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     fontWeight: 700,
   },
-  badgeGreen: { background: 'rgba(34,197,94,0.2)', color: '#4ade80' },
-  badgeMuted: { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' },
-  badgePurple: { background: 'rgba(142,45,226,0.25)', color: '#c4b5fd' },
-  badgeGold: { background: 'rgba(234,179,8,0.25)', color: '#facc15' },
+  badgeGreen: { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' },
+  badgeMuted: { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' },
+  badgePurple: { background: 'rgba(142,45,226,0.25)', color: 'var(--accent-purple)' },
+  badgeGold: { background: 'rgba(234,179,8,0.25)', color: 'var(--accent-gold)' },
   metricRow: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' },
   metric: {},
   metricVal: { fontSize: 18, fontWeight: 700 },

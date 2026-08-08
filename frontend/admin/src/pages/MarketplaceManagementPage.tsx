@@ -41,11 +41,11 @@ function formatCompact(n: number, currency = 'GHS') {
 
 function statusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
-  if (s === 'active') return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
-  if (s === 'suspended') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
-  if (s === 'kyc') return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
+  if (s === 'active') return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
+  if (s === 'suspended') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
+  if (s === 'kyc') return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
   if (s === 'review') return { background: 'rgba(59,130,246,0.25)', color: '#93c5fd' };
-  return { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' };
+  return { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' };
 }
 
 const TABS: { key: FilterKey; label: string }[] = [
@@ -551,7 +551,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     padding: '6px 10px',
     background: 'rgba(34,197,94,0.25)',
-    color: '#4ade80',
+    color: 'var(--success)',
     fontWeight: 700,
     fontSize: 12,
     cursor: 'pointer',
@@ -561,7 +561,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     padding: '6px 10px',
     background: 'transparent',
-    color: '#f87171',
+    color: 'var(--error)',
     fontWeight: 700,
     fontSize: 12,
     cursor: 'pointer',

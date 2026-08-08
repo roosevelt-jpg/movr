@@ -3,8 +3,8 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
+import { API } from '../lib/apiBase';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
 /**
@@ -24,19 +24,29 @@ export default function TrustOpsPage() {
 
   const load = async () => {
     try {
-      const [p, s, d, r, rec] = await Promise.all([
-        axios.get(`${API}/trust/promise`).catch(() => null),
+      const [p, s, d, r, rec] = await Promise.allSettled([
+        axios.get(`${API}/trust/promise`),
         axios.get(`${API}/admin/trust/sos`, { headers: headers() }),
         axios.get(`${API}/admin/trust/disputes`, { headers: headers() }),
         axios.get(`${API}/admin/trust/reliability`, { headers: headers() }),
         axios.get(`${API}/admin/trust/receipts`, { headers: headers() }),
       ]);
-      setPromise(p?.data?.data || null);
-      setSos(s.data?.data || []);
-      setDisputes(d.data?.data || []);
-      setReliability(r.data?.data || []);
-      setReceipts(rec.data?.data || []);
-      setError('');
+      setPromise(p.status === 'fulfilled' ? p.value?.data?.data || null : null);
+      setSos(s.status === 'fulfilled' ? s.value.data?.data || [] : []);
+      setDisputes(d.status === 'fulfilled' ? d.value.data?.data || [] : []);
+      setReliability(r.status === 'fulfilled' ? r.value.data?.data || [] : []);
+      setReceipts(rec.status === 'fulfilled' ? rec.value.data?.data || [] : []);
+      const failed = [s, d, r, rec].find((x) => x.status === 'rejected') as
+        | PromiseRejectedResult
+        | undefined;
+      if (failed) {
+        const err: any = failed.reason;
+        const path = err?.response?.data?.path;
+        const message = err?.response?.data?.message || err?.message || 'Failed to load trust ops';
+        setError(path ? `${message} (${path})` : message);
+      } else {
+        setError('');
+      }
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Failed to load trust ops');
     }
@@ -216,8 +226,8 @@ export default function TrustOpsPage() {
                         </td>
                       </tr>
                       <tr>
-                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: '#a1a1aa' }}>
-                          <strong style={{ color: '#fca5a5' }}>Runbook:</strong>{' '}
+                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: 'var(--text-secondary)' }}>
+                          <strong style={{ color: 'var(--error)' }}>Runbook:</strong>{' '}
                           {(s.runbook || []).join(' · ')}
                           {s.emergencyContacts?.length ? (
                             <div style={{ marginTop: 4 }}>
@@ -379,42 +389,47 @@ export default function TrustOpsPage() {
 const styles: Record<string, React.CSSProperties> = {
   wrap: { padding: 24, maxWidth: 1200, margin: '0 auto' },
   head: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 },
-  h1: { margin: 0, fontSize: 28, color: '#fff' },
-  sub: { margin: '6px 0 0', color: '#a1a1aa', fontSize: 14 },
-  link: { color: '#a78bfa', fontWeight: 700, textDecoration: 'none' },
+  h1: { margin: 0, fontSize: 28, color: 'var(--text-primary)' },
+  sub: { margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 14 },
+  link: { color: 'var(--electric-violet)', fontWeight: 700, textDecoration: 'none' },
   promise: {
     marginTop: 16,
     padding: 14,
     borderRadius: 12,
     background: 'rgba(16,185,129,0.12)',
     border: '1px solid rgba(16,185,129,0.35)',
-    color: '#d1fae5',
+    color: 'var(--text-primary)',
     fontSize: 13,
   },
-  ok: { color: '#34d399' },
-  err: { color: '#f87171' },
+  ok: { color: 'var(--success)' },
+  err: { color: 'var(--error)' },
   card: {
     marginTop: 18,
     padding: 16,
     borderRadius: 14,
-    background: '#111',
-    border: '1px solid #27272a',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
   },
-  h2: { margin: '0 0 12px', fontSize: 16, color: '#fff' },
+  h2: { margin: '0 0 12px', fontSize: 16, color: 'var(--text-primary)' },
   row: { display: 'flex', gap: 8 },
   input: {
     flex: 1,
-    background: '#000',
-    border: '1px solid #3f3f46',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
     borderRadius: 10,
-    color: '#fff',
+    color: 'var(--text-primary)',
     padding: '10px 12px',
   },
   table: { width: '100%', borderCollapse: 'collapse' as const },
-  th: { textAlign: 'left' as const, color: '#71717a', fontSize: 11, padding: '8px 6px' },
-  td: { color: '#e4e4e7', fontSize: 13, padding: '10px 6px', borderTop: '1px solid #1f1f23' },
-  muted: { color: '#71717a', padding: 12 },
-  small: { fontSize: 11, color: '#a1a1aa', marginTop: 2 },
+  th: { textAlign: 'left' as const, color: 'var(--text-secondary)', fontSize: 11, padding: '8px 6px' },
+  td: {
+    color: 'var(--text-primary)',
+    fontSize: 13,
+    padding: '10px 6px',
+    borderTop: '1px solid var(--border)',
+  },
+  muted: { color: 'var(--text-secondary)', padding: 12 },
+  small: { fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 },
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',

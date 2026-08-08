@@ -332,7 +332,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     minHeight: 28,
   },
-  error: { color: '#f87171', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
+  error: { color: 'var(--error)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   muted: { color: 'var(--text-secondary)', fontSize: 13 },
   label: { color: 'var(--text-secondary)', fontSize: 12 },
   kpiRow: {

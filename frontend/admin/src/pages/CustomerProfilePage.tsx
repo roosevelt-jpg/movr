@@ -38,10 +38,10 @@ type CustomerProfile = {
 
 function tierStyle(tier: string): React.CSSProperties {
   const t = tier.toLowerCase();
-  if (t === 'platinum') return { background: 'rgba(168,85,247,0.25)', color: '#e9d5ff' };
-  if (t === 'gold') return { background: 'rgba(234,179,8,0.25)', color: '#facc15' };
-  if (t === 'silver') return { background: 'rgba(148,163,184,0.3)', color: '#e2e8f0' };
-  return { background: 'rgba(180,83,9,0.25)', color: '#fdba74' };
+  if (t === 'platinum') return { background: 'rgba(168,85,247,0.2)', color: '#7c3aed' };
+  if (t === 'gold') return { background: 'rgba(234,179,8,0.22)', color: '#a16207' };
+  if (t === 'silver') return { background: 'rgba(100,116,139,0.22)', color: '#475569' };
+  return { background: 'rgba(180,83,9,0.2)', color: '#9a3412' };
 }
 
 function formatDate(d: string) {
@@ -59,6 +59,9 @@ export default function CustomerProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [messageBody, setMessageBody] = useState('');
+  const [messageOk, setMessageOk] = useState('');
+  const [showMessage, setShowMessage] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -79,16 +82,35 @@ export default function CustomerProfilePage() {
     load();
   }, [id]);
 
-  const sendMessage = async () => {
-    if (!id) return;
-    const body = window.prompt('Message to customer:');
-    if (!body?.trim()) return;
+  const openMessage = () => {
+    setShowMessage(true);
+    setMessageOk('');
+    setError('');
+    window.requestAnimationFrame(() => {
+      document.getElementById('customer-message-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      document.getElementById('customer-message-body')?.focus();
+    });
+  };
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !messageBody.trim()) {
+      setError('Enter a message before sending');
+      return;
+    }
     setBusy(true);
+    setMessageOk('');
     try {
-      await axios.post(`${API}/admin/customers/${id}/message`, { body: body.trim() }, { headers: headers() });
+      await axios.post(
+        `${API}/admin/customers/${id}/message`,
+        { body: messageBody.trim() },
+        { headers: headers() }
+      );
+      setMessageBody('');
+      setMessageOk('Message sent to customer inbox');
       setError('');
-    } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Message failed');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err.message || 'Message failed');
     } finally {
       setBusy(false);
     }
@@ -153,7 +175,7 @@ export default function CustomerProfilePage() {
           </h1>
         </div>
         <div style={styles.actions} className="admin-actions">
-          <button type="button" style={styles.secondaryBtn} onClick={sendMessage} disabled={busy}>
+          <button type="button" style={styles.secondaryBtn} onClick={openMessage} disabled={busy}>
             Message
           </button>
           <button type="button" style={styles.dangerBtn} onClick={blockCustomer} disabled={busy || !data.active}>
@@ -163,6 +185,7 @@ export default function CustomerProfilePage() {
       </div>
 
       {error ? <p style={styles.error}>{error}</p> : null}
+      {messageOk ? <p style={styles.ok}>{messageOk}</p> : null}
 
       <div style={styles.layout} data-admin-grid="profile" className="admin-split-grid">
         <div style={styles.leftCol}>
@@ -182,7 +205,7 @@ export default function CustomerProfilePage() {
                 <div style={styles.metricLabel}>Rides</div>
               </div>
               <div style={styles.metric}>
-                <div style={{ ...styles.metricVal, color: '#c4b5fd' }}>
+                <div style={{ ...styles.metricVal, color: 'var(--accent-purple)' }}>
                   {Number(data.metrics?.points || 0).toLocaleString()}
                 </div>
                 <div style={styles.metricLabel}>Points</div>
@@ -192,7 +215,7 @@ export default function CustomerProfilePage() {
                 <div style={styles.metricLabel}>Spend</div>
               </div>
               <div style={styles.metric}>
-                <div style={{ ...styles.metricVal, color: '#c4b5fd' }}>
+                <div style={{ ...styles.metricVal, color: 'var(--accent-purple)' }}>
                   {Number(data.metrics?.dvt || 0).toLocaleString()}
                 </div>
                 <div style={styles.metricLabel}>DVT</div>
@@ -218,6 +241,57 @@ export default function CustomerProfilePage() {
             </dl>
           </div>
 
+          {showMessage ? (
+            <form id="customer-message-form" style={styles.card} onSubmit={sendMessage}>
+              <div style={styles.messageHead}>
+                <h3 style={{ ...styles.sectionTitle, margin: 0 }}>Send message</h3>
+                <button
+                  type="button"
+                  style={styles.textBtn}
+                  onClick={() => {
+                    setShowMessage(false);
+                    setMessageBody('');
+                    setMessageOk('');
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <p style={styles.messageHint}>
+                Delivered to {data.name || 'this customer'}’s in-app inbox
+                {data.email ? ` · ${data.email}` : ''}.
+              </p>
+              <label style={styles.field}>
+                <span style={styles.fieldLabel}>Message</span>
+                <textarea
+                  id="customer-message-body"
+                  style={styles.textarea}
+                  value={messageBody}
+                  onChange={(e) => setMessageBody(e.target.value)}
+                  placeholder="Write a short note for the customer…"
+                  rows={5}
+                  required
+                />
+              </label>
+              <div style={styles.messageActions}>
+                <button
+                  type="button"
+                  style={styles.secondaryBtn}
+                  disabled={busy}
+                  onClick={() => {
+                    setShowMessage(false);
+                    setMessageBody('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" style={styles.primaryBtn} disabled={busy || !messageBody.trim()}>
+                  {busy ? 'Sending…' : 'Send message'}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
           <div style={styles.card}>
             <h3 style={styles.sectionTitle}>Wallet</h3>
             <dl style={styles.dl}>
@@ -227,7 +301,7 @@ export default function CustomerProfilePage() {
               </div>
               <div style={styles.dlRow}>
                 <dt style={styles.dt}>DVT</dt>
-                <dd style={{ ...styles.dd, color: '#c4b5fd' }}>
+                <dd style={{ ...styles.dd, color: 'var(--accent-purple)' }}>
                   {Number(data.wallet?.dvt || 0).toLocaleString()}
                 </dd>
               </div>
@@ -334,9 +408,56 @@ const styles: Record<string, React.CSSProperties> = {
   h1: { fontSize: 24, fontWeight: 700, margin: 0 },
   muted: { color: 'var(--text-secondary)' },
   error: { color: 'var(--error)', marginBottom: 12 },
+  ok: { color: 'var(--success)', marginBottom: 12 },
   actions: { display: 'flex', gap: 10, flexWrap: 'wrap' },
+  primaryBtn: { ...adminBtn.primary },
   secondaryBtn: { ...adminBtn.secondary },
   dangerBtn: { ...adminBtn.dangerSoft },
+  textBtn: {
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 600,
+    padding: 0,
+  },
+  messageHead: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  messageHint: {
+    margin: '0 0 12px',
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.4,
+  },
+  field: { display: 'flex', flexDirection: 'column', gap: 6 },
+  fieldLabel: { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 },
+  textarea: {
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text-primary)',
+    padding: '10px 12px',
+    fontSize: 14,
+    fontFamily: 'inherit',
+    width: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
+    resize: 'vertical',
+    lineHeight: 1.4,
+  },
+  messageActions: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
   layout: {
     display: 'grid',
     gridTemplateColumns: 'minmax(260px, 320px) 1fr',
@@ -374,8 +495,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     textTransform: 'capitalize',
   },
-  badgeGreen: { background: 'rgba(34,197,94,0.2)', color: '#4ade80' },
-  badgeMuted: { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' },
+  badgeGreen: { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' },
+  badgeMuted: { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' },
   metricRow: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, textAlign: 'center' },
   metric: {},
   metricVal: { fontSize: 16, fontWeight: 700 },

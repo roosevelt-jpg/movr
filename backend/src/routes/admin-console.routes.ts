@@ -22,6 +22,21 @@ const num = async (sql: string, params: any[] = [], field = 'c') => {
   return Number(r.rows[0]?.[field] || 0);
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Resolve admin actor id for FK columns — ignores stale non-UUID JWT ids like user_admin_demo. */
+async function resolveAdminUserId(user?: { id?: string; email?: string } | null) {
+  if (user?.id && UUID_RE.test(String(user.id))) return String(user.id);
+  const email = user?.email ? String(user.email).trim().toLowerCase() : '';
+  if (!email) return null;
+  const row = await safeQuery(
+    `SELECT id FROM users WHERE lower(email) = $1 AND user_type = 'admin' LIMIT 1`,
+    [email]
+  );
+  return row.rows[0]?.id || null;
+}
+
 /** Enriched overview widgets — charts + recent tables for dashboard mockup. */
 adminConsoleRouter.get('/overview/widgets', authenticateToken, requireAdmin, async (_req, res: Response) => {
   try {
@@ -147,11 +162,12 @@ adminConsoleRouter.post('/announcements', authenticateToken, requireAdmin, async
     if (!title || !body) {
       return res.status(400).json({ status: 'error', message: 'title and body required' });
     }
+    const createdBy = await resolveAdminUserId(req.user || null);
     const r = await db.query(
       `INSERT INTO admin_announcements (title, body, audience, status, created_by, starts_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING *`,
-      [title, body, audience, status, req.user?.id || null]
+      [title, body, audience, status, createdBy]
     );
     res.status(201).json({ status: 'success', data: r.rows[0] });
   } catch (error: any) {

@@ -37,7 +37,7 @@ export default function OnOffButton({
         letterSpacing: 0.2,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
-        color: '#ffffff',
+        color: 'var(--brand-white)',
         background: on ? 'var(--success)' : 'var(--error)',
         minWidth: 56,
         lineHeight: 1.2,

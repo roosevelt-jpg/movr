@@ -24,7 +24,7 @@ export default function ChannelFunnelPage() {
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--jet-black)', color: 'var(--pure-white)', padding: 32, fontFamily: 'Poppins, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--jet-black)', color: 'var(--text-primary)', padding: 32, fontFamily: 'Poppins, sans-serif' }}>
       <h1 style={{ fontSize: 24 }}>Channel funnel</h1>
       <p style={{ color: 'var(--text-secondary)' }}>Rides by source_channel (app, whatsapp, telegram, sms, ussd, ivr, voice).</p>
       <div style={{ height: 280, marginTop: 24 }}>

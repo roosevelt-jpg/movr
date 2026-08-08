@@ -106,7 +106,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 14px',
     border: 'none',
     background: 'transparent',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     fontWeight: 700,
     cursor: 'pointer',
   },

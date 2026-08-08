@@ -54,10 +54,10 @@ const TABS: { key: FilterKey; label: string }[] = [
 
 function statusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
-  if (s === 'approved') return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
-  if (s === 'rejected') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
-  if (s === 'incomplete') return { background: 'rgba(148,163,184,0.2)', color: '#94a3b8' };
-  return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
+  if (s === 'approved') return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
+  if (s === 'rejected') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
+  if (s === 'incomplete') return { background: 'rgba(148,163,184,0.2)', color: 'var(--text-secondary)' };
+  return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
 }
 
 function rowKey(r: KycRow) {

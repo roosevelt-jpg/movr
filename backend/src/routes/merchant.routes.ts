@@ -107,9 +107,50 @@ merchantRouter.post('/auth/register', async (req: any, res: Response) => {
       { expiresIn: '7d' }
     );
 
+    let verification: any = null;
+    try {
+      const { getUserOnboardingComms } = require('../services/user-onboarding-comms.service');
+      const { createHash } = require('crypto');
+      // Persist OTP via lightweight local helper matching auth index.ts shape
+      const otpStoreLocal = new Map();
+      const persist = async (opts: {
+        identifier: string;
+        code: string;
+        purpose: 'reset' | 'signup';
+        userId?: string;
+      }) => {
+        const key = String(opts.identifier || '').trim().toLowerCase();
+        otpStoreLocal.set(key, opts);
+        await db
+          .query(
+            `INSERT INTO auth_otps (identifier, code_hash, purpose, user_id, expires_at)
+             VALUES ($1, $2, $3, $4, NOW() + INTERVAL '10 minutes')`,
+            [
+              key.includes('@') ? key : key.replace(/[\s\-()]/g, ''),
+              createHash('sha256').update(String(opts.code)).digest('hex'),
+              opts.purpose,
+              opts.userId || null,
+            ]
+          )
+          .catch(() => undefined);
+      };
+      verification = await getUserOnboardingComms(db).afterSignup(
+        {
+          id: user.rows[0].id,
+          email: user.rows[0].email,
+          phone: user.rows[0].phone,
+          first_name: firstName || null,
+          user_type: 'merchant',
+        },
+        persist
+      );
+    } catch {
+      /* non-blocking */
+    }
+
     res.status(201).json({
       status: 'success',
-      data: { token, user: user.rows[0], merchant: merchant.rows[0] },
+      data: { token, user: user.rows[0], merchant: merchant.rows[0], verification },
     });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });

@@ -180,7 +180,7 @@ const styles: Record<string, React.CSSProperties> = {
   input: {
     background: 'var(--surface)',
     border: '1px solid var(--border)',
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     borderRadius: 8,
     padding: '8px 10px',
     width: 80,

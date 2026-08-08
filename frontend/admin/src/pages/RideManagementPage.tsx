@@ -46,13 +46,13 @@ const TABS: { key: FilterKey; label: string }[] = [
 function statusStyle(status: string): React.CSSProperties {
   const s = status.toLowerCase();
   if (s === 'done' || s.includes('complete')) {
-    return { background: 'rgba(34,197,94,0.2)', color: '#4ade80' };
+    return { background: 'rgba(34,197,94,0.2)', color: 'var(--success)' };
   }
   if (s.includes('cancel')) {
-    return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
+    return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
   }
   if (s === 'pending' || s.includes('request')) {
-    return { background: 'rgba(234,179,8,0.2)', color: '#facc15' };
+    return { background: 'rgba(234,179,8,0.2)', color: 'var(--accent-gold)' };
   }
   if (s.includes('sos')) {
     return { background: 'rgba(239,68,68,0.35)', color: '#fecaca' };
@@ -291,7 +291,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   kpiLabel: { margin: 0, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 },
   kpiValue: { margin: '8px 0 0', fontSize: 24, fontWeight: 800 },
-  kpiDelta: { margin: '6px 0 0', fontSize: 12, color: '#4ade80' },
+  kpiDelta: { margin: '6px 0 0', fontSize: 12, color: 'var(--success)' },
   tab: {
     border: '1px solid var(--border)',
     background: 'transparent',
@@ -304,7 +304,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabActive: {
     background: 'var(--movr-gradient)',
-    color: '#fff',
+    color: 'var(--brand-white)',
     borderColor: 'transparent',
   },
   search: {

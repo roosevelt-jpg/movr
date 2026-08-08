@@ -165,7 +165,7 @@ export default function VehiclePricingPage() {
         </button>
       </div>
 
-      {error ? <p style={{ color: '#f87171' }}>{error}</p> : null}
+      {error ? <p style={{ color: 'var(--error)' }}>{error}</p> : null}
 
       <div style={styles.tableWrap}>
         <div style={styles.thead}>
@@ -181,11 +181,11 @@ export default function VehiclePricingPage() {
         ) : (
           displayRows.map((r: any) => (
             <div key={r.id} style={styles.row}>
-              <span style={{ fontWeight: 600, color: '#fff' }}>{r.name}</span>
-              <span style={{ color: '#fff' }}>{money(r.base_fare)}</span>
-              <span style={{ color: '#fff' }}>{money(r.per_km_rate)}</span>
-              <span style={{ color: '#fff' }}>{money(r.per_minute_rate)}</span>
-              <span style={{ color: '#fff' }}>{money(r.minimum_fare)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.name}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{money(r.base_fare)}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{money(r.per_km_rate)}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{money(r.per_minute_rate)}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{money(r.minimum_fare)}</span>
               <button type="button" style={styles.edit} onClick={() => openEdit(r)}>
                 Edit
               </button>
@@ -196,7 +196,7 @@ export default function VehiclePricingPage() {
 
       {(selected || showAdd) && (
         <div style={styles.panel}>
-          <h2 style={{ marginTop: 0, color: '#fff' }}>
+          <h2 style={{ marginTop: 0, color: 'var(--text-primary)' }}>
             {showAdd ? 'Add vehicle type' : `Edit ${selected?.name}`}
           </h2>
           {showAdd ? (
@@ -271,35 +271,37 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 20,
     flexWrap: 'wrap',
   },
-  h1: { fontSize: 24, margin: 0, fontWeight: 700, color: '#fff' },
+  h1: { fontSize: 24, margin: 0, fontWeight: 700, color: 'var(--text-primary)' },
   addBtn: { ...adminBtn.primary },
   tableWrap: {
     borderRadius: 16,
     overflowX: 'auto',
-    background: '#0a0a0a',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
   },
   thead: {
     display: 'grid',
     gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
     gap: 8,
     padding: '14px 16px',
-    color: '#888',
+    color: 'var(--text-secondary)',
     fontSize: 13,
-    borderBottom: '1px solid #222',
+    borderBottom: '1px solid var(--border)',
   },
   row: {
     display: 'grid',
     gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.6fr',
     gap: 8,
     padding: '16px',
-    borderBottom: '1px solid #222',
+    borderBottom: '1px solid var(--border)',
     alignItems: 'center',
+    color: 'var(--text-primary)',
   },
-  empty: { padding: 24, color: '#888' },
+  empty: { padding: 24, color: 'var(--text-secondary)' },
   edit: {
     background: 'transparent',
     border: 'none',
-    color: '#3B82F6',
+    color: 'var(--motion-blue)',
     cursor: 'pointer',
     fontWeight: 600,
     justifySelf: 'start',
@@ -308,7 +310,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 20,
     borderRadius: 14,
     padding: 16,
-    background: '#1A1A1A',
+    background: 'var(--surface-elevated)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
   },
   form: {
     display: 'grid',
@@ -317,9 +321,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 12,
   },
   input: {
-    background: '#111',
-    border: '1px solid #333',
-    color: '#fff',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
     borderRadius: 8,
     padding: 10,
     width: '100%',

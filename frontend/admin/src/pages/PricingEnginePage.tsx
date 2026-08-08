@@ -3,10 +3,11 @@ import axios from 'axios';
 import AdminShell from '../layouts/AdminShell';
 import AdminOpsNav from '../components/AdminOpsNav';
 import OnOffButton from '../components/OnOffButton';
+import PlacesZonePicker, { type PickedPlace } from '../components/PlacesZonePicker';
 import { adminBtn } from '../styles/adminButtons';
 import { formatCountryLabel } from '../lib/currency';
+import { API } from '../lib/apiBase';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
 /** Admin pricing engine — zones, factors, events, live breakdown (Phase 25). */
@@ -33,6 +34,7 @@ export default function PricingEnginePage() {
     multiplier: '1.2',
   });
   const [message, setMessage] = useState('');
+  const [regionLabel, setRegionLabel] = useState('Accra');
 
   const load = async () => {
     const [z, f, b, e, live] = await Promise.all([
@@ -47,12 +49,29 @@ export default function PricingEnginePage() {
     setBreakdown(b.data.data);
     setEvents(e.data.data || []);
     setLiveZones(live.data.data || []);
-    if (z.data.data?.[0]) setEventForm((prev) => ({ ...prev, zoneId: z.data.data[0].id }));
+    if (z.data.data?.[0]) {
+      setEventForm((prev) => ({ ...prev, zoneId: prev.zoneId || z.data.data[0].id }));
+      const first = z.data.data[0];
+      if (first?.name) setRegionLabel(String(first.name).split(/[,·]/)[0].trim() || 'Accra');
+    }
   };
 
   useEffect(() => {
     load().catch(() => undefined);
   }, []);
+
+  const applyPlace = (place: PickedPlace) => {
+    const zoneName = place.locality || place.name || place.formattedAddress || 'New zone';
+    setZoneForm((prev) => ({
+      ...prev,
+      name: zoneName,
+      centerLat: String(Number(place.lat).toFixed(6)),
+      centerLng: String(Number(place.lng).toFixed(6)),
+      countryCode: (place.countryCode || prev.countryCode || 'GH').toUpperCase(),
+    }));
+    setRegionLabel(zoneName.split(/[,·]/)[0].trim() || zoneName);
+    setMessage(`Zone center set from Google Places · ${place.formattedAddress || place.name}`);
+  };
 
   const rows = useMemo(() => {
     if (liveZones.length) {
@@ -137,8 +156,8 @@ export default function PricingEnginePage() {
       <div style={styles.headerRow}>
         <h1 style={styles.h1}>Active pricing zones</h1>
         <div style={styles.headerActions}>
-          <button style={styles.region}>Region: Accra</button>
-          <button style={styles.newZone} onClick={() => setShowZone(true)}>
+          <span style={styles.region}>Region: {regionLabel}</span>
+          <button type="button" style={styles.newZone} onClick={() => setShowZone(true)}>
             + New zone
           </button>
         </div>
@@ -148,7 +167,7 @@ export default function PricingEnginePage() {
 
       {breakdown ? (
         <p style={styles.live}>
-          Live Accra: demand {breakdown.demandMultiplier}x · time {breakdown.timeMultiplier}x · day{' '}
+          Live {regionLabel}: demand {breakdown.demandMultiplier}x · time {breakdown.timeMultiplier}x · day{' '}
           {breakdown.dayMultiplier}x · weather {breakdown.weatherMultiplier}x · traffic{' '}
           {breakdown.trafficMultiplier}x · event {breakdown.eventMultiplier}x →{' '}
           <strong>{breakdown.finalMultiplier}x</strong>
@@ -189,6 +208,7 @@ export default function PricingEnginePage() {
                   </td>
                   <td style={styles.td}>
                     <button
+                      type="button"
                       style={styles.btn}
                       onClick={() => {
                         const next = prompt('Max surge cap', String(r.cap));
@@ -208,11 +228,20 @@ export default function PricingEnginePage() {
       {showZone ? (
         <div style={styles.panel}>
           <h2 style={styles.h2}>New zone</h2>
+          <p style={styles.mapHint}>
+            Search Google Maps & Places to auto-fill zone name, coordinates, and country. Then set radius and
+            surge cap.
+          </p>
+          <PlacesZonePicker
+            countryBias={zoneForm.countryCode}
+            onPick={applyPlace}
+            placeholder="e.g. Osu Accra, Airport City, Tema…"
+          />
           <div style={styles.form}>
             {(['name', 'centerLat', 'centerLng', 'radiusKm', 'maxSurgeCap', 'countryCode'] as const).map(
               (k) =>
                 k === 'countryCode' ? (
-                  <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 180px' }}>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       Country · {formatCountryLabel(zoneForm.countryCode)}
                     </span>
@@ -224,19 +253,31 @@ export default function PricingEnginePage() {
                     />
                   </label>
                 ) : (
-                  <input
-                    key={k}
-                    style={styles.input}
-                    placeholder={k}
-                    value={(zoneForm as any)[k]}
-                    onChange={(e) => setZoneForm({ ...zoneForm, [k]: e.target.value })}
-                  />
+                  <label key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 180px' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                      {k === 'centerLat'
+                        ? 'Center lat'
+                        : k === 'centerLng'
+                          ? 'Center lng'
+                          : k === 'radiusKm'
+                            ? 'Radius (km)'
+                            : k === 'maxSurgeCap'
+                              ? 'Max surge cap'
+                              : 'Name'}
+                    </span>
+                    <input
+                      style={styles.input}
+                      placeholder={k}
+                      value={(zoneForm as any)[k]}
+                      onChange={(e) => setZoneForm({ ...zoneForm, [k]: e.target.value })}
+                    />
+                  </label>
                 )
             )}
-            <button style={styles.newZone} onClick={() => createZone().catch((e) => setMessage(e.message))}>
+            <button type="button" style={styles.newZone} onClick={() => createZone().catch((e) => setMessage(e.message))}>
               Save zone
             </button>
-            <button style={styles.btn} onClick={() => setShowZone(false)}>
+            <button type="button" style={styles.btn} onClick={() => setShowZone(false)}>
               Cancel
             </button>
           </div>
@@ -266,6 +307,21 @@ export default function PricingEnginePage() {
 
       <h2 style={styles.h2}>Add event</h2>
       <div style={styles.form}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 180px' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Zone</span>
+          <select
+            style={styles.input}
+            value={eventForm.zoneId}
+            onChange={(e) => setEventForm({ ...eventForm, zoneId: e.target.value })}
+          >
+            {zones.length === 0 ? <option value="">No zones yet</option> : null}
+            {zones.map((z) => (
+              <option key={z.id} value={z.id}>
+                {z.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <input
           style={styles.input}
           placeholder="name"
@@ -290,7 +346,7 @@ export default function PricingEnginePage() {
           value={eventForm.multiplier}
           onChange={(e) => setEventForm({ ...eventForm, multiplier: e.target.value })}
         />
-        <button style={styles.newZone} onClick={() => addEvent().catch((e) => setMessage(e.message))}>
+        <button type="button" style={styles.newZone} onClick={() => addEvent().catch((e) => setMessage(e.message))}>
           Save event
         </button>
       </div>
@@ -306,20 +362,22 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     flexWrap: 'wrap',
   },
-  h1: { margin: 0, fontSize: 24 },
-  h2: { marginTop: 28, fontSize: 18 },
-  headerActions: { display: 'flex', gap: 8 },
+  h1: { margin: 0, fontSize: 24, color: 'var(--text-primary)' },
+  h2: { marginTop: 28, fontSize: 18, color: 'var(--text-primary)' },
+  headerActions: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
   region: {
     border: '1px solid var(--border)',
-    background: 'transparent',
-    color: 'var(--pure-white)',
+    background: 'var(--surface-elevated)',
+    color: 'var(--text-primary)',
     borderRadius: 8,
     padding: '8px 12px',
+    fontSize: 13,
+    fontWeight: 600,
   },
   newZone: { ...adminBtn.primary },
   live: { color: 'var(--text-secondary)', marginTop: 12 },
   mapHint: {
-    marginTop: 12,
+    marginTop: 0,
     marginBottom: 12,
     padding: 12,
     borderRadius: 12,
@@ -336,7 +394,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)',
     fontSize: 12,
   },
-  td: { padding: '10px 8px', borderBottom: '1px solid var(--border)', fontSize: 13 },
+  td: {
+    padding: '10px 8px',
+    borderBottom: '1px solid var(--border)',
+    fontSize: 13,
+    color: 'var(--text-primary)',
+  },
   pill: { borderRadius: 999, padding: '4px 10px', fontWeight: 700, fontSize: 12 },
   row: {
     display: 'flex',
@@ -346,13 +409,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid var(--border)',
   },
   btn: { ...adminBtn.secondary },
-  form: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+  form: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' },
   input: {
     background: 'var(--surface)',
     border: '1px solid var(--border)',
     borderRadius: 8,
     padding: 8,
-    color: 'var(--pure-white)',
+    color: 'var(--text-primary)',
     minWidth: 0,
     maxWidth: '100%',
     boxSizing: 'border-box',

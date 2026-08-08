@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
+import PlacesZonePicker, { type PickedPlace } from '../components/PlacesZonePicker';
 import { adminBtn } from '../styles/adminButtons';
+import { API } from '../lib/apiBase';
+import { friendlyApiError } from '../lib/apiError';
 
-const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
 type SubTab = 'live' | 'queue' | 'drivers' | 'incidents' | 'trust' | 'shift';
@@ -89,8 +91,8 @@ const SUB_TABS: { key: SubTab; label: string }[] = [
 
 function priorityStyle(p?: string): React.CSSProperties {
   const v = String(p || 'normal').toLowerCase();
-  if (v === 'high') return { background: 'rgba(239,68,68,0.2)', color: '#f87171' };
-  if (v === 'vip') return { background: 'rgba(142,45,226,0.25)', color: '#c4b5fd' };
+  if (v === 'high') return { background: 'rgba(239,68,68,0.2)', color: 'var(--error)' };
+  if (v === 'vip') return { background: 'rgba(142,45,226,0.25)', color: 'var(--accent-purple)' };
   return { background: 'rgba(59,130,246,0.2)', color: '#93c5fd' };
 }
 
@@ -111,6 +113,7 @@ export default function DispatcherPanelPage() {
   const [selectedRide, setSelectedRide] = useState<QueueRide | null>(null);
   const [driverQuery, setDriverQuery] = useState('');
   const [zone, setZone] = useState('Lagos Zone');
+  const [pricingZones, setPricingZones] = useState<{ id: string; name: string }[]>([]);
   const [activeRides, setActiveRides] = useState(0);
   const [queued, setQueued] = useState(0);
   const [completedToday, setCompletedToday] = useState(0);
@@ -150,7 +153,7 @@ export default function DispatcherPanelPage() {
         params: { zone },
       });
       const d = res.data?.data || {};
-      setZone(d.zone || zone);
+      if (d.zone && d.zone !== zone) setZone(d.zone);
       setActiveRides(Number(d.activeRides || 0));
       setQueued(Number(d.queued || 0));
       setCompletedToday(Number(d.completedToday || 0));
@@ -169,16 +172,36 @@ export default function DispatcherPanelPage() {
       setShiftReports(d.shiftReports || []);
       setError('');
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Failed to load dispatch board');
+      setError(friendlyApiError(e, 'Failed to load dispatch board'));
     }
     await loadTrust();
   };
+
+  const loadPricingZones = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/pricing/zones`, { headers: headers() });
+      setPricingZones(
+        (res.data?.data || []).map((z: any) => ({
+          id: String(z.id),
+          name: String(z.name || 'Zone'),
+        }))
+      );
+    } catch {
+      setPricingZones([]);
+    }
+  };
+
+  useEffect(() => {
+    loadPricingZones();
+  }, []);
 
   useEffect(() => {
     load();
     const id = window.setInterval(load, 10000);
     return () => window.clearInterval(id);
-  }, []);
+    // Reload board when active zone changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone]);
 
   const visibleRides = useMemo(() => {
     if (queueFilter === 'active') return activeList;
@@ -194,14 +217,28 @@ export default function DispatcherPanelPage() {
     return list;
   }, [drivers, driverQuery, nearestFirst]);
 
-  const patchSettings = async (patch: { autoAssign?: boolean; nearestFirst?: boolean }) => {
+  const patchSettings = async (patch: {
+    autoAssign?: boolean;
+    nearestFirst?: boolean;
+    zone?: string;
+  }) => {
     try {
       await axios.patch(`${API}/admin/dispatch/settings`, patch, { headers: headers() });
       if (typeof patch.autoAssign === 'boolean') setAutoAssign(patch.autoAssign);
       if (typeof patch.nearestFirst === 'boolean') setNearestFirst(patch.nearestFirst);
+      if (typeof patch.zone === 'string' && patch.zone.trim()) {
+        setZone(patch.zone.trim());
+      }
+      setMessage('Dispatch settings updated');
     } catch (e: any) {
-      setError(e?.response?.data?.message || e.message || 'Settings update failed');
+      setError(friendlyApiError(e, 'Settings update failed'));
     }
+  };
+
+  const applyPlaceZone = async (place: PickedPlace) => {
+    const next = place.locality || place.name || place.formattedAddress;
+    if (!next) return;
+    await patchSettings({ zone: next });
   };
 
   const broadcast = async () => {
@@ -336,10 +373,36 @@ export default function DispatcherPanelPage() {
               ? `${queued} rides waiting — Avg wait ${avgWait} min.`
               : 'Real-time matching, queue, and incidents'}
             {' · '}
-            <Link to="/trust" style={{ color: '#a78bfa' }}>
+            <Link to="/trust" style={{ color: 'var(--electric-violet)' }}>
               Trust Ops
             </Link>
           </p>
+          <div style={styles.zoneBar}>
+            <label style={styles.zoneLabel}>
+              Zone
+              <select
+                style={styles.zoneSelect}
+                value={pricingZones.some((z) => z.name === zone) ? zone : ''}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next) patchSettings({ zone: next });
+                }}
+              >
+                <option value="">{zone || 'Select pricing zone'}</option>
+                {pricingZones.map((z) => (
+                  <option key={z.id} value={z.name}>
+                    {z.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <PlacesZonePicker
+              compact
+              label=""
+              placeholder="Or pick from Google Places…"
+              onPick={(p) => applyPlaceZone(p)}
+            />
+          </div>
         </div>
         <div style={styles.actions} className="admin-actions">
           {tab === 'queue' ? (
@@ -684,14 +747,14 @@ export default function DispatcherPanelPage() {
                         <td style={styles.td}>
                           {s.customer_name || '—'}
                           {s.customer_phone ? (
-                            <div style={{ fontSize: 11, color: '#a1a1aa' }}>{s.customer_phone}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.customer_phone}</div>
                           ) : null}
                         </td>
                         <td style={styles.td}>{s.triggered_by || '—'}</td>
                         <td style={styles.td}>
                           {s.ride_id ? String(s.ride_id).slice(0, 8) : '—'}
                           {s.pickup_address ? (
-                            <div style={{ fontSize: 11, color: '#a1a1aa' }}>{s.pickup_address}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.pickup_address}</div>
                           ) : null}
                         </td>
                         <td style={styles.td}>
@@ -714,8 +777,8 @@ export default function DispatcherPanelPage() {
                         </td>
                       </tr>
                       <tr>
-                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: '#a1a1aa' }}>
-                          <strong style={{ color: '#fca5a5' }}>Runbook:</strong>{' '}
+                        <td colSpan={5} style={{ ...styles.td, fontSize: 12, color: 'var(--text-secondary)' }}>
+                          <strong style={{ color: 'var(--error)' }}>Runbook:</strong>{' '}
                           {(s.runbook || []).join(' · ')}
                           {s.emergencyContacts?.length ? (
                             <div style={{ marginTop: 4 }}>
@@ -862,8 +925,32 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
     flexWrap: 'wrap',
   },
-  h1: { fontSize: 28, fontWeight: 700, margin: 0 },
+  h1: { fontSize: 28, fontWeight: 700, margin: 0, color: 'var(--text-primary)' },
   sub: { color: 'var(--text-secondary)', marginTop: 6, marginBottom: 0 },
+  zoneBar: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 12,
+    alignItems: 'flex-end',
+    marginTop: 14,
+  },
+  zoneLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+  },
+  zoneSelect: {
+    minWidth: 200,
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 14,
+  },
   error: { color: 'var(--error)', marginBottom: 12 },
   message: { color: 'var(--success)', marginBottom: 12 },
   actions: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
@@ -960,8 +1047,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     marginBottom: 4,
   },
-  sosDot: { color: '#f87171', fontWeight: 700 },
-  lateDot: { color: '#facc15', fontWeight: 700 },
+  sosDot: { color: 'var(--error)', fontWeight: 700 },
+  lateDot: { color: 'var(--accent-gold)', fontWeight: 700 },
   bigStat: { fontSize: 22, fontWeight: 800 },
   panel: {
     background: 'var(--surface-elevated)',
@@ -1001,7 +1088,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 28,
     borderRadius: 8,
     background: 'rgba(142,45,226,0.2)',
-    color: '#c4b5fd',
+    color: 'var(--accent-purple)',
     display: 'grid',
     placeItems: 'center',
     fontWeight: 700,
@@ -1057,7 +1144,7 @@ const styles: Record<string, React.CSSProperties> = {
   empty: { color: 'var(--text-secondary)', fontSize: 13 },
   freePill: {
     background: 'rgba(34,197,94,0.2)',
-    color: '#4ade80',
+    color: 'var(--success)',
     borderRadius: 999,
     padding: '2px 8px',
     fontSize: 12,
