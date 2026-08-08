@@ -23,6 +23,7 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
   const [amount, setAmount] = useState('1000');
   const [momo, setMomo] = useState({ provider: 'MTN MoMo', accountNumber: '' });
   const [dispute, setDispute] = useState({ domain: 'ride', reason: '' });
+  const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -83,6 +84,26 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
     const j = await res.json();
     setMsg(res.ok ? 'Dispute opened' : j.message || 'Failed');
     setDispute({ domain: 'ride', reason: '' });
+  };
+
+  const confirmAgentCode = async () => {
+    const res = await fetch(`${API}/trust/cash-agent/confirm`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ code: confirmCode }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? j.data?.credited
+          ? 'Deposit credited'
+          : j.data?.collected
+            ? 'Pickup confirmed'
+            : 'Confirmed'
+        : j.message || 'Invalid code'
+    );
+    setConfirmCode('');
+    await load();
   };
 
   const promise = rails?.promise;
@@ -162,6 +183,18 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
           <Text style={styles.btnText}>Cash out</Text>
         </Pressable>
       </View>
+      <Text style={styles.muted}>Deposits credit after agent confirms your code.</Text>
+      <TextInput
+        style={styles.input}
+        value={confirmCode}
+        onChangeText={setConfirmCode}
+        placeholder="Agent confirmation code"
+        placeholderTextColor="#666"
+        keyboardType="number-pad"
+      />
+      <Pressable style={styles.btn} onPress={confirmAgentCode}>
+        <Text style={styles.btnText}>Confirm agent code</Text>
+      </Pressable>
 
       <Text style={styles.h2}>Dispute a fare</Text>
       <TextInput

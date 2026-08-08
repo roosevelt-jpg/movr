@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
 
@@ -334,6 +335,10 @@ export default function DispatcherPanelPage() {
             {tab === 'queue'
               ? `${queued} rides waiting — Avg wait ${avgWait} min.`
               : 'Real-time matching, queue, and incidents'}
+            {' · '}
+            <Link to="/trust" style={{ color: '#a78bfa' }}>
+              Trust Ops
+            </Link>
           </p>
         </div>
         <div style={styles.actions} className="admin-actions">

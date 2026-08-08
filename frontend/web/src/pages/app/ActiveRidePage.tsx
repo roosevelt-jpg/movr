@@ -108,6 +108,8 @@ const ActiveRidePage: React.FC = () => {
       const j = await res.json();
       if (j?.reliability?.amount) {
         toast.success(`No-show credit: ${j.reliability.amount}`);
+      } else if (j?.reliability?.error) {
+        toast.error(j.reliability.error);
       } else {
         toast.success('Ride cancelled');
       }

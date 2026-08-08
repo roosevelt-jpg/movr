@@ -131,6 +131,8 @@ export default function ActiveRideScreen({
       const j = await res.json();
       if (j?.reliability?.amount) {
         setSosMsg(`No-show credit applied: ${j.reliability.amount}`);
+      } else if (j?.reliability?.error) {
+        setSosMsg(j.reliability.error);
       }
       onCancelled?.();
     } catch {

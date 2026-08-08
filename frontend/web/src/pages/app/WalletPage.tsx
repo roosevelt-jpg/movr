@@ -35,6 +35,7 @@ const WalletPage: React.FC = () => {
   const [txs, setTxs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [promise, setPromise] = useState<any>(null);
 
   useEffect(() => {
     fetch(`${API}/wallet/portfolio`, { headers: authHeaders() })
@@ -51,6 +52,10 @@ const WalletPage: React.FC = () => {
       })
       .catch(() => setError('Could not load wallet'))
       .finally(() => setLoading(false));
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
   }, [locCurrency]);
 
   const fmt = (n: number) => formatCurrency(Math.abs(n), currency);
@@ -67,7 +72,14 @@ const WalletPage: React.FC = () => {
 
   return (
     <div className="min-h-[70vh] rounded-2xl bg-black text-white p-6 md:p-8 max-w-xl mx-auto w-full" data-force-dark>
-      <h1 className="text-3xl font-bold tracking-tight mb-6">My Wallet</h1>
+      <h1 className="text-3xl font-bold tracking-tight mb-2">My Wallet</h1>
+      {promise ? (
+        <p className="text-xs text-emerald-400/90 mb-4 leading-relaxed">
+          {promise.matchSlaText} · {promise.noShowText}
+        </p>
+      ) : (
+        <div className="mb-4" />
+      )}
       {loading ? <p className="mb-4 text-sm text-zinc-400">Loading wallet…</p> : null}
       {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 

@@ -24,6 +24,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Ride Management', to: '/rides' },
       { label: 'Dispatcher', to: '/dispatch' },
+      { label: 'Trust & Settlement', to: '/trust' },
       { label: 'Deliveries', to: '/orders' },
       { label: 'Rentals', to: '/vehicles' },
       { label: 'Broadcasts', to: '/broadcasts' },
@@ -51,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Transactions', to: '/finance' },
       { label: 'Settlements', to: '/finance' },
+      { label: 'Trust Ops', to: '/trust' },
       { label: 'GMV Report', to: '/finance' },
     ],
   },

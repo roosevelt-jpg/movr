@@ -59,6 +59,7 @@ export default function WalletScreen({
   const [txs, setTxs] = useState<Tx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [promise, setPromise] = useState<any>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +90,10 @@ export default function WalletScreen({
 
   useEffect(() => {
     load();
+    fetch(`${API}/trust/promise`)
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
   }, [load]);
 
   const fmtAmt = (t: Tx) => {
@@ -110,6 +115,11 @@ export default function WalletScreen({
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: spacing[10] }}>
       <Text style={styles.title}>My Wallet</Text>
+      {promise?.matchSlaText ? (
+        <Text style={{ color: '#6ee7b7', fontSize: 12, marginBottom: 12, lineHeight: 18 }}>
+          {promise.matchSlaText} · {promise.noShowText}
+        </Text>
+      ) : null}
       {loading ? <Text style={styles.empty}>Loading wallet…</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 

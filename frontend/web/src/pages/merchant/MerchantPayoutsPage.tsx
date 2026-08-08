@@ -26,6 +26,7 @@ export default function MerchantPayoutsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [bankForm, setBankForm] = useState({ bankName: '', accountNumber: '', accountName: '' });
   const [kycMsg, setKycMsg] = useState('');
+  const [promise, setPromise] = useState<any>(null);
 
   const load = () => {
     Promise.all([
@@ -73,6 +74,10 @@ export default function MerchantPayoutsPage() {
 
   useEffect(() => {
     load();
+    axios
+      .get(`${API}/trust/promise`)
+      .then((r) => setPromise(r.data?.data || null))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -142,6 +147,11 @@ export default function MerchantPayoutsPage() {
         <div className="mb-5 flex items-center gap-3">
           <h1 className="text-2xl font-bold">Payout</h1>
         </div>
+        {promise ? (
+          <p className="mb-4 text-xs text-emerald-400/90 leading-relaxed">
+            KYC gate {promise.kycPayoutThreshold}+ · {promise.buyerProtectionNote || promise.keep100Note}
+          </p>
+        ) : null}
 
         <div className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 to-violet-600 p-5">
           <p className="text-xs font-bold tracking-widest text-white/80">AVAILABLE BALANCE</p>

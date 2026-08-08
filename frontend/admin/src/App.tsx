@@ -33,6 +33,7 @@ import CustomerProfilePage from './pages/CustomerProfilePage';
 import TokensManagementPage from './pages/TokensManagementPage';
 import MarketplaceManagementPage from './pages/MarketplaceManagementPage';
 import DispatcherPanelPage from './pages/DispatcherPanelPage';
+import TrustOpsPage from './pages/TrustOpsPage';
 import PromotionsPage from './pages/PromotionsPage';
 import BroadcastCenterPage from './pages/BroadcastCenterPage';
 import PlatformAnalyticsPage from './pages/PlatformAnalyticsPage';
@@ -150,6 +151,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <DispatcherPanelPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/trust"
+          element={
+            <RequireAdmin>
+              <TrustOpsPage />
             </RequireAdmin>
           }
         />

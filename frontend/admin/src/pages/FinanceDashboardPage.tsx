@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip } from 'recharts';
 import AdminShell from '../layouts/AdminShell';
 import { adminBtn } from '../styles/adminButtons';
@@ -153,6 +154,12 @@ export default function FinanceDashboardPage() {
       <div style={styles.headerRow}>
         <div>
           <h1 style={styles.h1}>Finance & GMV Dashboard</h1>
+          <p style={{ margin: '8px 0 0', color: '#a1a1aa', fontSize: 13 }}>
+            <Link to="/trust" style={{ color: '#a78bfa', fontWeight: 700 }}>
+              Trust Ops
+            </Link>{' '}
+            — SOS, disputes, agent codes, reliability credits
+          </p>
           <p style={styles.sub}>Revenue, settlements, and token distribution</p>
         </div>
       </div>

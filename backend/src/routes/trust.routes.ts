@@ -251,6 +251,49 @@ trustAdminRouter.get('/disputes', async (_req: AuthRequest, res: Response) => {
   }
 });
 
+trustAdminRouter.get('/reliability', async (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT e.*,
+              COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'') AS customer_name
+       FROM reliability_events e
+       LEFT JOIN users u ON u.id = e.user_id
+       ORDER BY e.created_at DESC
+       LIMIT 100`
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+trustAdminRouter.get('/receipts', async (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = await db.query(
+      `SELECT r.*,
+              COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'') AS customer_name
+       FROM settlement_receipts r
+       LEFT JOIN users u ON u.id = r.user_id
+       ORDER BY r.created_at DESC
+       LIMIT 100`
+    );
+    res.json({ status: 'success', data: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+trustAdminRouter.post('/cash-agent/confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await trust.confirmCashAgentCode(String(req.body.code || ''), {
+      agentPhone: req.body.agentPhone || 'ops',
+    });
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
 trustAdminRouter.patch('/disputes/:id', async (req: AuthRequest, res: Response) => {
   try {
     const row = await trust.resolveDispute(req.params.id, {
