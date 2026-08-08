@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { spacing } from '@movr/design-system/theme';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
+import { mediaUrl } from '../../lib/media';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 function authHeaders(): Record<string, string> {
@@ -14,7 +14,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Restaurant menu — categories, popular items, floating View Cart (mockup). */
+/** Store menu — categories, sale pricing, images, floating View Cart. */
 export default function StoreProfileScreen({
   storeId,
   onOpenCart,
@@ -28,6 +28,7 @@ export default function StoreProfileScreen({
   onOpenCart?: () => void;
   onBack?: () => void;
 }) {
+  const { width } = useWindowDimensions();
   const [store, setStore] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>(['All']);
@@ -46,7 +47,8 @@ export default function StoreProfileScreen({
         if (!Array.isArray(items)) return;
         const count = items.reduce((n: number, i: any) => n + Number(i.quantity || 0), 0);
         const total = items.reduce(
-          (n: number, i: any) => n + Number(i.unit_price || i.unitPrice || i.price || 0) * Number(i.quantity || 0),
+          (n: number, i: any) =>
+            n + Number(i.unit_price || i.unitPrice || i.price || 0) * Number(i.quantity || 0),
           0
         );
         setCartCount(count);
@@ -76,9 +78,14 @@ export default function StoreProfileScreen({
           category: s.category || '',
           hours: s.hours_text || s.hours_json?.label || '',
           rating: Number(s.rating || 0),
-          eta: s.eta_text || (s.eta_min_minutes != null ? `${s.eta_min_minutes}-${s.eta_max_minutes ?? s.eta_min_minutes} min` : ''),
+          eta:
+            s.eta_text ||
+            (s.eta_min_minutes != null
+              ? `${s.eta_min_minutes}-${s.eta_max_minutes ?? s.eta_min_minutes} min`
+              : ''),
           minOrder: Number(s.min_order_amount || 0),
           currency: s.currency_code || 'NGN',
+          banner: s.banner_url || s.image_url || null,
         });
       })
       .catch((e) => {
@@ -98,6 +105,10 @@ export default function StoreProfileScreen({
               name: p.name,
               description: p.description || '',
               price: Number(p.price || p.base_price || 0),
+              listPrice: Number(p.listPrice ?? p.price ?? 0),
+              compareAtPrice: p.compareAtPrice != null ? Number(p.compareAtPrice) : null,
+              onSale: Boolean(p.onSale),
+              imageUrl: p.images?.[0]?.url || p.image_url || null,
               menu_category: p.menu_category || 'All',
               emoji: p.emoji || '🍽️',
               is_popular: Boolean(p.is_popular || p.is_featured),
@@ -106,7 +117,7 @@ export default function StoreProfileScreen({
         }
         const cats = j?.categories || [];
         if (Array.isArray(cats) && cats.length) {
-          setCategories(cats.map((c: any) => c.name || c).filter(Boolean));
+          setCategories(['All', ...cats.map((c: any) => c.name || c).filter(Boolean)]);
         }
       })
       .catch((e) => {
@@ -139,27 +150,39 @@ export default function StoreProfileScreen({
   };
 
   const currency = store?.currency || 'NGN';
+  const pad = Math.max(12, Math.min(20, width * 0.04));
 
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: pad }]}>
           <Pressable style={styles.back} onPress={onBack}>
             <Text style={styles.backTxt}>←</Text>
           </Pressable>
-          <Text style={styles.heroEmoji}>🍔</Text>
+          {store?.banner ? (
+            <Image source={{ uri: mediaUrl(store.banner) }} style={styles.heroImg} />
+          ) : (
+            <Text style={styles.heroEmoji}>🍔</Text>
+          )}
         </View>
-        {loading ? <Text style={styles.empty}>Loading store…</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Text style={styles.title}>{store?.name || ''}</Text>
-        <Text style={styles.sub}>
+        {loading ? <Text style={[styles.empty, { paddingHorizontal: pad }]}>Loading store…</Text> : null}
+        {error ? <Text style={[styles.error, { paddingHorizontal: pad }]}>{error}</Text> : null}
+        <Text style={[styles.title, { paddingHorizontal: pad }]}>{store?.name || ''}</Text>
+        <Text style={[styles.sub, { paddingHorizontal: pad }]}>
           {[store?.category, store?.hours].filter(Boolean).join(' · ')}
         </Text>
-        <Text style={styles.stats}>
-          {store ? `★ ${Number(store.rating || 0).toFixed(1)}   ·   ${store.eta || ''}   ·   Min ${formatCurrency(store.minOrder || 0, currency)}` : ''}
+        <Text style={[styles.stats, { paddingHorizontal: pad }]}>
+          {store
+            ? `★ ${Number(store.rating || 0).toFixed(1)}   ·   ${store.eta || ''}   ·   Min ${formatCurrency(store.minOrder || 0, currency)}`
+            : ''}
         </Text>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cats}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: pad, gap: 8 }}
+          style={styles.cats}
+        >
           {categories.map((c) => (
             <Pressable
               key={c}
@@ -171,22 +194,38 @@ export default function StoreProfileScreen({
           ))}
         </ScrollView>
 
-        <Text style={styles.section}>POPULAR</Text>
+        <Text style={[styles.section, { paddingHorizontal: pad }]}>
+          {popular.length ? 'POPULAR' : 'MENU'}
+        </Text>
         {list.map((p) => (
           <Pressable
             key={p.id}
-            style={styles.row}
+            style={[styles.row, { paddingHorizontal: pad }]}
             onPress={() => onOpenProduct?.(p.id)}
           >
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.itemName}>{p.name}</Text>
+            <View style={{ flex: 1, paddingRight: 12, minWidth: 0 }}>
+              <Text style={styles.itemName} numberOfLines={2}>
+                {p.name}
+              </Text>
               <Text style={styles.itemDesc} numberOfLines={2}>
                 {p.description}
               </Text>
-              <Text style={styles.itemPrice}>{formatCurrency(p.price, currency)}</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.itemPrice}>{formatCurrency(p.price, currency)}</Text>
+                {p.compareAtPrice != null && p.compareAtPrice > p.price ? (
+                  <Text style={styles.strike}>{formatCurrency(p.compareAtPrice, currency)}</Text>
+                ) : p.listPrice > p.price ? (
+                  <Text style={styles.strike}>{formatCurrency(p.listPrice, currency)}</Text>
+                ) : null}
+                {p.onSale ? <Text style={styles.sale}>Sale</Text> : null}
+              </View>
             </View>
             <View style={styles.thumb}>
-              <Text style={styles.thumbEmoji}>{p.emoji}</Text>
+              {p.imageUrl ? (
+                <Image source={{ uri: mediaUrl(p.imageUrl) }} style={styles.thumbImg} />
+              ) : (
+                <Text style={styles.thumbEmoji}>{p.emoji}</Text>
+              )}
               <Pressable
                 style={styles.plus}
                 onPress={(e) => {
@@ -200,15 +239,15 @@ export default function StoreProfileScreen({
             </View>
           </Pressable>
         ))}
-        {!loading && !list.length ? <Text style={styles.empty}>No products available.</Text> : null}
+        {!loading && !list.length ? (
+          <Text style={[styles.empty, { paddingHorizontal: pad }]}>No products available.</Text>
+        ) : null}
       </ScrollView>
 
       {cartCount > 0 ? (
-        <Pressable style={styles.cartBar} onPress={onOpenCart}>
+        <Pressable style={[styles.cartBar, { left: pad, right: pad }]} onPress={onOpenCart}>
           <Text style={styles.cartLeft}>🛒  View Cart ({cartCount})</Text>
-          <Text style={styles.cartRight}>
-            {formatCurrency(cartTotal, currency)} →
-          </Text>
+          <Text style={styles.cartRight}>{formatCurrency(cartTotal, currency)} →</Text>
         </Pressable>
       ) : null}
     </View>
@@ -220,7 +259,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    alignItems: 'center',
     paddingTop: 8,
   },
   back: {
@@ -233,22 +272,16 @@ const styles = StyleSheet.create({
   },
   backTxt: { color: '#fff', fontSize: 18 },
   heroEmoji: { fontSize: 48, opacity: 0.9 },
-  title: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '800',
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  sub: { color: '#A1A1AA', paddingHorizontal: 16, marginTop: 6 },
-  stats: { color: '#E4E4E7', paddingHorizontal: 16, marginTop: 10, fontWeight: '600' },
-  cats: { paddingHorizontal: 16, marginTop: 18, marginBottom: 8 },
+  heroImg: { width: 64, height: 64, borderRadius: 14 },
+  title: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 8 },
+  sub: { color: '#A1A1AA', marginTop: 6 },
+  stats: { color: '#E4E4E7', marginTop: 10, fontWeight: '600' },
+  cats: { marginTop: 18, marginBottom: 8 },
   pill: {
     backgroundColor: '#1A1A1A',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginRight: 8,
   },
   pillOn: { backgroundColor: '#A855F7' },
   pillTxt: { color: '#fff', fontWeight: '600' },
@@ -258,20 +291,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
-    paddingHorizontal: 16,
     marginTop: 16,
     marginBottom: 8,
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#1F1F1F',
   },
   itemName: { color: '#fff', fontWeight: '700', fontSize: 16 },
   itemDesc: { color: '#A1A1AA', marginTop: 4, fontSize: 13 },
-  itemPrice: { color: '#fff', fontWeight: '700', marginTop: 8 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  itemPrice: { color: '#fff', fontWeight: '700' },
+  strike: { color: '#71717A', textDecorationLine: 'line-through', fontSize: 12 },
+  sale: { color: '#FB923C', fontWeight: '800', fontSize: 11 },
   thumb: {
     width: 88,
     height: 88,
@@ -279,7 +313,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  thumbImg: { width: '100%', height: '100%' },
   thumbEmoji: { fontSize: 36 },
   plus: {
     position: 'absolute',
@@ -295,8 +331,6 @@ const styles = StyleSheet.create({
   plusTxt: { color: '#fff', fontWeight: '900', fontSize: 18, marginTop: -1 },
   cartBar: {
     position: 'absolute',
-    left: 16,
-    right: 16,
     bottom: 20,
     backgroundColor: '#2563EB',
     borderRadius: 16,
@@ -308,6 +342,6 @@ const styles = StyleSheet.create({
   },
   cartLeft: { color: '#fff', fontWeight: '700' },
   cartRight: { color: '#fff', fontWeight: '800' },
-  empty: { color: '#71717A', paddingHorizontal: 16, marginVertical: 12 },
-  error: { color: '#F87171', paddingHorizontal: 16, marginVertical: 8 },
+  empty: { color: '#71717A', marginVertical: 12 },
+  error: { color: '#F87171', marginVertical: 8 },
 });

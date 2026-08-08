@@ -16,10 +16,12 @@ export default function OrderConfirmedScreen({
   orderId,
   onTrack,
   onHome,
+  onRate,
 }: {
   orderId?: string;
   onTrack?: () => void;
   onHome?: () => void;
+  onRate?: () => void;
 }) {
   const [merchant, setMerchant] = useState('');
   const [orderRef, setOrderRef] = useState('');
@@ -139,7 +141,10 @@ export default function OrderConfirmedScreen({
         <View style={styles.trackB} />
         <Text style={styles.trackText}>Track Order</Text>
       </Pressable>
-      <Pressable style={styles.home} onPress={onHome}>
+      <Pressable style={styles.home} onPress={onRate}>
+        <Text style={styles.homeText}>Rate products</Text>
+      </Pressable>
+      <Pressable style={[styles.home, { marginTop: 12 }]} onPress={onHome}>
         <Text style={styles.homeText}>Back to Home</Text>
       </Pressable>
     </View>

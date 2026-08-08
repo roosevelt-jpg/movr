@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Linking,
+  ScrollView,
+  Alert,
+  TextInput,
+  Modal,
+  useWindowDimensions,
+} from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import { ordersApi } from '../../services/api';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const SOCKET_URL = (process.env.EXPO_PUBLIC_SOCKET_URL || API.replace(/\/api\/v1\/?$/, '')) as string;
@@ -13,16 +25,19 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Live order tracking — map, courier card, timeline, footer (mockup). */
+/** Live order tracking — map, courier, timeline, returns/rate CTAs. */
 export default function OrderTrackingScreen({
   orderId,
   storeName = '',
   onDetails,
+  onRate,
 }: {
   orderId?: string;
   storeName?: string;
   onDetails?: () => void;
+  onRate?: () => void;
 }) {
+  const { width } = useWindowDimensions();
   const [orderRef, setOrderRef] = useState(orderId ? String(orderId) : '');
   const [statusLabel, setStatusLabel] = useState('');
   const [eta, setEta] = useState('');
@@ -34,6 +49,9 @@ export default function OrderTrackingScreen({
   const [fromStore, setFromStore] = useState(storeName);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [returnMsg, setReturnMsg] = useState('');
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
 
   useEffect(() => {
     let socket: any = null;
@@ -95,9 +113,26 @@ export default function OrderTrackingScreen({
     };
   }, [orderId]);
 
+  const submitReturn = async () => {
+    if (!orderId || !returnReason.trim()) {
+      Alert.alert('Return', 'Please enter a reason');
+      return;
+    }
+    try {
+      await ordersApi.requestReturn(orderId, { reason: returnReason.trim() });
+      setReturnMsg('Return requested');
+      setReturnOpen(false);
+      setReturnReason('');
+    } catch (e: any) {
+      setReturnMsg(e?.response?.data?.message || e?.message || 'Could not request return');
+    }
+  };
+
+  const stackActions = width < 380;
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 28 }}>
-      <View style={styles.map}>
+      <View style={[styles.map, { height: Math.min(220, Math.max(160, width * 0.48)) }]}>
         <View style={styles.grid} />
         <View style={styles.route} />
         <Text style={styles.storePin}>🍔</Text>
@@ -117,25 +152,29 @@ export default function OrderTrackingScreen({
         </View>
       </View>
 
-      {courier ? <View style={styles.courierCard}>
-        <View style={styles.avatar}>
-          <Text style={{ fontSize: 22 }}>🛵</Text>
+      {courier ? (
+        <View style={styles.courierCard}>
+          <View style={styles.avatar}>
+            <Text style={{ fontSize: 22 }}>🛵</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.courierName} numberOfLines={1}>
+              {courier.name}
+            </Text>
+            <Text style={styles.courierRole}>{courier.role}</Text>
+            <Text style={styles.rating}>★ {Number(courier.rating).toFixed(1)}</Text>
+          </View>
+          <Pressable
+            style={styles.square}
+            onPress={() => courier.phone && Linking.openURL(`tel:${courier.phone}`)}
+          >
+            <Text>📞</Text>
+          </Pressable>
+          <Pressable style={styles.square}>
+            <Text>💬</Text>
+          </Pressable>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.courierName}>{courier.name}</Text>
-          <Text style={styles.courierRole}>{courier.role}</Text>
-          <Text style={styles.rating}>★ {Number(courier.rating).toFixed(1)}</Text>
-        </View>
-        <Pressable
-          style={styles.square}
-          onPress={() => courier.phone && Linking.openURL(`tel:${courier.phone}`)}
-        >
-          <Text>📞</Text>
-        </Pressable>
-        <Pressable style={styles.square}>
-          <Text>💬</Text>
-        </Pressable>
-      </View> : null}
+      ) : null}
 
       <View style={styles.timeline}>
         {timeline.map((step, i) => (
@@ -166,14 +205,51 @@ export default function OrderTrackingScreen({
 
       <View style={styles.footer}>
         <Text style={styles.footerIcons}>🍔 🍗</Text>
-        <Text style={styles.footerMeta}>
+        <Text style={styles.footerMeta} numberOfLines={1}>
           {itemCount} items · {formatCurrency(total, currency)}
         </Text>
         <Pressable onPress={onDetails}>
           <Text style={styles.details}>Details</Text>
         </Pressable>
       </View>
+
+      <View style={[styles.actions, stackActions && { flexDirection: 'column' }]}>
+        <Pressable style={[styles.actionBtn, !stackActions && { flex: 1 }]} onPress={onRate}>
+          <Text style={styles.actionTxt}>Rate products</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.actionBtn, styles.actionMuted, !stackActions && { flex: 1 }]}
+          onPress={() => setReturnOpen(true)}
+        >
+          <Text style={styles.actionTxt}>Request return</Text>
+        </Pressable>
+      </View>
+      {returnMsg ? <Text style={styles.empty}>{returnMsg}</Text> : null}
       <Text style={styles.from}>From {fromStore}</Text>
+
+      <Modal visible={returnOpen} transparent animationType="fade" onRequestClose={() => setReturnOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Request return</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Why are you returning?"
+              placeholderTextColor="#666"
+              value={returnReason}
+              onChangeText={setReturnReason}
+              multiline
+            />
+            <View style={styles.modalRow}>
+              <Pressable style={styles.modalCancel} onPress={() => setReturnOpen(false)}>
+                <Text style={styles.actionTxt}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.modalOk} onPress={submitReturn}>
+                <Text style={styles.actionTxt}>Submit</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -181,7 +257,6 @@ export default function OrderTrackingScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000', padding: spacing[4] },
   map: {
-    height: 200,
     borderRadius: 18,
     backgroundColor: '#0c0c12',
     overflow: 'hidden',
@@ -219,8 +294,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    gap: 8,
   },
-  orderNum: { color: '#A1A1AA', fontWeight: '600' },
+  orderNum: { color: '#A1A1AA', fontWeight: '600', flexShrink: 1 },
   badge: {
     borderWidth: 1,
     borderColor: '#F97316',
@@ -278,7 +354,52 @@ const styles = StyleSheet.create({
   footerIcons: { fontSize: 18 },
   footerMeta: { flex: 1, color: '#fff', fontWeight: '600' },
   details: { color: '#A855F7', fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  actionBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionMuted: { backgroundColor: '#141414' },
+  actionTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
   from: { color: '#52525B', fontSize: 12, marginTop: 10, textAlign: 'center' },
-  empty: { color: '#71717A', textAlign: 'center', marginBottom: 12 },
+  empty: { color: '#71717A', textAlign: 'center', marginBottom: 12, marginTop: 8 },
   error: { color: '#F87171', textAlign: 'center', marginBottom: 12 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: { backgroundColor: '#1A1A1A', borderRadius: 16, padding: 16 },
+  modalTitle: { color: '#fff', fontWeight: '800', fontSize: 18, marginBottom: 12 },
+  modalInput: {
+    minHeight: 90,
+    borderRadius: 12,
+    backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: '#333',
+    color: '#fff',
+    padding: 12,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  modalRow: { flexDirection: 'row', gap: 10 },
+  modalCancel: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#444',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalOk: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: '#8E2DE2',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
 });

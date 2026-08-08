@@ -37,6 +37,9 @@ import SupportChatScreen from './SupportChatScreen';
 import TokenScreen from './TokenScreen';
 import TransactionReceiptScreen from './TransactionReceiptScreen';
 import WishlistScreen from './WishlistScreen';
+import CartScreen from './CartScreen';
+import OrderConfirmedScreen from './OrderConfirmedScreen';
+import OrderTrackingScreen from './OrderTrackingScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const CHICKEN_ID = 'c0000000-0000-4000-8000-000000000014';
@@ -70,6 +73,9 @@ type Service =
   | 'store'
   | 'product'
   | 'wishlist'
+  | 'cart'
+  | 'order_confirmed'
+  | 'order_tracking'
   | 'redeem'
   | 'receipt';
 
@@ -115,6 +121,7 @@ export default function SuperAppHomeScreen({
   const [data, setData] = useState<any>(null);
   const [storeId, setStoreId] = useState(CHICKEN_ID);
   const [productId, setProductId] = useState(ZINGER_ID);
+  const [orderId, setOrderId] = useState('');
   const [rentalVehicleId, setRentalVehicleId] = useState('e0000000-0000-4000-8000-000000000002');
   const [rentalMode, setRentalMode] = useState<'self_drive' | 'chauffeur'>('self_drive');
   const [parcelRef, setParcelRef] = useState('MVR-P-8821');
@@ -362,6 +369,7 @@ export default function SuperAppHomeScreen({
         <StoreProfileScreen
           storeId={storeId}
           onBack={() => setService('shop')}
+          onOpenCart={() => setService('cart')}
           onOpenProduct={(id) => {
             setProductId(id);
             setService('product');
@@ -377,7 +385,53 @@ export default function SuperAppHomeScreen({
           productId={productId}
           storeId={storeId}
           onBack={() => setService('store')}
-          onAdded={() => setService('store')}
+          onAdded={() => setService('cart')}
+        />
+      </View>
+    );
+  }
+  if (service === 'cart') {
+    return (
+      <View style={styles.root}>
+        <CartScreen
+          storeId={storeId}
+          onBack={() => setService('store')}
+          onCheckedOut={(id) => {
+            setOrderId(id);
+            setService('order_confirmed');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'order_confirmed') {
+    return (
+      <View style={styles.root}>
+        <OrderConfirmedScreen
+          orderId={orderId}
+          onTrack={() => setService('order_tracking')}
+          onRate={() => {
+            setTab('shop');
+            setService('shop');
+          }}
+          onHome={() => {
+            setTab('home');
+            setService('hub');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'order_tracking') {
+    return (
+      <View style={styles.root}>
+        <OrderTrackingScreen
+          orderId={orderId}
+          onDetails={() => setService('order_confirmed')}
+          onRate={() => {
+            setTab('shop');
+            setService('shop');
+          }}
         />
       </View>
     );
@@ -386,7 +440,7 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <WishlistScreen
-          onBack={() => setService('shop')}
+          onBack={() => setService(tab === 'profile' ? 'hub' : 'shop')}
           onOpenProduct={(sid, pid) => {
             setStoreId(sid);
             setProductId(pid);

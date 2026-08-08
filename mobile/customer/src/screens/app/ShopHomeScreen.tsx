@@ -8,9 +8,11 @@ import {
   ScrollView,
   TextInput,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import { mediaUrl } from '../../lib/media';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -43,9 +45,16 @@ export default function ShopHomeScreen({
   userLat?: number;
   userLng?: number;
 }) {
+  const { width } = useWindowDimensions();
+  const cols = width >= 900 ? 4 : width >= 600 ? 3 : 2;
+  const gap = 10;
+  const pad = 16;
+  const cardWidth = (width - pad * 2 - gap * (cols - 1)) / cols;
   const [category, setCategory] = useState('All');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('newest');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
   const [mode, setMode] = useState<'products' | 'stores'>('products');
   const [stores, setStores] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -94,6 +103,8 @@ export default function ShopHomeScreen({
       const params = new URLSearchParams({ sort });
       if (category !== 'All') params.set('category', category.toLowerCase());
       if (q.trim()) params.set('q', q.trim());
+      if (minPrice !== '') params.set('minPrice', minPrice);
+      if (maxPrice !== '') params.set('maxPrice', maxPrice);
       fetch(`${API}/products?${params}`)
         .then((r) => r.json())
         .then((j) => {
@@ -105,7 +116,7 @@ export default function ShopHomeScreen({
         })
         .finally(() => setLoading(false));
     }
-  }, [category, q, userLat, userLng, mode, sort]);
+  }, [category, q, userLat, userLng, mode, sort, minPrice, maxPrice]);
 
   const visibleStores = useMemo(() => {
     return stores.filter((s) => {
@@ -177,22 +188,43 @@ export default function ShopHomeScreen({
       </ScrollView>
 
       {mode === 'products' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {[
-            { id: 'newest', label: 'Newest' },
-            { id: 'rating', label: 'Top rated' },
-            { id: 'price_asc', label: 'Price ↑' },
-            { id: 'price_desc', label: 'Price ↓' },
-          ].map((s) => (
-            <Pressable
-              key={s.id}
-              onPress={() => setSort(s.id)}
-              style={[styles.chip, sort === s.id && styles.chipOn]}
-            >
-              <Text style={[styles.chipText, sort === s.id && styles.chipTextOn]}>{s.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {[
+              { id: 'newest', label: 'Newest' },
+              { id: 'rating', label: 'Top rated' },
+              { id: 'price_asc', label: 'Price ↑' },
+              { id: 'price_desc', label: 'Price ↓' },
+            ].map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={() => setSort(s.id)}
+                style={[styles.chip, sort === s.id && styles.chipOn]}
+              >
+                <Text style={[styles.chipText, sort === s.id && styles.chipTextOn]}>{s.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={styles.priceFilters}>
+            <TextInput
+              style={styles.priceInput}
+              placeholder="Min"
+              placeholderTextColor="#666"
+              keyboardType="numeric"
+              value={minPrice}
+              onChangeText={setMinPrice}
+            />
+            <Text style={{ color: '#666' }}>—</Text>
+            <TextInput
+              style={styles.priceInput}
+              placeholder="Max"
+              placeholderTextColor="#666"
+              keyboardType="numeric"
+              value={maxPrice}
+              onChangeText={setMaxPrice}
+            />
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.section}>{mode === 'products' ? 'PRODUCTS' : 'NEARBY STORES'}</Text>
@@ -229,10 +261,11 @@ export default function ShopHomeScreen({
       ) : (
         <FlatList
           data={products}
+          key={`cols-${cols}`}
           keyExtractor={(i) => String(i.id)}
-          numColumns={2}
-          columnWrapperStyle={{ gap: 10 }}
-          contentContainerStyle={{ paddingBottom: spacing[8], gap: 10 }}
+          numColumns={cols}
+          columnWrapperStyle={cols > 1 ? { gap } : undefined}
+          contentContainerStyle={{ paddingBottom: spacing[8], gap }}
           renderItem={({ item }) => {
             const img = item.images?.[0]?.url || item.image_url;
             const price = Number(item.price || 0);
@@ -240,7 +273,7 @@ export default function ShopHomeScreen({
             const currency = item.currency || 'NGN';
             return (
               <Pressable
-                style={styles.productCard}
+                style={[styles.productCard, { width: cardWidth }]}
                 onPress={() =>
                   onOpenProduct?.(
                     String(item.store_id),
@@ -252,7 +285,7 @@ export default function ShopHomeScreen({
               >
                 <View style={styles.productImgWrap}>
                   {img ? (
-                    <Image source={{ uri: img }} style={styles.productImg} />
+                    <Image source={{ uri: mediaUrl(img) }} style={styles.productImg} />
                   ) : (
                     <Text style={{ fontSize: 28 }}>{item.emoji || '🛍️'}</Text>
                   )}
@@ -351,11 +384,9 @@ const styles = StyleSheet.create({
   openBtn: { paddingHorizontal: 8, paddingVertical: 6 },
   openText: { color: '#c4b5fd', fontWeight: '700' },
   productCard: {
-    flex: 1,
     backgroundColor: '#141414',
     borderRadius: 14,
     padding: 10,
-    marginBottom: 4,
   },
   productImgWrap: {
     height: 110,
@@ -372,6 +403,15 @@ const styles = StyleSheet.create({
   productPrice: { color: '#fff', fontWeight: '800', fontSize: 13, marginTop: 4 },
   strike: { color: '#666', textDecorationLine: 'line-through', fontSize: 11 },
   sale: { color: '#FB923C', fontSize: 10, fontWeight: '800' },
+  priceFilters: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  priceInput: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   empty: { color: '#666', textAlign: 'center', marginTop: 24 },
   error: { color: '#F87171', textAlign: 'center', marginBottom: 12 },
 });

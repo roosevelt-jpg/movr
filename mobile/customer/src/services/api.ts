@@ -31,7 +31,11 @@ export const cartApi = {
   updateItem: (id: string, quantity: number) => api.patch(`/cart/items/${id}`, { quantity }),
   removeItem: (id: string) => api.delete(`/cart/items/${id}`),
   checkout: (data: any) => api.post('/cart/checkout', data),
+  quote: (data: any) => api.post('/cart/quote', data),
   wishlist: () => api.get('/cart/wishlist'),
+  wishStatus: (productId: string) => api.get(`/cart/wishlist/${productId}`),
+  addWish: (productId: string) => api.post(`/cart/wishlist/${productId}`),
+  removeWish: (productId: string) => api.delete(`/cart/wishlist/${productId}`),
 };
 
 export const productsApi = {
@@ -44,6 +48,8 @@ export const productsApi = {
 export const ordersApi = {
   list: () => api.get('/orders'),
   get: (id: string) => api.get(`/orders/${id}`),
+  requestReturn: (id: string, data: { reason: string; itemId?: string; refundAmount?: number }) =>
+    api.post(`/orders/${id}/returns`, data),
 };
 
 /** Movr AI — multi-domain chat, channels, rankings, live-agent escalate */

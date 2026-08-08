@@ -1,9 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Image,
+  TextInput,
+  useWindowDimensions,
+} from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 import { cartApi, storesApi } from '../../services/api';
 import api from '../../services/api';
+import { mediaUrl } from '../../lib/media';
 
 type SizeOpt = { id: string; label: string; price_delta?: number };
 type Addon = { id: string; name: string; priceDelta: number };
@@ -24,6 +34,7 @@ export default function ProductDetailScreen({
   onAdded?: () => void;
   onBack?: () => void;
 }) {
+  const { width } = useWindowDimensions();
   const [name, setName] = useState(nameProp);
   const [price, setPrice] = useState(priceProp);
   const [listPrice, setListPrice] = useState(priceProp);
@@ -242,21 +253,28 @@ export default function ProductDetailScreen({
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? <Text style={styles.merchant}>Loading product…</Text> : null}
-        <View style={styles.hero}>
-          {(gallery[imageIdx] || imageUrl) ? (
-            <Image source={{ uri: gallery[imageIdx] || imageUrl || undefined }} style={styles.heroImg} />
+        <View style={[styles.hero, { height: Math.min(240, Math.max(180, width * 0.55)) }]}>
+          {gallery[imageIdx] || imageUrl ? (
+            <Image
+              source={{ uri: mediaUrl(gallery[imageIdx] || imageUrl) }}
+              style={styles.heroImg}
+            />
           ) : (
             <Text style={styles.heroEmoji}>{emoji}</Text>
           )}
         </View>
         {gallery.length > 1 ? (
-          <View style={styles.thumbs}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbs}>
             {gallery.map((url, i) => (
-              <Pressable key={`${url}-${i}`} onPress={() => setImageIdx(i)} style={[styles.thumb, i === imageIdx && styles.thumbOn]}>
-                <Image source={{ uri: url }} style={styles.thumbImg} />
+              <Pressable
+                key={`${url}-${i}`}
+                onPress={() => setImageIdx(i)}
+                style={[styles.thumb, i === imageIdx && styles.thumbOn]}
+              >
+                <Image source={{ uri: mediaUrl(url) }} style={styles.thumbImg} />
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
 
         <View style={styles.titleRow}>
@@ -273,7 +291,9 @@ export default function ProductDetailScreen({
         {onSale ? <Text style={styles.saleChip}>Sale</Text> : null}
         <Text style={styles.merchant}>{merchant}</Text>
         <View style={styles.metaRow}>
-          <Text style={styles.rating}>★ {rating.toFixed(1)} · {reviews || reviewList.length} ratings</Text>
+          <Text style={styles.rating}>
+            ★ {rating.toFixed(1)} · {reviews || reviewList.length} ratings
+          </Text>
           <View style={styles.avail}>
             <Text style={styles.availTxt}>{available ? 'Available' : 'Unavailable'}</Text>
           </View>
@@ -332,21 +352,52 @@ export default function ProductDetailScreen({
             </View>
           ))
         )}
-        <Pressable
-          style={styles.reviewBtn}
-          onPress={async () => {
-            try {
-              await api.post(`/products/${productId}/reviews`, reviewForm);
-              setMsg('Thanks for your review');
-              const r = await api.get(`/products/${productId}/reviews`);
-              setReviewList(r.data?.data || []);
-            } catch (e: any) {
-              setMsg(e?.response?.data?.message || 'Could not submit review');
-            }
-          }}
-        >
-          <Text style={styles.reviewBtnTxt}>Submit {reviewForm.rating}★ review</Text>
-        </Pressable>
+
+        <View style={styles.reviewForm}>
+          <Text style={styles.addonName}>Write a review</Text>
+          <View style={styles.starRow}>
+            {[5, 4, 3, 2, 1].map((n) => (
+              <Pressable
+                key={n}
+                onPress={() => setReviewForm((f) => ({ ...f, rating: n }))}
+                style={[styles.starChip, reviewForm.rating === n && styles.starOn]}
+              >
+                <Text style={styles.starTxt}>{n}★</Text>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Title"
+            placeholderTextColor="#666"
+            value={reviewForm.title}
+            onChangeText={(t) => setReviewForm((f) => ({ ...f, title: t }))}
+          />
+          <TextInput
+            style={[styles.input, styles.inputArea]}
+            placeholder="Your experience"
+            placeholderTextColor="#666"
+            value={reviewForm.body}
+            onChangeText={(t) => setReviewForm((f) => ({ ...f, body: t }))}
+            multiline
+          />
+          <Pressable
+            style={styles.reviewBtn}
+            onPress={async () => {
+              try {
+                await api.post(`/products/${productId}/reviews`, reviewForm);
+                setMsg('Thanks for your review');
+                setReviewForm({ rating: 5, title: '', body: '' });
+                const r = await api.get(`/products/${productId}/reviews`);
+                setReviewList(r.data?.data || []);
+              } catch (e: any) {
+                setMsg(e?.response?.data?.message || 'Could not submit review');
+              }
+            }}
+          >
+            <Text style={styles.reviewBtnTxt}>Submit review</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
@@ -401,7 +452,7 @@ const styles = StyleSheet.create({
   },
   heroImg: { width: '100%', height: '100%', borderRadius: 20 },
   heroEmoji: { fontSize: 88 },
-  thumbs: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  thumbs: { gap: 8, paddingBottom: 12 },
   thumb: {
     width: 52,
     height: 52,
@@ -431,8 +482,34 @@ const styles = StyleSheet.create({
   merchant: { color: '#A1A1AA', marginTop: 6 },
   reviewCard: { backgroundColor: '#141414', borderRadius: 12, padding: 12, marginBottom: 8 },
   reviewTitle: { color: '#FB923C', fontWeight: '700', marginBottom: 4 },
-  reviewBtn: {
+  reviewForm: {
     marginTop: 8,
+    backgroundColor: '#141414',
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+  },
+  starRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  starChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  starOn: { backgroundColor: '#8E2DE2', borderColor: '#8E2DE2' },
+  starTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  input: {
+    borderRadius: 10,
+    backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: '#333',
+    color: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  inputArea: { minHeight: 80, textAlignVertical: 'top' },
+  reviewBtn: {
     backgroundColor: '#1A1025',
     borderRadius: 12,
     paddingVertical: 12,
@@ -459,9 +536,10 @@ const styles = StyleSheet.create({
     marginTop: spacing[5],
     marginBottom: 10,
   },
-  sizeRow: { flexDirection: 'row', gap: 8 },
+  sizeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   sizeChip: {
-    flex: 1,
+    minWidth: '30%',
+    flexGrow: 1,
     backgroundColor: '#141414',
     borderRadius: 12,
     paddingVertical: 12,

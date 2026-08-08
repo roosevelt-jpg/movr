@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Image, useWindowDimensions } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 import api from '../../services/api';
+import { mediaUrl } from '../../lib/media';
 
-/** Customer wishlist list. */
+/** Customer wishlist list with sale pricing. */
 export default function WishlistScreen({
   onBack,
   onOpenProduct,
@@ -12,6 +13,7 @@ export default function WishlistScreen({
   onBack?: () => void;
   onOpenProduct?: (storeId: string, productId: string, name?: string, price?: number) => void;
 }) {
+  const { width } = useWindowDimensions();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,30 +53,45 @@ export default function WishlistScreen({
           const id = item.id || item.productId;
           const img = item.images?.[0]?.url || item.image_url;
           const price = Number(item.price || 0);
+          const compare = item.compareAtPrice != null ? Number(item.compareAtPrice) : null;
           return (
-            <View style={styles.card}>
+            <View
+              style={[styles.card, width < 360 && { flexDirection: 'column', alignItems: 'stretch' }]}
+            >
               <Pressable
-                style={{ flexDirection: 'row', flex: 1, gap: 12 }}
+                style={{ flexDirection: 'row', flex: 1, gap: 12, minWidth: 0 }}
                 onPress={() =>
                   onOpenProduct?.(String(item.store_id), String(id), item.name, price)
                 }
               >
                 <View style={styles.thumb}>
                   {img ? (
-                    <Image source={{ uri: img }} style={styles.img} />
+                    <Image source={{ uri: mediaUrl(img) }} style={styles.img} />
                   ) : (
                     <Text style={{ fontSize: 22 }}>🛍️</Text>
                   )}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.store}>{item.storeName || item.store_name}</Text>
-                  <Text style={styles.price}>
-                    {formatCurrency(price, item.currency || 'NGN')}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.name} numberOfLines={2}>
+                    {item.name}
                   </Text>
+                  <Text style={styles.store} numberOfLines={1}>
+                    {item.storeName || item.store_name}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <Text style={styles.price}>
+                      {formatCurrency(price, item.currency || 'NGN')}
+                    </Text>
+                    {compare != null && compare > price ? (
+                      <Text style={styles.strike}>
+                        {formatCurrency(compare, item.currency || 'NGN')}
+                      </Text>
+                    ) : null}
+                    {item.onSale ? <Text style={styles.sale}>Sale</Text> : null}
+                  </View>
                 </View>
               </Pressable>
-              <Pressable onPress={() => remove(String(id))}>
+              <Pressable onPress={() => remove(String(id))} style={{ paddingVertical: 4 }}>
                 <Text style={styles.remove}>Remove</Text>
               </Pressable>
             </View>
@@ -113,6 +130,8 @@ const styles = StyleSheet.create({
   img: { width: '100%', height: '100%' },
   name: { color: '#fff', fontWeight: '700' },
   store: { color: '#888', fontSize: 12, marginTop: 2 },
-  price: { color: '#fff', fontWeight: '800', marginTop: 4 },
+  price: { color: '#fff', fontWeight: '800' },
+  strike: { color: '#666', textDecorationLine: 'line-through', fontSize: 11 },
+  sale: { color: '#FB923C', fontSize: 10, fontWeight: '800' },
   remove: { color: '#F87171', fontWeight: '600', fontSize: 12 },
 });

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Image } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
 import { cartApi } from '../../services/api';
+import { mediaUrl } from '../../lib/media';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 function authHeaders(): Record<string, string> {
@@ -21,6 +22,10 @@ type CartItem = {
   price: number;
   qty: number;
   emoji?: string;
+  imageUrl?: string | null;
+  listPrice?: number | null;
+  compareAtPrice?: number | null;
+  onSale?: boolean;
 };
 
 /** Your Cart — qty, coupon, DVT discount, Place Order (mockup). */
@@ -70,6 +75,10 @@ export default function CartScreen({
               price: Number(r.unit_price || r.unitPrice || r.price || 0),
               qty: Number(r.quantity || r.qty || 1),
               emoji: r.emoji || '🍽️',
+              imageUrl: r.image_url || r.images?.[0]?.url || null,
+              listPrice: r.listPrice != null ? Number(r.listPrice) : null,
+              compareAtPrice: r.compareAtPrice != null ? Number(r.compareAtPrice) : null,
+              onSale: Boolean(r.salePrice != null || r.onSale),
             }))
           );
         }
@@ -102,6 +111,10 @@ export default function CartScreen({
             price: Number(r.unit_price || r.unitPrice || r.price || 0),
             qty: Number(r.quantity || r.qty || 1),
             emoji: r.emoji || '🍽️',
+            imageUrl: r.image_url || r.images?.[0]?.url || null,
+            listPrice: r.listPrice != null ? Number(r.listPrice) : null,
+            compareAtPrice: r.compareAtPrice != null ? Number(r.compareAtPrice) : null,
+            onSale: Boolean(r.salePrice != null || r.onSale),
           }));
           setItems(mapped);
           refreshQuote(mapped);
@@ -174,11 +187,25 @@ export default function CartScreen({
       {items.map((i) => (
         <View key={i.id} style={styles.card}>
           <View style={styles.thumb}>
-            <Text style={{ fontSize: 28 }}>{i.emoji || '🍽️'}</Text>
+            {i.imageUrl ? (
+              <Image source={{ uri: mediaUrl(i.imageUrl) }} style={styles.thumbImg} />
+            ) : (
+              <Text style={{ fontSize: 28 }}>{i.emoji || '🍽️'}</Text>
+            )}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{i.name}</Text>
-            <Text style={styles.price}>{formatCurrency(i.price, currency)}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.name} numberOfLines={2}>
+              {i.name}
+            </Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>{formatCurrency(i.price, currency)}</Text>
+              {i.compareAtPrice != null && i.compareAtPrice > i.price ? (
+                <Text style={styles.strike}>{formatCurrency(i.compareAtPrice, currency)}</Text>
+              ) : i.listPrice != null && i.listPrice > i.price ? (
+                <Text style={styles.strike}>{formatCurrency(i.listPrice, currency)}</Text>
+              ) : null}
+              {i.onSale ? <Text style={styles.sale}>Sale</Text> : null}
+            </View>
           </View>
           <View style={styles.qty}>
             <Pressable style={styles.qtyMinus} onPress={() => setQty(i.id, -1)}>
@@ -270,9 +297,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  thumbImg: { width: '100%', height: '100%' },
   name: { color: '#fff', fontWeight: '700' },
-  price: { color: '#A1A1AA', marginTop: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  price: { color: '#A1A1AA' },
+  strike: { color: '#71717A', textDecorationLine: 'line-through', fontSize: 11 },
+  sale: { color: '#FB923C', fontWeight: '800', fontSize: 10 },
   qty: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyMinus: {
     width: 28,
