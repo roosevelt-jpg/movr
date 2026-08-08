@@ -89,13 +89,26 @@ export default function SafetyCenterScreen({ onBack }: { onBack?: () => void }) 
   };
 
   const shareTrip = async () => {
-    const res = await fetch(`${API}/safety/share-trip`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: '{}',
-    }).catch(() => null);
-    const json = res ? await res.json().catch(() => null) : null;
-    const url = json?.data?.shareUrl || 'https://movr.io/trip/share';
+    let url = 'https://movr.io/trip/share';
+    try {
+      let res = await fetch(`${API}/trust/share-trip`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: '{}',
+      });
+      let json = await res.json().catch(() => null);
+      if (!res.ok || !json?.data) {
+        res = await fetch(`${API}/safety/share-trip`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: '{}',
+        });
+        json = await res.json().catch(() => null);
+      }
+      url = json?.data?.publicUrl || json?.data?.shareUrl || url;
+    } catch {
+      /* use fallback */
+    }
     await Share.share({ message: `Track my Movr trip: ${url}`, url });
   };
 

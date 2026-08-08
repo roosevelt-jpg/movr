@@ -13,7 +13,8 @@ const MENU = `MOVR
 2. Track my order
 3. Check wallet balance
 4. My saved places
-5. Help
+5. Cash agents
+6. Help / dispute
 
 Reply with a number`;
 
@@ -70,7 +71,7 @@ export default function UssdMenuScreen({
         }),
       });
       const json = await res.json();
-      const text = json?.message || json?.data?.text || 'Invalid. Reply 1-5';
+      const text = json?.message || json?.data?.text || 'Invalid. Reply 1-6';
       setScreen(text);
     } catch {
       setScreen('Network error. Try again.');

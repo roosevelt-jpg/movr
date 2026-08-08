@@ -25,6 +25,7 @@ export default function MerchantPayoutsPage() {
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [bankForm, setBankForm] = useState({ bankName: '', accountNumber: '', accountName: '' });
+  const [kycMsg, setKycMsg] = useState('');
 
   const load = () => {
     Promise.all([
@@ -74,7 +75,30 @@ export default function MerchantPayoutsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    const amt = Number(summary.available || 0);
+    if (!amt) {
+      setKycMsg('');
+      return;
+    }
+    axios
+      .get(`${API}/trust/kyc-gate`, {
+        headers: headers(),
+        params: { amount: amt, role: 'merchant' },
+      })
+      .then((r) => {
+        const d = r.data?.data;
+        if (d && d.allowed === false) setKycMsg(d.message || 'KYC required for this payout');
+        else setKycMsg('');
+      })
+      .catch(() => setKycMsg(''));
+  }, [summary.available]);
+
   const requestPayout = async () => {
+    if (kycMsg) {
+      toast.error(kycMsg);
+      return;
+    }
     setBusy(true);
     try {
       await axios.post(
@@ -209,9 +233,10 @@ export default function MerchantPayoutsPage() {
 
         <div className="sticky bottom-0 mt-8 border-t border-zinc-900 bg-black/95 p-4">
           <div className="mx-auto max-w-lg">
+            {kycMsg ? <p className="mb-2 text-center text-sm text-amber-400">{kycMsg}</p> : null}
             <button
               type="button"
-              disabled={busy || summary.available <= 0}
+              disabled={busy || summary.available <= 0 || Boolean(kycMsg)}
               onClick={requestPayout}
               className="w-full rounded-full bg-gradient-to-r from-blue-500 to-violet-600 py-3.5 font-bold disabled:opacity-40"
             >

@@ -4,6 +4,7 @@ import DriverHomeScreen from './DriverHomeScreen';
 import IncomingRideRequestScreen from './IncomingRideRequestScreen';
 import ActiveRideScreen from './ActiveRideScreen';
 import DriverEarningsScreen from './DriverEarningsScreen';
+import SettlementHubScreen from './SettlementHubScreen';
 
 /**
  * Driver dashboard host — Home map (mockup), incoming offer overlay, active nav, earnings.
@@ -15,7 +16,7 @@ export default function DashboardScreen(props: {
   onPerformance?: () => void;
   onSubscription?: () => void;
 }) {
-  const [mode, setMode] = useState<'home' | 'offer' | 'nav' | 'earnings'>('home');
+  const [mode, setMode] = useState<'home' | 'offer' | 'nav' | 'earnings' | 'settlement'>('home');
   const [offerId, setOfferId] = useState<string | undefined>();
   const [rideId, setRideId] = useState<string | undefined>();
 
@@ -41,11 +42,20 @@ export default function DashboardScreen(props: {
     );
   }
 
+  if (mode === 'settlement') {
+    return (
+      <View style={styles.root}>
+        <SettlementHubScreen onBack={() => setMode('earnings')} />
+      </View>
+    );
+  }
+
   if (mode === 'earnings') {
     return (
       <View style={styles.root}>
         <DriverEarningsScreen
           onWithdraw={props.onWithdraw}
+          onSettlement={() => setMode('settlement')}
           onDemand={props.onDemand}
           onVehicle={props.onVehicle}
           onPerformance={props.onPerformance}

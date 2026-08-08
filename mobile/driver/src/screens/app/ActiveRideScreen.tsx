@@ -26,6 +26,7 @@ export default function ActiveRideScreen({
   const [proxy, setProxy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [sosMsg, setSosMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,6 +55,21 @@ export default function ActiveRideScreen({
       })
       .catch(() => undefined);
   }, [rideId]);
+
+  const triggerSos = async () => {
+    if (!rideId) return;
+    try {
+      const res = await fetch(`${API}/sos/trigger`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ rideId, triggeredBy: 'driver' }),
+      });
+      const j = await res.json();
+      setSosMsg(res.ok ? 'SOS active — ops notified' : j.message || 'SOS failed');
+    } catch (e: any) {
+      setSosMsg(e.message || 'SOS failed');
+    }
+  };
 
   const arrived = async () => {
     setBusy(true);
@@ -142,7 +158,12 @@ export default function ActiveRideScreen({
         >
           <Text>💬</Text>
         </Pressable>
+        <Pressable style={[styles.comm, styles.sos]} onPress={triggerSos}>
+          <Text style={styles.sosText}>SOS</Text>
+        </Pressable>
       </View>
+
+      {sosMsg ? <Text style={[styles.msg, { color: '#f87171' }]}>{sosMsg}</Text> : null}
 
       <View style={styles.route}>
         <View style={styles.routeRow}>
@@ -250,6 +271,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sos: { backgroundColor: '#7f1d1d' },
+  sosText: { color: '#fecaca', fontWeight: '800', fontSize: 11 },
   route: {
     backgroundColor: '#0A0A0A',
     borderRadius: 14,

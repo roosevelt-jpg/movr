@@ -29,7 +29,10 @@ export default function WithdrawEarningsScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(true);
   const [msg, setMsg] = useState('');
+  const [kycMsg, setKycMsg] = useState('');
   const [keepNote, setKeepNote] = useState('');
+
+  const n = Number(amount) || 0;
 
   const load = () => {
     fetch(`${API}/driver/earnings/balance`, { headers: authHeaders() })
@@ -57,6 +60,21 @@ export default function WithdrawEarningsScreen() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!n) {
+      setKycMsg('');
+      return;
+    }
+    fetch(`${API}/trust/kyc-gate?amount=${n}&role=driver`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data;
+        if (d && d.allowed === false) setKycMsg(d.message || 'KYC required for this payout');
+        else setKycMsg('');
+      })
+      .catch(() => setKycMsg(''));
+  }, [n]);
+
   const saveMethod = async () => {
     setLoading(true);
     setMsg('');
@@ -73,6 +91,16 @@ export default function WithdrawEarningsScreen() {
         setMethod(json.data);
         setEditingMethod(false);
         setMsg(`Saved · ${json.data?.eta || 'Usually arrives in minutes'}`);
+        await fetch(`${API}/trust/rails`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            railType: provider.toLowerCase().includes('bank') ? 'bank' : 'momo',
+            provider,
+            accountNumber: account,
+            isDefault: true,
+          }),
+        }).catch(() => undefined);
       }
     } catch (e: any) {
       setMsg(e.message || 'Network error');
@@ -82,9 +110,12 @@ export default function WithdrawEarningsScreen() {
   };
 
   const withdraw = async () => {
-    const n = Number(amount);
     if (!n || n > available || !method) {
       setMsg(!method ? 'Add a MoMo number first' : 'Amount exceeds available balance');
+      return;
+    }
+    if (kycMsg) {
+      setMsg(kycMsg);
       return;
     }
     setLoading(true);
@@ -178,9 +209,14 @@ export default function WithdrawEarningsScreen() {
         </View>
       )}
 
+      {kycMsg ? <Text style={[styles.msg, { color: '#fbbf24' }]}>{kycMsg}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable style={styles.cta} onPress={withdraw} disabled={loading || !method}>
+      <Pressable
+        style={[styles.cta, (loading || Boolean(kycMsg) || !method) && { opacity: 0.55 }]}
+        onPress={withdraw}
+        disabled={loading || Boolean(kycMsg) || !method}
+      >
         <View style={styles.ctaLeft} />
         <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>{loading ? 'Processing…' : 'Withdraw now'}</Text>

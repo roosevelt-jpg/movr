@@ -750,7 +750,13 @@ export class MarketplaceService {
       items: items.rows,
       item_count: Number(row.item_count || items.rows.reduce((n: number, i: any) => n + Number(i.quantity || 1), 0)),
       eta_minutes: etaMinutes,
-      eta_text: etaMinutes > 0 ? `Courier is ${etaMinutes} min away` : 'Arriving',
+      eta_text:
+        etaMinutes <= 0
+          ? 'Arriving'
+          : status.includes('prepar')
+            ? `Preparing · ready in ~${etaMinutes} min`
+            : `Courier is ${etaMinutes} min away`,
+      prep_buffer_applied: status.includes('prepar'),
       order_ref: publicRef,
       public_ref: publicRef,
       status_label:

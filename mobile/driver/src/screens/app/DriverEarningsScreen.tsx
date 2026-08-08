@@ -27,10 +27,14 @@ function fmtAt(iso: string) {
 /** Driver Earnings — online, period tabs, activity, Go Offline (mockup). */
 export default function DriverEarningsScreen({
   onWithdraw,
+  onSettlement,
   onPerformance,
   onSubscription,
 }: {
+  onSend?: () => void;
+  onTopUp?: () => void;
   onWithdraw?: () => void;
+  onSettlement?: () => void;
   onDemand?: () => void;
   onVehicle?: () => void;
   onPerformance?: () => void;
@@ -38,6 +42,7 @@ export default function DriverEarningsScreen({
 }) {
   const [range, setRange] = useState<(typeof RANGES)[number]>('today');
   const [online, setOnline] = useState(false);
+  const [promise, setPromise] = useState<any>(null);
   const [data, setData] = useState<any>({
     amount: 0,
     trips: 0,
@@ -72,6 +77,13 @@ export default function DriverEarningsScreen({
   useEffect(() => {
     load();
   }, [range]);
+
+  useEffect(() => {
+    fetch(`${API}/trust/promise`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+  }, []);
 
   const setPresence = async (next: boolean) => {
     setOnline(next);
@@ -153,6 +165,14 @@ export default function DriverEarningsScreen({
           <Pressable onPress={onWithdraw} style={{ marginTop: 16 }}>
             <Text style={styles.withdraw}>Withdraw earnings →</Text>
           </Pressable>
+        ) : null}
+        {onSettlement ? (
+          <Pressable onPress={onSettlement} style={{ marginTop: 10 }}>
+            <Text style={styles.withdraw}>Settlement rails (MoMo · agents) →</Text>
+          </Pressable>
+        ) : null}
+        {promise?.keep100Note ? (
+          <Text style={{ color: '#a1a1aa', fontSize: 12, marginTop: 12 }}>{promise.keep100Note}</Text>
         ) : null}
 
         {(onPerformance || onSubscription) && (
