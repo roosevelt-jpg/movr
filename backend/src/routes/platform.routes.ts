@@ -531,6 +531,9 @@ driverRouter.post(
         return res.status(400).json({ status: 'error', message: 'Invalid amount' });
       }
 
+      const { TrustSettlementService } = require('../services/trust-settlement.service');
+      await new TrustSettlementService(db).assertKycForPayout(driverId, amount, 'driver');
+
       const wallet = await db.query(`SELECT balance_fiat FROM wallets WHERE user_id = $1`, [
         driverId,
       ]);
@@ -574,7 +577,11 @@ driverRouter.post(
         data: payout.rows[0],
       });
     } catch (error: any) {
-      res.status(500).json({ status: 'error', message: error.message });
+      const msg = String(error.message || '');
+      res.status(msg.toLowerCase().includes('kyc') ? 400 : 500).json({
+        status: 'error',
+        message: error.message,
+      });
     }
   }
 );

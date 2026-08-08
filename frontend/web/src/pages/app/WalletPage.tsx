@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUp, ArrowDown, ArrowLeftRight, Link2, CreditCard } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeftRight, Link2, CreditCard, Landmark } from 'lucide-react';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
 import { formatCurrency } from '../../lib/currency';
 
@@ -57,6 +57,7 @@ const WalletPage: React.FC = () => {
 
   const actions = [
     { label: 'Top Up', icon: ArrowUp, to: '/wallet/topup' },
+    { label: 'Settle', icon: Landmark, to: '/wallet/settlement' },
     { label: 'Cards', icon: CreditCard, to: '/wallet/payment-methods' },
     { label: 'Withdraw', icon: ArrowDown, to: '/wallet/withdraw' },
     { label: 'Transfer', icon: ArrowLeftRight, to: '/token' },

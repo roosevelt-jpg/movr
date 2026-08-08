@@ -23,6 +23,7 @@ const ActiveRidePage: React.FC = () => {
   const [chatBody, setChatBody] = useState('');
   const [messages, setMessages] = useState<string[]>([]);
   const [sosMsg, setSosMsg] = useState('');
+  const [shareMsg, setShareMsg] = useState('');
   const [noticeAcked, setNoticeAcked] = useState(false);
   const [noticeBusy, setNoticeBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -73,10 +74,57 @@ const ActiveRidePage: React.FC = () => {
     }
   };
 
+  const shareTrip = async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`${API}/trust/share-trip`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ rideId: id }),
+      });
+      const j = await res.json();
+      const url =
+        j?.data?.publicUrl ||
+        (j?.data?.shareUrl
+          ? `${window.location.origin}${j.data.shareUrl}`
+          : null);
+      if (!res.ok || !url) throw new Error(j.message || 'Share failed');
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+      setShareMsg(url);
+      toast.success('Share link copied');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not share trip');
+    }
+  };
+
+  const reportNoShow = async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`${API}/rides/${id}/cancel`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ reason: 'driver_no_show' }),
+      });
+      const j = await res.json();
+      if (j?.reliability?.amount) {
+        toast.success(`No-show credit: ${j.reliability.amount}`);
+      } else {
+        toast.success('Ride cancelled');
+      }
+      navigate('/dashboard');
+    } catch {
+      toast.error('Could not cancel');
+    }
+  };
+
   const cancelRide = async () => {
     if (!id) return;
     try {
-      await fetch(`${API}/rides/${id}/cancel`, { method: 'PUT', headers: headers() });
+      await fetch(`${API}/rides/${id}/cancel`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ reason: 'rider_cancel' }),
+      });
       toast.success('Ride cancelled');
       navigate('/dashboard');
     } catch {
@@ -184,7 +232,7 @@ const ActiveRidePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <a
             href={`tel:${proxy || driver?.phone || ''}`}
             className="rounded-xl bg-zinc-900 py-3 flex flex-col items-center gap-1"
@@ -205,6 +253,14 @@ const ActiveRidePage: React.FC = () => {
           </button>
           <button
             type="button"
+            onClick={shareTrip}
+            className="rounded-xl bg-zinc-900 py-3 flex flex-col items-center gap-1"
+          >
+            <span className="text-sm">🔗</span>
+            <span className="text-xs font-semibold">Share</span>
+          </button>
+          <button
+            type="button"
             onClick={triggerSos}
             className="rounded-xl bg-red-900/80 py-3 flex flex-col items-center gap-1"
           >
@@ -214,6 +270,9 @@ const ActiveRidePage: React.FC = () => {
         </div>
 
         {sosMsg ? <p className="text-red-400 text-sm text-center font-semibold">{sosMsg}</p> : null}
+        {shareMsg ? (
+          <p className="text-emerald-400 text-xs text-center break-all">Shared: {shareMsg}</p>
+        ) : null}
 
         <div className="flex justify-between text-sm">
           <span className="text-zinc-400">Paying with</span>
@@ -251,6 +310,13 @@ const ActiveRidePage: React.FC = () => {
           className="w-full rounded-2xl bg-zinc-900 py-3.5 font-bold"
         >
           Cancel Ride
+        </button>
+        <button
+          type="button"
+          onClick={reportNoShow}
+          className="w-full rounded-2xl border border-amber-700/60 text-amber-300 py-3 font-semibold text-sm"
+        >
+          Driver no-show — get credit
         </button>
       </div>
     </div>

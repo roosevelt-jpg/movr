@@ -641,7 +641,8 @@ export class MarketplaceService {
               s.name AS store_name,
               s.category AS store_category,
               COALESCE(s.eta_min_minutes, 20) AS eta_min_minutes,
-              COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes
+              COALESCE(s.eta_max_minutes, 30) AS eta_max_minutes,
+              COALESCE(s.prep_time_minutes, 15) AS prep_time_minutes
        FROM marketplace_orders o
        LEFT JOIN stores s ON s.id = o.store_id
        WHERE o.id = $1 AND o.user_id = $2`,
@@ -682,7 +683,19 @@ export class MarketplaceService {
     }
     if (status.includes('deliver') || status.includes('complet')) etaMinutes = 0;
     else if (status.includes('out')) etaMinutes = Math.min(etaMinutes || 8, 12);
-    else if (status.includes('prepar') || status.includes('accept')) etaMinutes = Math.max(etaMinutes, 18);
+    else if (status.includes('prepar')) {
+      const buffer = await this.db
+        .query(`SELECT value FROM platform_settings WHERE key = 'trust_merchant_prep_buffer_min' LIMIT 1`)
+        .catch(() => ({ rows: [] as any[] }));
+      const buf = Number(
+        typeof buffer.rows[0]?.value === 'object'
+          ? buffer.rows[0]?.value?.value ?? buffer.rows[0]?.value
+          : buffer.rows[0]?.value ?? 5
+      );
+      etaMinutes = Math.max(etaMinutes, Number(row.prep_time_minutes || 15) + buf);
+    } else if (status.includes('accept')) {
+      etaMinutes = Math.max(etaMinutes, 18);
+    }
 
     const publicRef =
       row.public_ref ||

@@ -493,7 +493,8 @@ const USSD_MENU = `MOVR
 2. Track my order
 3. Check wallet balance
 4. My saved places
-5. Help
+5. Cash agents
+6. Help / dispute
 
 Reply with a number`;
 
@@ -606,10 +607,34 @@ async function handleUssdSession(opts: {
       };
     }
     if (choice === '5') {
+      const agents = await db
+        .query(
+          `SELECT name, city, phone FROM cash_agents WHERE is_active = TRUE ORDER BY city, name LIMIT 4`
+        )
+        .catch(() => ({ rows: [] as any[] }));
       await save('menu', {});
-      return { type: 'END', text: 'Help: Call 0800-MOVR or open in-app Help' };
+      if (!agents.rows.length) {
+        return {
+          type: 'END',
+          text: 'Cash agents: Open app Wallet → Settle, or dial *920*MOVR# later.',
+        };
+      }
+      const lines = agents.rows.map(
+        (a: any, i: number) => `${i + 1}. ${a.name} (${a.city}) ${a.phone || ''}`
+      );
+      return {
+        type: 'END',
+        text: `Cash agents (deposit/withdraw):\n${lines.join('\n')}\n\nShow code in app Wallet → Settle`,
+      };
     }
-    return { type: 'CON', text: `Invalid. Reply 1-5\n\n${USSD_MENU}` };
+    if (choice === '6') {
+      await save('menu', {});
+      return {
+        type: 'END',
+        text: 'Help: Call 0800-MOVR. Disputes: open app Wallet → Settle → Dispute. No-show credits auto-apply.',
+      };
+    }
+    return { type: 'CON', text: `Invalid. Reply 1-6\n\n${USSD_MENU}` };
   }
 
   if (state === 'book_wait') {

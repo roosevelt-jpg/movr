@@ -26,6 +26,7 @@ import MarketplacePage from './pages/app/MarketplacePage';
 import StorePage from './pages/app/StorePage';
 import CartPage from './pages/app/CartPage';
 import WalletPage from './pages/app/WalletPage';
+import SettlementHubPage from './pages/app/SettlementHubPage';
 import OrderConfirmedPage from './pages/app/OrderConfirmedPage';
 import OrderTrackingPage from './pages/app/OrderTrackingPage';
 import TokenPage from './pages/app/TokenPage';
@@ -195,6 +196,7 @@ const App: React.FC = () => {
                 <Route path="/orders/:id/confirmed" element={<OrderConfirmedPage />} />
                 <Route path="/orders/:id" element={<OrderTrackingPage />} />
                 <Route path="/wallet" element={<WalletPage />} />
+                <Route path="/wallet/settlement" element={<SettlementHubPage />} />
                 <Route path="/wallet/topup" element={<WalletTopUpPage />} />
                 <Route path="/wallet/withdraw" element={<WithdrawPage />} />
                 <Route path="/wallet/payment-methods" element={<PaymentMethodsPage />} />

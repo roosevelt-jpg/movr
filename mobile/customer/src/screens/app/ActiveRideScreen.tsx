@@ -39,6 +39,7 @@ export default function ActiveRideScreen({
   const [proxy, setProxy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [sosMsg, setSosMsg] = useState('');
+  const [shareMsg, setShareMsg] = useState('');
   const [noticeAcked, setNoticeAcked] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -98,6 +99,47 @@ export default function ActiveRideScreen({
     }
   };
 
+  const shareTrip = async () => {
+    if (!rideId) return;
+    try {
+      const res = await fetch(`${API}/trust/share-trip`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ rideId }),
+      });
+      const j = await res.json();
+      const url = j?.data?.publicUrl || j?.data?.shareUrl;
+      if (!res.ok || !url) throw new Error(j.message || 'Share failed');
+      setShareMsg(url);
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: 'My Movr trip', url }).catch(() => undefined);
+      }
+    } catch (e: any) {
+      setShareMsg(e.message || 'Share failed');
+    }
+  };
+
+  const reportNoShow = async () => {
+    if (!rideId) return;
+    setCancelling(true);
+    try {
+      const res = await fetch(`${API}/rides/${rideId}/cancel`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ reason: 'driver_no_show' }),
+      });
+      const j = await res.json();
+      if (j?.reliability?.amount) {
+        setSosMsg(`No-show credit applied: ${j.reliability.amount}`);
+      }
+      onCancelled?.();
+    } catch {
+      /* ignore */
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const cancelRide = async () => {
     if (!rideId) return;
     setCancelling(true);
@@ -105,6 +147,7 @@ export default function ActiveRideScreen({
       await fetch(`${API}/rides/${rideId}/cancel`, {
         method: 'PUT',
         headers: authHeaders(),
+        body: JSON.stringify({ reason: 'rider_cancel' }),
       });
       onCancelled?.();
     } catch {
@@ -195,6 +238,10 @@ export default function ActiveRideScreen({
           <Text style={styles.actionIcon}>💬</Text>
           <Text style={styles.actionLabel}>Message</Text>
         </Pressable>
+        <Pressable style={styles.action} onPress={shareTrip}>
+          <Text style={styles.actionIcon}>🔗</Text>
+          <Text style={styles.actionLabel}>Share</Text>
+        </Pressable>
         <Pressable style={[styles.action, styles.sos]} onPress={triggerSos}>
           <Text style={styles.sosIcon}>SOS</Text>
           <Text style={styles.sosLabel}>SOS</Text>
@@ -202,6 +249,7 @@ export default function ActiveRideScreen({
       </View>
 
       {sosMsg ? <Text style={styles.sosMsg}>{sosMsg}</Text> : null}
+      {shareMsg ? <Text style={styles.sosMsg}>{shareMsg}</Text> : null}
 
       <View style={styles.payRow}>
         <Text style={styles.payLabel}>Paying with</Text>
@@ -215,6 +263,9 @@ export default function ActiveRideScreen({
 
       <Pressable style={styles.cancel} onPress={cancelRide} disabled={cancelling}>
         <Text style={styles.cancelText}>{cancelling ? 'Cancelling…' : 'Cancel Ride'}</Text>
+      </Pressable>
+      <Pressable style={styles.noShow} onPress={reportNoShow} disabled={cancelling}>
+        <Text style={styles.noShowText}>Driver no-show — get credit</Text>
       </Pressable>
 
       {onComplete ? (
@@ -356,6 +407,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
   },
   cancelText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  noShow: {
+    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#b45309',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  noShowText: { color: '#fbbf24', fontWeight: '600', fontSize: 14 },
   doneLink: { marginTop: 12, alignItems: 'center' },
   doneText: { color: '#A855F7', fontWeight: '600' },
   loadState: { color: '#A1A1AA', textAlign: 'center', marginVertical: spacing[4] },

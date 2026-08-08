@@ -96,8 +96,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.put('/:id/cancel', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    const reason = String(req.body?.reason || req.query?.reason || '').toLowerCase();
     const db = req.app.locals.db;
     const realtime = req.app.locals.realtime;
+    const userId = (req as any).user?.id;
 
     const result = await db.updateRideStatus(id, 'cancelled');
 
@@ -112,6 +114,21 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
       /* non-blocking */
     }
 
+    let reliability: any = null;
+    const noShow =
+      reason.includes('no_show') ||
+      reason.includes('no-show') ||
+      reason === 'driver_no_show';
+    if (noShow && userId) {
+      try {
+        const { TrustSettlementService } = require('../services/trust-settlement.service');
+        const trust = new TrustSettlementService(db);
+        reliability = await trust.compensateNoShow(userId, id, 'Driver no-show on cancel');
+      } catch {
+        /* non-blocking */
+      }
+    }
+
     realtime.broadcastToRide(id, 'ride:cancelled', {
       rideId: id,
       timestamp: Date.now()
@@ -120,7 +137,8 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     res.status(200).json({
       status: 'success',
       message: 'Ride cancelled successfully',
-      data: result.rows[0]
+      data: result.rows[0],
+      reliability
     });
   } catch (error) {
     res.status(500).json({

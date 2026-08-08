@@ -27,7 +27,11 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
   const [methodId, setMethodId] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [kycMsg, setKycMsg] = useState('');
   const [loadingOptions, setLoadingOptions] = useState(true);
+
+  const n = Number(String(amount).replace(/,/g, '')) || 0;
+  const selected = methods.find((m) => m.id === methodId) || methods[0];
 
   useEffect(() => {
     fetch(`${API}/wallet/withdraw/options`, { headers: authHeaders() })
@@ -50,8 +54,20 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
       .finally(() => setLoadingOptions(false));
   }, []);
 
-  const n = Number(String(amount).replace(/,/g, '')) || 0;
-  const selected = methods.find((m) => m.id === methodId) || methods[0];
+  useEffect(() => {
+    if (!n) {
+      setKycMsg('');
+      return;
+    }
+    fetch(`${API}/trust/kyc-gate?amount=${n}&role=driver`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data;
+        if (d && d.allowed === false) setKycMsg(d.message || 'KYC required');
+        else setKycMsg('');
+      })
+      .catch(() => setKycMsg(''));
+  }, [n]);
 
   const setChip = (v: number | 'all') => {
     if (v === 'all') setAmount(String(Math.floor(available)));
@@ -174,9 +190,14 @@ export default function WithdrawScreen({ onBack }: { onBack?: () => void }) {
         );
       })}
 
+      {kycMsg ? <Text style={[styles.msg, { color: '#fbbf24' }]}>{kycMsg}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable style={styles.cta} onPress={withdraw} disabled={busy || !selected}>
+      <Pressable
+        style={[styles.cta, (busy || Boolean(kycMsg)) && { opacity: 0.5 }]}
+        onPress={withdraw}
+        disabled={busy || Boolean(kycMsg) || !selected}
+      >
         <Text style={styles.ctaText}>
           {busy ? 'Processing…' : `Withdraw ${formatCurrency(n || 0, currency)}`}
         </Text>

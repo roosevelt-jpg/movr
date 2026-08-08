@@ -1851,6 +1851,9 @@ merchantRouter.post(
     try {
       const merchant = await getMerchantForUser(req.user!.id);
       const { amount, bankAccount, currency } = req.body;
+      const { TrustSettlementService } = require('../services/trust-settlement.service');
+      const trust = new TrustSettlementService(db);
+      await trust.assertKycForPayout(req.user!.id, Number(amount), 'merchant');
       // TODO: wire to provider transfer once merchant settlement accounts are fully provisioned
       const reference = `MERCHANT-PAYOUT-${Date.now()}`;
       let transfer: any = { success: false, reference, note: 'TODO provider transfer' };
@@ -1896,6 +1899,18 @@ merchantRouter.post(
            WHERE merchant_id = $2`,
           [Number(amount), merchant.id]
         )
+        .catch(() => undefined);
+
+      await trust
+        .createReceipt(req.user!.id, {
+          kind: 'merchant_payout',
+          amount: Number(amount),
+          currency: currency || 'NGN',
+          channel: 'bank',
+          counterparty: bankAccount?.bankName || 'Merchant bank',
+          status: transfer.success ? 'processing' : 'pending',
+          metadata: { payoutId: payout.rows[0]?.id, reference },
+        })
         .catch(() => undefined);
 
       res.status(201).json({ status: 'success', data: { payout: payout.rows[0], transfer } });

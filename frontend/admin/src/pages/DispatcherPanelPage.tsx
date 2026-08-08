@@ -6,7 +6,7 @@ import { adminBtn } from '../styles/adminButtons';
 const API = process.env.REACT_APP_API_URL || '/api/v1';
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-type SubTab = 'live' | 'queue' | 'drivers' | 'incidents' | 'shift';
+type SubTab = 'live' | 'queue' | 'drivers' | 'incidents' | 'trust' | 'shift';
 type QueueFilter = 'queue' | 'active' | 'completed';
 
 type QueueRide = {
@@ -40,6 +40,24 @@ type Incident = {
   created_at?: string;
 };
 
+type TrustSos = {
+  id: string;
+  status?: string;
+  triggered_by?: string;
+  ride_id?: string;
+  created_at?: string;
+  customer_name?: string;
+};
+
+type TrustDispute = {
+  id: string;
+  domain?: string;
+  reason?: string;
+  status?: string;
+  customer_name?: string;
+  refund_amount?: number;
+};
+
 type ShiftReport = {
   id: string;
   zone?: string;
@@ -56,6 +74,7 @@ const SUB_TABS: { key: SubTab; label: string }[] = [
   { key: 'queue', label: 'Queue Management' },
   { key: 'drivers', label: 'Driver Status' },
   { key: 'incidents', label: 'Incident Log' },
+  { key: 'trust', label: 'SOS & Disputes' },
   { key: 'shift', label: 'Shift Report' },
 ];
 
@@ -98,7 +117,22 @@ export default function DispatcherPanelPage() {
   const [completedList, setCompletedList] = useState<QueueRide[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [trustSos, setTrustSos] = useState<TrustSos[]>([]);
+  const [trustDisputes, setTrustDisputes] = useState<TrustDispute[]>([]);
   const [shiftReports, setShiftReports] = useState<ShiftReport[]>([]);
+
+  const loadTrust = async () => {
+    try {
+      const [sosRes, dRes] = await Promise.all([
+        axios.get(`${API}/admin/trust/sos`, { headers: headers() }),
+        axios.get(`${API}/admin/trust/disputes`, { headers: headers() }),
+      ]);
+      setTrustSos(sosRes.data?.data || []);
+      setTrustDisputes(dRes.data?.data || []);
+    } catch {
+      /* board may still work without trust tables */
+    }
+  };
 
   const load = async () => {
     try {
@@ -128,6 +162,7 @@ export default function DispatcherPanelPage() {
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Failed to load dispatch board');
     }
+    await loadTrust();
   };
 
   useEffect(() => {
@@ -221,6 +256,34 @@ export default function DispatcherPanelPage() {
       await load();
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Clear resolved failed');
+    }
+  };
+
+  const resolveSos = async (id: string) => {
+    try {
+      await axios.patch(
+        `${API}/admin/trust/sos/${id}/resolve`,
+        { note: 'Resolved from dispatcher' },
+        { headers: headers() }
+      );
+      setMessage('SOS resolved');
+      await loadTrust();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e.message || 'Resolve SOS failed');
+    }
+  };
+
+  const patchDispute = async (id: string, status: string) => {
+    try {
+      await axios.patch(
+        `${API}/admin/trust/disputes/${id}`,
+        { status },
+        { headers: headers() }
+      );
+      setMessage(`Dispute marked ${status}`);
+      await loadTrust();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e.message || 'Dispute update failed');
     }
   };
 
@@ -565,6 +628,105 @@ export default function DispatcherPanelPage() {
               )}
             </tbody>
           </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'trust' && (
+        <div style={styles.panel}>
+          <h2 style={styles.panelTitle}>Active SOS</h2>
+          <div className="admin-table-scroll" style={{ marginBottom: 24 }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Customer</th>
+                  <th style={styles.th}>Triggered</th>
+                  <th style={styles.th}>Ride</th>
+                  <th style={styles.th}>When</th>
+                  <th style={styles.th}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trustSos.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={styles.tdMuted}>
+                      No active SOS
+                    </td>
+                  </tr>
+                ) : (
+                  trustSos.map((s) => (
+                    <tr key={s.id}>
+                      <td style={styles.td}>{s.customer_name || '—'}</td>
+                      <td style={styles.td}>{s.triggered_by || '—'}</td>
+                      <td style={styles.td}>{s.ride_id ? String(s.ride_id).slice(0, 8) : '—'}</td>
+                      <td style={styles.td}>
+                        {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                      </td>
+                      <td style={styles.td}>
+                        <button type="button" className="admin-btn" onClick={() => resolveSos(s.id)}>
+                          Resolve
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <h2 style={styles.panelTitle}>Unified disputes</h2>
+          <div className="admin-table-scroll">
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Customer</th>
+                  <th style={styles.th}>Domain</th>
+                  <th style={styles.th}>Reason</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trustDisputes.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={styles.tdMuted}>
+                      No disputes
+                    </td>
+                  </tr>
+                ) : (
+                  trustDisputes.map((d) => (
+                    <tr key={d.id}>
+                      <td style={styles.td}>{d.customer_name || '—'}</td>
+                      <td style={styles.td}>{d.domain || '—'}</td>
+                      <td style={styles.td}>{d.reason || '—'}</td>
+                      <td style={styles.td}>{d.status || 'open'}</td>
+                      <td style={styles.td}>
+                        {d.status === 'open' || d.status === 'investigating' ? (
+                          <>
+                            <button
+                              type="button"
+                              className="admin-btn"
+                              style={{ marginRight: 6 }}
+                              onClick={() => patchDispute(d.id, 'investigating')}
+                            >
+                              Investigate
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-btn"
+                              onClick={() => patchDispute(d.id, 'resolved')}
+                            >
+                              Resolve
+                            </button>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -236,6 +236,9 @@ app.use('/api/v1/public/trip', publicTripShareRouter);
 const { safetyRouter, activityRouter } = require('./routes/safety.routes');
 app.use('/api/v1/safety', safetyRouter);
 app.use('/api/v1/activity', activityRouter);
+const { trustRouter, trustAdminRouter } = require('./routes/trust.routes');
+app.use('/api/v1/trust', trustRouter);
+app.use('/api/v1/admin/trust', trustAdminRouter);
 const { customerExtrasRouter } = require('./routes/customer-extras.routes');
 app.use('/api/v1/me', customerExtrasRouter);
 

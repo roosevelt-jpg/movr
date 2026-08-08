@@ -36,6 +36,7 @@ type Tx = {
 export default function WalletScreen({
   onTopUp,
   onWithdraw,
+  onSettlement,
   onTransfer,
   onClaimDvt,
   onPaymentMethods,
@@ -45,6 +46,7 @@ export default function WalletScreen({
   onTopUp?: () => void;
   onRedeem?: () => void;
   onWithdraw?: () => void;
+  onSettlement?: () => void;
   onTransfer?: () => void;
   onClaimDvt?: () => void;
   onPaymentMethods?: () => void;
@@ -97,6 +99,7 @@ export default function WalletScreen({
 
   const actions = [
     { key: 'topup', label: 'Top Up', icon: '↑', onPress: onTopUp },
+    { key: 'settle', label: 'Settle', icon: '🏦', onPress: onSettlement },
     { key: 'methods', label: 'Cards', icon: '💳', onPress: onPaymentMethods },
     { key: 'withdraw', label: 'Withdraw', icon: '↓', onPress: onWithdraw || onTopUp },
     { key: 'transfer', label: 'Transfer', icon: '↔', onPress: onTransfer },

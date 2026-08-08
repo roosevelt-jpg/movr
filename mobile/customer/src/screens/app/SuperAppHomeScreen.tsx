@@ -31,6 +31,7 @@ import DealsScreen from './DealsScreen';
 import StakingScreen from './StakingScreen';
 import HelpCentreScreen from './HelpCentreScreen';
 import WithdrawScreen from './WithdrawScreen';
+import SettlementHubScreen from './SettlementHubScreen';
 import ProductDetailScreen from './ProductDetailScreen';
 import StoreProfileScreen from './StoreProfileScreen';
 import SupportChatScreen from './SupportChatScreen';
@@ -59,6 +60,7 @@ type Service =
   | 'claim'
   | 'topup'
   | 'withdraw'
+  | 'settlement'
   | 'rewards'
   | 'safety'
   | 'history'
@@ -211,6 +213,7 @@ export default function SuperAppHomeScreen({
         <WalletScreen
           onTopUp={() => setService('topup')}
           onWithdraw={() => setService('withdraw')}
+          onSettlement={() => setService('settlement')}
           onTransfer={onSend}
           onClaimDvt={() => setService('claim')}
           onPaymentMethods={() => setService('payments')}
@@ -360,6 +363,13 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <WithdrawScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'settlement') {
+    return (
+      <View style={styles.root}>
+        <SettlementHubScreen onBack={() => setService('hub')} />
       </View>
     );
   }

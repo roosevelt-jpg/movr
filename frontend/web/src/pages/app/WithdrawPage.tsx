@@ -30,6 +30,7 @@ const WithdrawPage: React.FC = () => {
   const [methodId, setMethodId] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [kycMsg, setKycMsg] = useState('');
 
   useEffect(() => {
     fetch(`${API}/wallet/withdraw/options`, { headers: authHeaders() })
@@ -49,6 +50,22 @@ const WithdrawPage: React.FC = () => {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const amt = Number(amount) || 0;
+    if (!amt) {
+      setKycMsg('');
+      return;
+    }
+    fetch(`${API}/trust/kyc-gate?amount=${amt}&role=driver`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const d = j?.data;
+        if (d && d.allowed === false) setKycMsg(d.message || 'KYC required for this payout');
+        else setKycMsg('');
+      })
+      .catch(() => setKycMsg(''));
+  }, [amount]);
 
   const n = Number(amount) || 0;
   const selected = methods.find((m) => m.id === methodId);
@@ -173,11 +190,12 @@ const WithdrawPage: React.FC = () => {
         ))}
       </div>
 
+      {kycMsg ? <p className="text-center text-amber-400 mb-3 text-sm">{kycMsg}</p> : null}
       {msg ? <p className="text-center text-purple-300 mb-3 text-sm">{msg}</p> : null}
 
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || Boolean(kycMsg)}
         onClick={withdraw}
         className="w-full rounded-2xl py-4 font-extrabold bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60"
       >
