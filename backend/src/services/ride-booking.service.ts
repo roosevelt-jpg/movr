@@ -204,7 +204,11 @@ export class RideBookingService {
           ride.id,
           input.pickupLat,
           input.pickupLng,
-          { rideType }
+          {
+            rideType,
+            dropoffLat: input.dropoffLat,
+            dropoffLng: input.dropoffLng,
+          }
         );
         offeredDriverId = result.driverId;
         assignmentStatus =

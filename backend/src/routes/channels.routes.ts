@@ -102,6 +102,18 @@ rideBookingRouter.post(
         countryCode: req.body.countryCode,
         fareMode: req.body.fareMode || 'now',
       });
+      try {
+        const { africaRailsService } = require('./africa-mobility-rails.routes');
+        await africaRailsService.logChannelEvent({
+          channel: 'app',
+          userId: req.user!.id,
+          rideId: result.rideId || result.id,
+          eventType: 'booked',
+          payload: { fareMode: req.body.fareMode || 'now' },
+        });
+      } catch {
+        /* optional */
+      }
       res.status(201).json({ status: 'success', data: result });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

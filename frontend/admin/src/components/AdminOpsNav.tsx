@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 const OPS_TABS = [
   { label: 'Live map', to: '/live-map' },
   { label: 'Pricing engine', to: '/pricing' },
+  { label: 'Africa rails', to: '/africa-rails' },
   { label: 'Finance', to: '/finance' },
   { label: 'Identity review', to: '/identity' },
   { label: 'Integrations', to: '/integrations' },

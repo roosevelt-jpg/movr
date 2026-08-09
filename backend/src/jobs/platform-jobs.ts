@@ -7,10 +7,12 @@ import { RankingService } from '../services/ranking.service';
 import { TrustSettlementService } from '../services/trust-settlement.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 import { ReviewAutonomyService } from '../services/review-autonomy.service';
+import { RideBookingService } from '../services/ride-booking.service';
+import { AfricaMobilityRailsService } from '../services/africa-mobility-rails.service';
 import getLogger from '../utils/logger';
 
 /**
- * Scheduled jobs (Phase 13/18/28 + autonomous ride loop). Call startPlatformJobs() from composition root.
+ * Scheduled jobs (Phase 13/18/28 + autonomous ride loop + Africa rails).
  */
 export function startPlatformJobs() {
   const db = new DatabaseService();
@@ -25,6 +27,8 @@ export function startPlatformJobs() {
     broadcastToDrivers: () => undefined,
     broadcastToRide: () => undefined,
   } as any);
+  const booking = new RideBookingService(db, matching);
+  const rails = new AfricaMobilityRailsService(db, matching, booking);
   const logger = getLogger('platform-jobs');
 
   const HOUR = 60 * 60 * 1000;
@@ -89,6 +93,16 @@ export function startPlatformJobs() {
       .catch((e) => logger.warn(`auto reviews failed: ${e?.message || e}`));
   }, HOUR);
 
+  // Driver income guarantee settlement (Africa rails)
+  setInterval(() => {
+    rails
+      .settleGuarantees()
+      .then((r) => {
+        if (r.toppedUp || r.fulfilled) logger.info('driver guarantees', r);
+      })
+      .catch((e) => logger.warn(`guarantees failed: ${e?.message || e}`));
+  }, 5 * 60_000);
+
   setTimeout(() => {
     performance.recalculateAllActiveDrivers().catch(() => undefined);
     ranking.refreshAll().catch(() => undefined);
@@ -99,5 +113,6 @@ export function startPlatformJobs() {
     trust.processUnmatchedSlaCredits().catch(() => undefined);
     trust.processAutoCloseEverything().catch(() => undefined);
     reviews.processAutoRatings().catch(() => undefined);
+    rails.settleGuarantees().catch(() => undefined);
   }, 15_000);
 }

@@ -262,6 +262,12 @@ app.use('/api/v1/activity', activityRouter);
 const { trustRouter, trustAdminRouter } = require('./routes/trust.routes');
 app.use('/api/v1/trust', trustRouter);
 app.use('/api/v1/admin/trust', trustAdminRouter);
+const {
+  africaRailsRouter,
+  africaRailsAdminRouter,
+} = require('./routes/africa-mobility-rails.routes');
+app.use('/api/v1/rails', africaRailsRouter);
+app.use('/api/v1/admin/rails', africaRailsAdminRouter);
 const { customerExtrasRouter } = require('./routes/customer-extras.routes');
 app.use('/api/v1/me', customerExtrasRouter);
 

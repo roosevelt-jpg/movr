@@ -34,6 +34,7 @@ import TokensManagementPage from './pages/TokensManagementPage';
 import MarketplaceManagementPage from './pages/MarketplaceManagementPage';
 import DispatcherPanelPage from './pages/DispatcherPanelPage';
 import TrustOpsPage from './pages/TrustOpsPage';
+import AfricaRailsPage from './pages/AfricaRailsPage';
 import AiSupportInboxPage from './pages/AiSupportInboxPage';
 import PromotionsPage from './pages/PromotionsPage';
 import BroadcastCenterPage from './pages/BroadcastCenterPage';
@@ -160,6 +161,14 @@ const App: React.FC = () => {
           element={
             <RequireAdmin>
               <TrustOpsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/africa-rails"
+          element={
+            <RequireAdmin>
+              <AfricaRailsPage />
             </RequireAdmin>
           }
         />

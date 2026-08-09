@@ -265,7 +265,9 @@ export class MatchingEngineService {
     pickupLat: number,
     pickupLng: number,
     rideType: string = 'standard',
-    customerRating: number = 5.0
+    customerRating: number = 5.0,
+    dropoffLat?: number,
+    dropoffLng?: number
   ): Promise<any[]> {
     try {
       const cacheKey = `nearby:drivers:${rideType}:${pickupLat.toFixed(3)}:${pickupLng.toFixed(3)}`;
@@ -370,6 +372,54 @@ export class MatchingEngineService {
           } catch {
             /* quality table may be empty */
           }
+          // Destination / going-home market: prefer drivers heading toward dropoff
+          try {
+            const ids = scored.map((s: any) => s.id).filter(Boolean);
+            if (ids.length && dropoffLat != null && dropoffLng != null) {
+              const prefs = await this.db.query(
+                `SELECT driver_id, dest_lat, dest_lng, radius_km, bonus_accept
+                 FROM driver_destination_prefs
+                 WHERE driver_id = ANY($1::uuid[]) AND active_until > NOW()`,
+                [ids]
+              );
+              const byId = new Map(prefs.rows.map((p: any) => [p.driver_id, p]));
+              for (const s of scored) {
+                const pref = byId.get(s.id);
+                if (!pref) continue;
+                const dKm =
+                  Math.sqrt(
+                    Math.pow(Number(dropoffLat) - Number(pref.dest_lat), 2) +
+                      Math.pow(Number(dropoffLng) - Number(pref.dest_lng), 2)
+                  ) * 111;
+                if (dKm <= Number(pref.radius_km || 3)) {
+                  s.destinationBoost = 1.2;
+                  s.destinationBonus = Number(pref.bonus_accept || 0);
+                  s.matchScore = Number(s.matchScore || 0) + 1.2 + Math.max(0, 1 - dKm / 5);
+                }
+              }
+            }
+          } catch {
+            /* prefs optional */
+          }
+          // Trust score boost for high-reputation drivers
+          try {
+            const ids = scored.map((s: any) => s.id).filter(Boolean);
+            if (ids.length) {
+              const ts = await this.db.query(
+                `SELECT user_id, score FROM mobility_trust_scores WHERE user_id = ANY($1::uuid[])`,
+                [ids]
+              );
+              const byId = new Map(ts.rows.map((r: any) => [r.user_id, Number(r.score || 70)]));
+              for (const s of scored) {
+                const score = byId.get(s.id);
+                if (score != null && score >= 80) {
+                  s.matchScore = Number(s.matchScore || 0) + (score - 70) / 40;
+                }
+              }
+            }
+          } catch {
+            /* trust scores optional */
+          }
           scored.sort((a, b) => b.matchScore - a.matchScore);
           try {
             if (this.redis?.set) await this.redis.set(cacheKey, scored, 8);
@@ -420,10 +470,23 @@ export class MatchingEngineService {
     taskId: string,
     pickupLat: number,
     pickupLng: number,
-    opts?: { hardAssign?: boolean; excludeDriverIds?: string[]; rideType?: string }
+    opts?: {
+      hardAssign?: boolean;
+      excludeDriverIds?: string[];
+      rideType?: string;
+      dropoffLat?: number;
+      dropoffLng?: number;
+    }
   ): Promise<{ driverId: string | null; driversConsidered: number; assignmentStatus?: string }> {
     const rideType = opts?.rideType || 'standard';
-    const drivers = await this.findBestDrivers(pickupLat, pickupLng, rideType);
+    const drivers = await this.findBestDrivers(
+      pickupLat,
+      pickupLng,
+      rideType,
+      5,
+      opts?.dropoffLat,
+      opts?.dropoffLng
+    );
     const exclude = new Set((opts?.excludeDriverIds || []).map(String));
     const pick = drivers.find((d: any) => d?.id && !exclude.has(String(d.id))) || null;
     const driverId = pick?.id || null;
@@ -614,7 +677,7 @@ export class MatchingEngineService {
     );
 
     const expired = await this.db.query(
-      `SELECT id, pickup_lat, pickup_lng, offered_driver_id, assign_attempts, offered_driver_ids, ride_type
+      `SELECT id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, offered_driver_id, assign_attempts, offered_driver_ids, ride_type
        FROM rides
        WHERE offered_driver_id IS NOT NULL
          AND offered_at IS NOT NULL
@@ -669,7 +732,12 @@ export class MatchingEngineService {
         ride.id,
         Number(ride.pickup_lat),
         Number(ride.pickup_lng),
-        { excludeDriverIds: exclude, rideType: ride.ride_type || 'standard' }
+        {
+          excludeDriverIds: exclude,
+          rideType: ride.ride_type || 'standard',
+          dropoffLat: ride.dropoff_lat != null ? Number(ride.dropoff_lat) : undefined,
+          dropoffLng: ride.dropoff_lng != null ? Number(ride.dropoff_lng) : undefined,
+        }
       );
 
       if (result.driverId) {
@@ -879,6 +947,21 @@ export class MatchingEngineService {
       }
 
       this.logger.info(`Ride ${rideId} assigned to driver ${driverId}`);
+
+      try {
+        const { RideBookingService } = require('./ride-booking.service');
+        const { AfricaMobilityRailsService } = require('./africa-mobility-rails.service');
+        const booking = new RideBookingService(this.db, this);
+        const rails = new AfricaMobilityRailsService(this.db, this, booking);
+        const ride = await this.db.query(
+          `SELECT driver_earnings, estimated_fare FROM rides WHERE id = $1`,
+          [rideId]
+        );
+        const amt = Number(ride.rows[0]?.driver_earnings || ride.rows[0]?.estimated_fare || 0);
+        if (amt > 0) await rails.recordGuaranteeEarnings(driverId, amt);
+      } catch {
+        /* guarantees optional */
+      }
     } catch (error) {
       this.logger.error('Error assigning ride:', error);
       throw error;
