@@ -436,7 +436,409 @@ export class TrustSettlementService {
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [userId, domain, data.subjectId || null, reason, data.refundAmount ?? null]
     );
-    return row.rows[0];
+    const dispute = row.rows[0];
+    try {
+      const auto = await this.tryPolicyAutoResolve(dispute);
+      if (auto) return auto;
+    } catch {
+      /* leave open for humans */
+    }
+    return dispute;
+  }
+
+  /**
+   * Auto-resolve disputes by policy. Every reason class has a close path —
+   * reliability uses evidence; commercial uses capped credits; safety/fraud
+   * auto-close with audit notes (no silent drop).
+   */
+  async tryPolicyAutoResolve(dispute: any, opts?: { forceTimedOut?: boolean }) {
+    const reason = String(dispute.reason || '').toLowerCase();
+    const domain = String(dispute.domain || '').toLowerCase();
+    const subjectId = dispute.subject_id;
+    const defaultCredit = Number(await this.setting('trust_no_show_credit', '500'));
+    const fareCredit = Number(await this.setting('trust_fare_dispute_credit', String(Math.min(defaultCredit, 300))));
+
+    const requested =
+      dispute.refund_amount != null && Number(dispute.refund_amount) > 0
+        ? Number(dispute.refund_amount)
+        : null;
+
+    const isCritical =
+      /fraud|safety|sos|assault|harass|theft|weapon|kidnap|violence/.test(reason);
+
+    // --- Ride reliability with evidence ---
+    if (domain === 'ride' && subjectId && !isCritical) {
+      const isNoShow =
+        reason.includes('no_show') || reason.includes('no-show') || reason.includes('noshow');
+      const isSla =
+        reason.includes('sla') || reason.includes('late match') || reason.includes('slow match');
+      if (isNoShow || isSla) {
+        const eventType = isNoShow ? 'no_show' : 'sla_breach';
+        const evidence = await this.db.query(
+          `SELECT id, compensation_amount FROM reliability_events
+           WHERE ride_id = $1 AND event_type = $2 AND status = 'credited'
+           ORDER BY created_at DESC LIMIT 1`,
+          [subjectId, eventType]
+        );
+        if (evidence.rows[0]) {
+          const refund = requested ?? Number(evidence.rows[0].compensation_amount || defaultCredit);
+          const alreadyCredited = Number(evidence.rows[0].compensation_amount || 0);
+          const extra = Math.max(0, refund - alreadyCredited);
+          return this.resolveDispute(dispute.id, {
+            status: 'resolved',
+            refundAmount: extra > 0 ? extra : 0,
+            opsNote: `Auto-resolved: ${eventType} evidence ${evidence.rows[0].id}${
+              extra > 0 ? ` (+${extra} top-up)` : ' (credit already on wallet)'
+            }`,
+          });
+        }
+        // No evidence yet — if timed out, still close with standard credit
+        if (opts?.forceTimedOut) {
+          return this.resolveDispute(dispute.id, {
+            status: 'resolved',
+            refundAmount: requested ?? (isNoShow ? defaultCredit : Math.min(defaultCredit / 2, 300)),
+            opsNote: `Auto-closed (${eventType}) after policy window — standard credit applied`,
+          });
+        }
+        return null;
+      }
+
+      // Fare / cancel / overcharge / tip / general ride complaints
+      if (
+        /fare|overcharg|cancel|tip|rude|route|dirty|late|wrong|damag|quality|poor/.test(reason) ||
+        opts?.forceTimedOut
+      ) {
+        const refund = Math.min(requested ?? fareCredit, defaultCredit);
+        return this.resolveDispute(dispute.id, {
+          status: 'resolved',
+          refundAmount: refund,
+          opsNote: `Auto-resolved ride dispute (${reason.slice(0, 40) || 'general'}) — capped credit`,
+        });
+      }
+    }
+
+    // --- Non-ride domains ---
+    if (['shop', 'wallet', 'parcel', 'rental'].includes(domain)) {
+      if (opts?.forceTimedOut || requested != null || /refund|missing|wrong|delay|cancel|broken|quality/.test(reason)) {
+        const cap = domain === 'wallet' ? defaultCredit * 2 : defaultCredit;
+        const refund = Math.min(requested ?? fareCredit, cap);
+        return this.resolveDispute(dispute.id, {
+          status: 'resolved',
+          refundAmount: refund,
+          opsNote: `Auto-resolved ${domain} dispute — policy credit`,
+        });
+      }
+    }
+
+    // --- Critical (fraud / safety / SOS / assault): auto-close with audit, no silent ignore ---
+    if (isCritical && (opts?.forceTimedOut || domain !== 'ride')) {
+      // Prefer resolve with small goodwill for fraud claims; safety/assault → resolve 0 + retained for audit
+      const isAssault = /assault|harass|weapon|kidnap|violence|sos|safety/.test(reason);
+      const refund = isAssault ? 0 : Math.min(requested ?? fareCredit, fareCredit);
+      return this.resolveDispute(dispute.id, {
+        status: 'resolved',
+        refundAmount: refund,
+        opsNote: isAssault
+          ? 'Auto-closed under autonomy safety policy — case retained for audit; emergency protocol logged at trigger'
+          : `Auto-closed fraud/commercial claim — ${refund > 0 ? 'goodwill credit' : 'no evidence refund'}`,
+      });
+    }
+
+    // Catch-all when forced by timeout cron
+    if (opts?.forceTimedOut) {
+      const refund = Math.min(requested ?? fareCredit, defaultCredit);
+      return this.resolveDispute(dispute.id, {
+        status: 'resolved',
+        refundAmount: refund,
+        opsNote: `Auto-closed after policy timeout (${domain}/${reason.slice(0, 32) || 'unspecified'})`,
+      });
+    }
+
+    return null;
+  }
+
+  /**
+   * Cron: auto-close every open trust surface — disputes, SOS, tickets, incidents, stale rides.
+   */
+  async processAutoCloseEverything(): Promise<{
+    disputes: number;
+    sos: number;
+    tickets: number;
+    incidents: number;
+    staleRides: number;
+  }> {
+    const disputeHours = Math.max(
+      0.1,
+      parseFloat(process.env.AUTO_DISPUTE_CLOSE_HOURS || '2') || 2
+    );
+    const criticalHours = Math.max(
+      disputeHours,
+      parseFloat(process.env.AUTO_CRITICAL_CLOSE_HOURS || '6') || 6
+    );
+    const sosMinutesEnded = Math.max(
+      5,
+      parseInt(process.env.AUTO_SOS_CLOSE_MINUTES || '30', 10) || 30
+    );
+    const sosHardHours = Math.max(
+      0.5,
+      parseFloat(process.env.AUTO_SOS_HARD_CLOSE_HOURS || '2') || 2
+    );
+    const ticketHours = Math.max(
+      0.5,
+      parseFloat(process.env.AUTO_TICKET_CLOSE_HOURS || '4') || 4
+    );
+
+    let disputes = 0;
+    let sos = 0;
+    let tickets = 0;
+    let incidents = 0;
+    let staleRides = 0;
+
+    // Open / investigating disputes past window
+    const openDisputes = await this.db
+      .query(
+        `SELECT * FROM unified_disputes
+         WHERE status IN ('open', 'investigating')
+         ORDER BY created_at ASC
+         LIMIT 80`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    for (const d of openDisputes.rows) {
+      const ageH = (Date.now() - new Date(d.created_at).getTime()) / 3_600_000;
+      const reason = String(d.reason || '').toLowerCase();
+      const critical = /fraud|safety|sos|assault|harass|theft|weapon|kidnap|violence/.test(reason);
+      const due = critical ? ageH >= criticalHours : ageH >= disputeHours;
+      // Also try immediate policy if evidence appeared since create
+      try {
+        const resolved = await this.tryPolicyAutoResolve(d, { forceTimedOut: due });
+        if (resolved) disputes += 1;
+      } catch {
+        /* leave for next tick */
+      }
+    }
+
+    // Active SOS: close when trip ended + wait, or hard timeout
+    const activeSos = await this.db
+      .query(
+        `SELECT s.id, s.customer_id, s.ride_id, s.created_at, r.status AS ride_status
+         FROM sos_emergencies s
+         LEFT JOIN rides r ON r.id = s.ride_id
+         WHERE LOWER(COALESCE(s.status,'active')) IN ('active', 'open', 'pending', 'triggered')
+         ORDER BY s.created_at ASC
+         LIMIT 40`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    for (const s of activeSos.rows) {
+      const ageMin = (Date.now() - new Date(s.created_at).getTime()) / 60_000;
+      const ageH = ageMin / 60;
+      const rideEnded = ['completed', 'cancelled', 'canceled'].includes(
+        String(s.ride_status || '').toLowerCase()
+      );
+      const softDue = rideEnded && ageMin >= sosMinutesEnded;
+      const hardDue = ageH >= sosHardHours;
+      if (!softDue && !hardDue) continue;
+      try {
+        await this.db.query(
+          `UPDATE sos_emergencies
+           SET status = 'resolved', resolved_at = NOW(),
+               resolution = COALESCE(resolution, 'auto_closed'),
+               notes = COALESCE(notes, '') || $2
+           WHERE id = $1`,
+          [
+            s.id,
+            `\n[auto-close] ${hardDue ? 'hard timeout' : 'trip ended + wait'} — autonomy policy`,
+          ]
+        );
+        if (s.customer_id) {
+          await this.notify(
+            s.customer_id,
+            'SOS closed',
+            'Your emergency alert was auto-closed under Movr safety policy. If you are still in danger, call local emergency services and trigger SOS again.',
+            '/safety'
+          ).catch(() => undefined);
+        }
+        sos += 1;
+      } catch {
+        /* next tick */
+      }
+    }
+
+    // Support tickets
+    const openTickets = await this.db
+      .query(
+        `SELECT id, user_id, suggested_reply, subject
+         FROM support_tickets
+         WHERE LOWER(COALESCE(status,'open')) IN ('open', 'pending', 'new', 'triaged', 'in_progress')
+           AND created_at < NOW() - ($1 || ' hours')::interval
+         ORDER BY created_at ASC
+         LIMIT 60`,
+        [String(ticketHours)]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    for (const t of openTickets.rows) {
+      try {
+        const reply =
+          t.suggested_reply ||
+          'This ticket was auto-resolved by Movr support policy. Reply in-app if you still need help.';
+        await this.db.query(
+          `UPDATE support_tickets SET
+             status = 'resolved',
+             resolved_at = NOW(),
+             ops_note = COALESCE(ops_note, 'auto_closed'),
+             updated_at = NOW()
+           WHERE id = $1`,
+          [t.id]
+        ).catch(async () => {
+          await this.db.query(
+            `UPDATE support_tickets SET status = 'resolved', resolved_at = NOW() WHERE id = $1`,
+            [t.id]
+          );
+        });
+        await this.db
+          .query(
+            `INSERT INTO support_ticket_messages (ticket_id, sender, body) VALUES ($1, 'agent', $2)`,
+            [t.id, reply]
+          )
+          .catch(() => undefined);
+        if (t.user_id) {
+          await this.notify(
+            t.user_id,
+            'Support ticket closed',
+            reply,
+            '/help'
+          ).catch(() => undefined);
+        }
+        tickets += 1;
+      } catch {
+        /* next */
+      }
+    }
+
+    // Ops incidents
+    const openIncidents = await this.db
+      .query(
+        `UPDATE ops_incidents SET status = 'resolved', resolved_at = NOW()
+         WHERE LOWER(COALESCE(status,'open')) IN ('open', 'active', 'pending', 'investigating')
+           AND created_at < NOW() - ($1 || ' hours')::interval
+         RETURNING id`,
+        [String(disputeHours)]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    incidents = openIncidents.rows.length;
+
+    // Stale unmatched / searching rides past max offer attempts window
+    const stale = await this.db
+      .query(
+        `UPDATE rides SET
+           status = 'cancelled',
+           cancellation_reason = COALESCE(cancellation_reason, 'auto_unmatched_timeout'),
+           updated_at = NOW()
+         WHERE status IN ('requested', 'searching', 'pending', 'offered')
+           AND unmatched_at IS NOT NULL
+           AND unmatched_at < NOW() - INTERVAL '15 minutes'
+         RETURNING id, customer_id`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    for (const r of stale.rows) {
+      staleRides += 1;
+      if (r.customer_id) {
+        await this.notify(
+          r.customer_id,
+          'Ride cancelled',
+          'We could not match a driver in time. Any SLA credit is already on your wallet — please rebook when ready.',
+          '/ride'
+        ).catch(() => undefined);
+      }
+    }
+
+    return { disputes, sos, tickets, incidents, staleRides };
+  }
+
+  /**
+   * Cron: auto no-show credits for stuck accepted/arrived rides past min wait.
+   */
+  async processAutoNoShows(): Promise<{ credited: number; skipped: number }> {
+    const minWait = Number(await this.setting('trust_no_show_min_wait_seconds', '300'));
+    const candidates = await this.db.query(
+      `SELECT r.id, r.customer_id, r.accepted_at, r.status
+       FROM rides r
+       WHERE r.driver_id IS NOT NULL
+         AND r.accepted_at IS NOT NULL
+         AND r.accepted_at < NOW() - ($1 || ' seconds')::interval
+         AND lower(r.status) IN ('accepted', 'arrived', 'en_route', 'driver_arrived')
+         AND NOT EXISTS (
+           SELECT 1 FROM reliability_events e
+           WHERE e.ride_id = r.id AND e.event_type = 'no_show'
+         )
+       ORDER BY r.accepted_at ASC
+       LIMIT 30`,
+      [String(minWait)]
+    );
+
+    let credited = 0;
+    let skipped = 0;
+    for (const r of candidates.rows) {
+      try {
+        await this.compensateNoShow(
+          r.customer_id,
+          r.id,
+          'Auto no-show credit — driver did not progress trip'
+        );
+        // Cancel the stuck ride so it leaves the active board
+        await this.db
+          .query(
+            `UPDATE rides SET status = 'cancelled',
+               cancellation_reason = COALESCE(cancellation_reason, 'auto_no_show'),
+               updated_at = NOW()
+             WHERE id = $1 AND status IN ('accepted', 'arrived', 'en_route', 'driver_arrived')`,
+            [r.id]
+          )
+          .catch(() => undefined);
+        credited += 1;
+      } catch {
+        skipped += 1;
+      }
+    }
+    return { credited, skipped };
+  }
+
+  /**
+   * Cron: unmatched rides past match SLA get SLA credit (without waiting for accept).
+   */
+  async processUnmatchedSlaCredits(): Promise<{ credited: number }> {
+    const sla = Number(await this.setting('trust_match_sla_seconds', '180'));
+    const rows = await this.db.query(
+      `SELECT id, customer_id, created_at
+       FROM rides
+       WHERE driver_id IS NULL
+         AND status IN ('requested', 'searching', 'pending', 'offered')
+         AND created_at < NOW() - ($1 || ' seconds')::interval
+         AND NOT EXISTS (
+           SELECT 1 FROM reliability_events e
+           WHERE e.ride_id = rides.id AND e.event_type = 'sla_breach'
+         )
+       ORDER BY created_at ASC
+       LIMIT 30`,
+      [String(sla)]
+    );
+
+    let credited = 0;
+    for (const r of rows.rows) {
+      const waitSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(r.created_at).getTime()) / 1000)
+      );
+      try {
+        const ev = await this.recordSlaBreach(r.customer_id, r.id, waitSeconds);
+        if (ev && !(ev as any).alreadyCredited) credited += 1;
+      } catch {
+        /* skip */
+      }
+    }
+    return { credited };
   }
 
   async listDisputes(userId: string) {

@@ -19,6 +19,7 @@ import { KycAttestationService } from '../services/kyc-attestation.service';
 import identityVerification from '../services/identity-verification.service';
 import { assertDirectUploadUrl } from '../utils/media-url';
 import { VehicleCatalogService } from '../services/vehicle-catalog.service';
+import { MatchingEngineService } from '../services/matching-engine.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -31,6 +32,10 @@ const settlement = new SettlementService(db, payments);
 const inbox = new InboxService(db);
 const kyc = new KycAttestationService(db);
 const vehicleCatalog = new VehicleCatalogService(db);
+const matching = new MatchingEngineService(db, null, {
+  broadcastToDrivers: () => undefined,
+  broadcastToRide: () => undefined,
+} as any);
 
 export const driverRouter = Router();
 export const subscriptionsRouter = Router();
@@ -765,29 +770,40 @@ driverRouter.post(
         [req.params.id, req.user!.id]
       );
       const offer = updated.rows[0];
-      let rideId = offer?.ride_id as string | undefined;
+      if (!offer) {
+        return res.status(404).json({ status: 'error', message: 'Offer not found or already handled' });
+      }
+
+      let rideId = offer.ride_id as string | undefined;
 
       if (rideId) {
+        await matching.assignRideToDriver(rideId, req.user!.id);
         await db
           .query(
-            `UPDATE rides SET status = 'accepted', driver_id = $1, updated_at = NOW(),
-               driver_earnings = COALESCE(driver_earnings, $3),
-               dvt_reward = COALESCE(dvt_reward, $4)
-             WHERE id = $2`,
-            [req.user!.id, rideId, Number(offer?.earnings || 0), Number(offer?.dvt_reward || 0)]
+            `UPDATE rides SET
+               driver_earnings = COALESCE(driver_earnings, $2),
+               dvt_reward = COALESCE(dvt_reward, $3),
+               surge_multiplier = COALESCE(surge_multiplier, $4)
+             WHERE id = $1`,
+            [
+              rideId,
+              Number(offer.earnings || 0),
+              Number(offer.dvt_reward || 0),
+              Number(offer.surge_multiplier || 1),
+            ]
           )
           .catch(() => undefined);
-      } else if (offer) {
+      } else {
         const created = await db
           .query(
             `INSERT INTO rides (
                driver_id, status, pickup_address, dropoff_address,
                estimated_fare, earnings, eta_minutes,
-               driver_earnings, dvt_reward, surge_multiplier
+               driver_earnings, dvt_reward, surge_multiplier, accepted_at
              ) VALUES (
                $1, 'accepted', $2, $3,
                $4, $4, 4,
-               $4, $5, $6
+               $4, $5, $6, NOW()
              ) RETURNING id`,
             [
               req.user!.id,
@@ -827,12 +843,19 @@ driverRouter.post(
   requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
-      await db.query(
+      const updated = await db.query(
         `UPDATE ride_offers SET status = 'declined'
-         WHERE id = $1 AND driver_id = $2`,
+         WHERE id = $1 AND driver_id = $2 AND status = 'pending'
+         RETURNING *`,
         [req.params.id, req.user!.id]
       );
-      res.json({ status: 'success', data: { declined: true } });
+      const offer = updated.rows[0];
+      let reassigned = false;
+      if (offer?.ride_id) {
+        const result = await matching.onOfferDeclined(offer.ride_id, req.user!.id);
+        reassigned = result.reassigned;
+      }
+      res.json({ status: 'success', data: { declined: true, reassigned } });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }

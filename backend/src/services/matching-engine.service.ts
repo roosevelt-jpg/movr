@@ -300,6 +300,8 @@ export class MatchingEngineService {
           LEFT JOIN vehicle_types vt2 ON vt2.id = dv.vehicle_type_id
           WHERE u.user_type = 'driver'
             AND u.is_active = true
+            AND COALESCE(d.is_online, false) = true
+            AND COALESCE(d.status, 'active') <> 'suspended'
             AND dp.avg_rating >= 4.5
             AND dp.acceptance_rate >= 70
             AND (
@@ -387,6 +389,8 @@ export class MatchingEngineService {
          LEFT JOIN drivers d ON d.user_id = u.id
          LEFT JOIN vehicle_types vt ON vt.id = d.vehicle_type_id
          WHERE u.user_type = 'driver' AND u.is_active = true
+           AND COALESCE(d.is_online, true) = true
+           AND COALESCE(d.status, 'active') <> 'suspended'
            AND (
              COALESCE(vt.code, d.vehicle_type, 'standard') = $1
              OR d.vehicle_type_id IS NULL
@@ -409,17 +413,22 @@ export class MatchingEngineService {
 
   /**
    * Generic nearest-driver assignment for rides or marketplace deliveries (Phase 4).
+   * Rides: opens an offer window (driver must accept) unless hardAssign=true (admin force).
    */
   async assignNearestDriver(
     taskType: 'ride' | 'delivery',
     taskId: string,
     pickupLat: number,
-    pickupLng: number
-  ): Promise<{ driverId: string | null; driversConsidered: number }> {
-    const drivers = await this.findBestDrivers(pickupLat, pickupLng);
-    const driverId = drivers[0]?.id || null;
+    pickupLng: number,
+    opts?: { hardAssign?: boolean; excludeDriverIds?: string[]; rideType?: string }
+  ): Promise<{ driverId: string | null; driversConsidered: number; assignmentStatus?: string }> {
+    const rideType = opts?.rideType || 'standard';
+    const drivers = await this.findBestDrivers(pickupLat, pickupLng, rideType);
+    const exclude = new Set((opts?.excludeDriverIds || []).map(String));
+    const pick = drivers.find((d: any) => d?.id && !exclude.has(String(d.id))) || null;
+    const driverId = pick?.id || null;
 
-      if (driverId && taskType === 'delivery') {
+    if (driverId && taskType === 'delivery') {
       await this.db.query(
         `UPDATE marketplace_orders
          SET courier_id = $1,
@@ -453,17 +462,12 @@ export class MatchingEngineService {
     }
 
     if (driverId && taskType === 'ride') {
-      await this.db.query(
-        `UPDATE rides SET driver_id = $1, status = 'accepted', updated_at = NOW(),
-           accepted_at = COALESCE(accepted_at, NOW()) WHERE id = $2`,
-        [driverId, taskId]
-      );
-      try {
-        const { TrustSettlementService } = require('./trust-settlement.service');
-        await new TrustSettlementService(this.db).onRideAccepted(taskId);
-      } catch {
-        /* SLA credit non-blocking */
+      if (opts?.hardAssign) {
+        await this.assignRideToDriver(taskId, driverId);
+        return { driverId, driversConsidered: drivers.length, assignmentStatus: 'assigned' };
       }
+      await this.offerRideToDriver(taskId, driverId);
+      return { driverId, driversConsidered: drivers.length, assignmentStatus: 'offered' };
     }
 
     this.logger.info('assignNearestDriver', {
@@ -473,7 +477,210 @@ export class MatchingEngineService {
       considered: drivers.length,
     });
 
-    return { driverId, driversConsidered: drivers.length };
+    return {
+      driverId,
+      driversConsidered: drivers.length,
+      assignmentStatus: driverId ? 'offered' : 'no_drivers',
+    };
+  }
+
+  /** Offer a ride to a driver (awaiting accept). Does not set accepted. */
+  async offerRideToDriver(rideId: string, driverId: string): Promise<void> {
+    const offerSeconds = Math.max(
+      15,
+      parseInt(process.env.AUTO_ASSIGN_OFFER_SECONDS || '45', 10) || 45
+    );
+
+    await this.db.query(
+      `UPDATE rides SET
+         offered_driver_id = $1,
+         offered_at = NOW(),
+         assign_attempts = COALESCE(assign_attempts, 0) + 1,
+         offered_driver_ids = CASE
+           WHEN offered_driver_ids IS NULL THEN ARRAY[$1]::uuid[]
+           WHEN $1 = ANY(offered_driver_ids) THEN offered_driver_ids
+           ELSE array_append(offered_driver_ids, $1::uuid)
+         END,
+         status = CASE
+           WHEN status IN ('requested', 'searching', 'pending', 'offered') THEN 'offered'
+           ELSE status
+         END,
+         last_reassign_at = NOW(),
+         updated_at = NOW()
+       WHERE id = $2`,
+      [driverId, rideId]
+    );
+
+    // Bridge to driver-app `ride_offers` table (pending poll / accept / decline).
+    try {
+      await this.db.query(
+        `UPDATE ride_offers SET status = 'expired'
+         WHERE ride_id = $1 AND status = 'pending'`,
+        [rideId]
+      );
+      await this.db.query(
+        `UPDATE ride_offers SET status = 'expired'
+         WHERE driver_id = $1 AND status = 'pending' AND (ride_id IS NULL OR ride_id <> $2)`,
+        [driverId, rideId]
+      );
+
+      const ride = await this.db.query(
+        `SELECT pickup_address, dropoff_address, distance_km, estimated_duration_minutes,
+                estimated_fare, surge_multiplier, dvt_reward
+         FROM rides WHERE id = $1`,
+        [rideId]
+      );
+      const r = ride.rows[0] || {};
+      const fare = Number(r.estimated_fare || 0);
+      const surge = Number(r.surge_multiplier || 1);
+      const earnings = Math.round(fare * 0.85 * 100) / 100;
+      const surgeBonus = Math.round(Math.max(0, fare - fare / Math.max(surge, 1)) * 100) / 100;
+
+      await this.db.query(
+        `INSERT INTO ride_offers (
+           ride_id, driver_id, status, expires_at,
+           pickup_label, dropoff_label, distance_to_pickup_km, trip_distance_km,
+           eta_minutes, earnings, surge_multiplier, surge_bonus, currency_code, dvt_reward
+         ) VALUES (
+           $1, $2, 'pending', NOW() + ($3 || ' seconds')::interval,
+           $4, $5, 0.8, $6, $7, $8, $9, $10, 'NGN', $11
+         )`,
+        [
+          rideId,
+          driverId,
+          String(offerSeconds),
+          r.pickup_address || 'Pickup',
+          r.dropoff_address || 'Dropoff',
+          Number(r.distance_km || 0),
+          Math.max(3, Number(r.estimated_duration_minutes || 15)),
+          earnings || fare,
+          surge,
+          surgeBonus,
+          Number(r.dvt_reward || Math.round(fare * 0.04) || 0),
+        ]
+      );
+    } catch (e: any) {
+      this.logger.warn(`ride_offers bridge failed: ${e?.message || e}`);
+    }
+
+    try {
+      this.realtime.broadcastToDrivers?.('ride:offer', { rideId, driverId });
+      this.realtime.broadcastToRide?.(rideId, 'ride:offered', { rideId, driverId });
+    } catch {
+      /* realtime optional */
+    }
+
+    this.logger.info(`Ride ${rideId} offered to driver ${driverId}`);
+  }
+
+  /** Expire pending driver-app offers for a ride (and optionally one driver). */
+  async expireRideOffers(rideId: string, driverId?: string | null): Promise<void> {
+    try {
+      if (driverId) {
+        await this.db.query(
+          `UPDATE ride_offers SET status = 'expired'
+           WHERE ride_id = $1 AND driver_id = $2 AND status = 'pending'`,
+          [rideId, driverId]
+        );
+      } else {
+        await this.db.query(
+          `UPDATE ride_offers SET status = 'expired'
+           WHERE ride_id = $1 AND status = 'pending'`,
+          [rideId]
+        );
+      }
+    } catch {
+      /* table optional */
+    }
+  }
+
+  /**
+   * Expire stale offers and reassign to next driver (autonomous loop tick).
+   */
+  async processExpiredOffers(): Promise<{ processed: number; unmatched: number; reassigned: number }> {
+    const offerSeconds = Math.max(
+      15,
+      parseInt(process.env.AUTO_ASSIGN_OFFER_SECONDS || '45', 10) || 45
+    );
+    const maxAttempts = Math.max(
+      1,
+      parseInt(process.env.AUTO_ASSIGN_MAX_ATTEMPTS || '5', 10) || 5
+    );
+
+    const expired = await this.db.query(
+      `SELECT id, pickup_lat, pickup_lng, offered_driver_id, assign_attempts, offered_driver_ids, ride_type
+       FROM rides
+       WHERE offered_driver_id IS NOT NULL
+         AND offered_at IS NOT NULL
+         AND offered_at < NOW() - ($1 || ' seconds')::interval
+         AND status IN ('requested', 'searching', 'pending', 'offered')
+       ORDER BY offered_at ASC
+       LIMIT 40`,
+      [String(offerSeconds)]
+    );
+
+    let reassigned = 0;
+    let unmatched = 0;
+
+    for (const ride of expired.rows) {
+      const prevDriver = ride.offered_driver_id;
+      try {
+        await this.cancelRideAssignment(ride.id, prevDriver, 'offer_timeout');
+      } catch {
+        /* continue */
+      }
+      await this.expireRideOffers(ride.id, prevDriver);
+
+      const attempts = Number(ride.assign_attempts || 0);
+      if (attempts >= maxAttempts) {
+        await this.db.query(
+          `UPDATE rides SET unmatched_at = COALESCE(unmatched_at, NOW()),
+             offered_driver_id = NULL, offered_at = NULL,
+             status = 'requested', updated_at = NOW()
+           WHERE id = $1`,
+          [ride.id]
+        );
+        await this.expireRideOffers(ride.id);
+        try {
+          this.realtime.broadcastToDrivers?.('ride:unmatched', { rideId: ride.id });
+          this.realtime.broadcastToRide?.(ride.id, 'ride:unmatched', { rideId: ride.id });
+        } catch {
+          /* optional */
+        }
+        unmatched += 1;
+        continue;
+      }
+
+      const exclude = [
+        ...(Array.isArray(ride.offered_driver_ids) ? ride.offered_driver_ids : []),
+        prevDriver,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      const result = await this.assignNearestDriver(
+        'ride',
+        ride.id,
+        Number(ride.pickup_lat),
+        Number(ride.pickup_lng),
+        { excludeDriverIds: exclude, rideType: ride.ride_type || 'standard' }
+      );
+
+      if (result.driverId) {
+        reassigned += 1;
+      } else {
+        await this.db.query(
+          `UPDATE rides SET unmatched_at = COALESCE(unmatched_at, NOW()),
+             offered_driver_id = NULL, offered_at = NULL,
+             status = 'requested', updated_at = NOW()
+           WHERE id = $1`,
+          [ride.id]
+        );
+        unmatched += 1;
+      }
+    }
+
+    return { processed: expired.rows.length, unmatched, reassigned };
   }
 
   /**
@@ -487,7 +694,8 @@ export class MatchingEngineService {
     countryCode: string = 'GH',
     pickupLat?: number,
     pickupLng?: number,
-    precomputedBreakdown?: any
+    precomputedBreakdown?: any,
+    opts?: { destLat?: number; destLng?: number; rideId?: string }
   ) {
     const cacheKey = `fare:${countryCode}:${rideType}`;
     let pricing: any = null;
@@ -563,7 +771,13 @@ export class MatchingEngineService {
       const pricingEngine = new PricingEngineService(this.db, this.redis);
       const lat = pickupLat ?? 5.6037;
       const lng = pickupLng ?? -0.187;
-      breakdown = await pricingEngine.calculateMultiplier({ lat, lng });
+      breakdown = await pricingEngine.calculateMultiplier({
+        lat,
+        lng,
+        destLat: opts?.destLat,
+        destLng: opts?.destLng,
+        rideId: opts?.rideId,
+      });
     }
     const fare = Math.round(floored * breakdown.finalMultiplier * 100) / 100;
     return { fare, breakdown, baseBeforeSurge: floored };
@@ -575,7 +789,8 @@ export class MatchingEngineService {
     rideType: string = 'standard',
     countryCode: string = 'GH',
     pickupLat?: number,
-    pickupLng?: number
+    pickupLng?: number,
+    opts?: { destLat?: number; destLng?: number; rideId?: string }
   ): Promise<number> {
     const result = await this.calculateFareWithBreakdown(
       distanceKm,
@@ -583,7 +798,9 @@ export class MatchingEngineService {
       rideType,
       countryCode,
       pickupLat,
-      pickupLng
+      pickupLng,
+      undefined,
+      opts
     );
     return result.fare;
   }
@@ -594,12 +811,29 @@ export class MatchingEngineService {
   async assignRideToDriver(rideId: string, driverId: string): Promise<void> {
     try {
       const query = `
-        UPDATE rides 
+        UPDATE rides
         SET driver_id = $1, status = 'accepted', updated_at = NOW(),
-            accepted_at = COALESCE(accepted_at, NOW())
+            accepted_at = COALESCE(accepted_at, NOW()),
+            offered_driver_id = NULL,
+            offered_at = NULL
         WHERE id = $2
       `;
       await this.db.query(query, [driverId, rideId]);
+
+      try {
+        await this.db.query(
+          `UPDATE ride_offers SET status = 'accepted'
+           WHERE ride_id = $1 AND driver_id = $2 AND status = 'pending'`,
+          [rideId, driverId]
+        );
+        await this.db.query(
+          `UPDATE ride_offers SET status = 'expired'
+           WHERE ride_id = $1 AND status = 'pending'`,
+          [rideId]
+        );
+      } catch {
+        /* ride_offers optional */
+      }
 
       try {
         const { TrustSettlementService } = require('./trust-settlement.service');
@@ -608,9 +842,12 @@ export class MatchingEngineService {
         /* SLA credit non-blocking */
       }
 
-      // Update counters
-      await this.redis.incrementCounter('active:rides');
-      await this.redis.decrementCounter('available:drivers');
+      try {
+        await this.redis.incrementCounter('active:rides');
+        await this.redis.decrementCounter('available:drivers');
+      } catch {
+        /* redis optional */
+      }
 
       this.logger.info(`Ride ${rideId} assigned to driver ${driverId}`);
     } catch (error) {
@@ -625,20 +862,87 @@ export class MatchingEngineService {
   async cancelRideAssignment(rideId: string, driverId: string, reason: string): Promise<void> {
     try {
       const query = `
-        UPDATE rides 
-        SET driver_id = NULL, status = 'requested'
+        UPDATE rides
+        SET driver_id = NULL,
+            offered_driver_id = NULL,
+            offered_at = NULL,
+            status = 'requested',
+            updated_at = NOW()
         WHERE id = $1
+          AND (driver_id = $2 OR offered_driver_id = $2 OR $2 IS NULL)
       `;
-      await this.db.query(query, [rideId]);
+      await this.db.query(query, [rideId, driverId || null]);
+      await this.expireRideOffers(rideId, driverId);
 
-      // Update counters
-      await this.redis.decrementCounter('active:rides');
-      await this.redis.incrementCounter('available:drivers');
+      try {
+        await this.redis.decrementCounter('active:rides');
+        await this.redis.incrementCounter('available:drivers');
+      } catch {
+        /* redis optional */
+      }
 
       this.logger.info(`Ride ${rideId} assignment cancelled (driver: ${driverId}, reason: ${reason})`);
     } catch (error) {
       this.logger.error('Error cancelling assignment:', error);
       throw error;
     }
+  }
+
+  /**
+   * Driver declined an offer — expire it and immediately re-offer to next driver.
+   */
+  async onOfferDeclined(rideId: string, driverId: string): Promise<{ reassigned: boolean }> {
+    await this.cancelRideAssignment(rideId, driverId, 'driver_decline');
+    const ride = await this.db.query(
+      `SELECT pickup_lat, pickup_lng, ride_type, assign_attempts, offered_driver_ids
+       FROM rides WHERE id = $1`,
+      [rideId]
+    );
+    const r = ride.rows[0];
+    if (!r) return { reassigned: false };
+
+    const maxAttempts = Math.max(
+      1,
+      parseInt(process.env.AUTO_ASSIGN_MAX_ATTEMPTS || '5', 10) || 5
+    );
+    if (Number(r.assign_attempts || 0) >= maxAttempts) {
+      await this.db.query(
+        `UPDATE rides SET unmatched_at = COALESCE(unmatched_at, NOW()), status = 'requested', updated_at = NOW()
+         WHERE id = $1`,
+        [rideId]
+      );
+      return { reassigned: false };
+    }
+
+    const exclude = [
+      ...(Array.isArray(r.offered_driver_ids) ? r.offered_driver_ids : []),
+      driverId,
+    ]
+      .filter(Boolean)
+      .map(String);
+
+    const result = await this.assignNearestDriver(
+      'ride',
+      rideId,
+      Number(r.pickup_lat),
+      Number(r.pickup_lng),
+      { excludeDriverIds: exclude, rideType: r.ride_type || 'standard' }
+    );
+    return { reassigned: Boolean(result.driverId) };
+  }
+
+  /** Whether dispatch auto-assign is enabled (default true). */
+  async isAutoAssignEnabled(): Promise<boolean> {
+    try {
+      const r = await this.db.query(
+        `SELECT auto_assign FROM dispatch_settings WHERE id = 1 LIMIT 1`
+      );
+      if (r.rows[0] && typeof r.rows[0].auto_assign === 'boolean') {
+        return r.rows[0].auto_assign;
+      }
+    } catch {
+      /* table may be missing */
+    }
+    return true;
   }
 }

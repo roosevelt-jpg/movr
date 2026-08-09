@@ -493,8 +493,10 @@ adminMockupRouter.get('/dispatch/board', authenticateToken, requireAdmin, async 
       drivers,
       reports,
       settings,
+      unmatched,
+      offered,
     ] = await Promise.all([
-      num(`SELECT COUNT(*)::int AS c FROM rides WHERE status IN ('requested','searching','pending')`),
+      num(`SELECT COUNT(*)::int AS c FROM rides WHERE status IN ('requested','searching','pending','offered')`),
       num(`SELECT COUNT(*)::int AS c FROM rides WHERE status IN ('accepted','started','arrived','in_progress','ongoing','matched')`),
       num(`SELECT COUNT(*)::int AS c FROM rides WHERE status = 'completed' AND created_at >= CURRENT_DATE`),
       num(`SELECT COUNT(*)::int AS c FROM drivers WHERE COALESCE(is_online,false) = true`),
@@ -515,10 +517,11 @@ adminMockupRouter.get('/dispatch/board', authenticateToken, requireAdmin, async 
         `SELECT r.id, r.status, r.pickup_address, r.dropoff_address, r.created_at,
                 COALESCE(r.estimated_fare, r.actual_fare, 0)::float AS fare,
                 EXTRACT(EPOCH FROM (NOW() - r.created_at))/60 AS wait_min,
-                u.first_name, u.last_name
+                u.first_name, u.last_name,
+                r.offered_driver_id, r.assign_attempts, r.last_reassign_at, r.unmatched_at
          FROM rides r
          LEFT JOIN users u ON u.id = r.customer_id
-         WHERE r.status IN ('requested','searching','pending')
+         WHERE r.status IN ('requested','searching','pending','offered')
          ORDER BY r.created_at ASC
          LIMIT 40`
       ),
@@ -559,6 +562,16 @@ adminMockupRouter.get('/dispatch/board', authenticateToken, requireAdmin, async 
          FROM dispatch_shift_reports ORDER BY created_at DESC LIMIT 10`
       ),
       safeQuery(`SELECT auto_assign, nearest_first, zone FROM dispatch_settings WHERE id = 1`),
+      num(
+        `SELECT COUNT(*)::int AS c FROM rides
+         WHERE unmatched_at IS NOT NULL
+           AND status IN ('requested','searching','pending')
+           AND created_at >= NOW() - INTERVAL '1 day'`
+      ),
+      num(
+        `SELECT COUNT(*)::int AS c FROM rides
+         WHERE status = 'offered' OR offered_driver_id IS NOT NULL`
+      ),
     ]);
 
     // Enrich priority when migration 070 columns exist
@@ -582,6 +595,10 @@ adminMockupRouter.get('/dispatch/board', authenticateToken, requireAdmin, async 
       priority: priorityMap.get(r.id) || (idx % 5 === 0 ? 'high' : idx % 7 === 0 ? 'vip' : 'normal'),
       fare: Number(r.fare || 0),
       distanceKm: Number(r.distance_km || Math.round((4 + (idx % 8) * 1.2) * 10) / 10),
+      assignAttempts: Number(r.assign_attempts || 0),
+      offeredDriverId: r.offered_driver_id || null,
+      lastReassignAt: r.last_reassign_at || null,
+      unmatchedAt: r.unmatched_at || null,
     });
 
     const sosCount = incidents.rows.filter((i: any) => i.kind === 'sos' || i.severity === 'critical').length;
@@ -609,6 +626,13 @@ adminMockupRouter.get('/dispatch/board', authenticateToken, requireAdmin, async 
         settings: {
           autoAssign: Boolean(settingsRow.auto_assign ?? true),
           nearestFirst: Boolean(settingsRow.nearest_first ?? true),
+          mode: Boolean(settingsRow.auto_assign ?? true) ? 'autonomous' : 'manual_override',
+        },
+        autonomy: {
+          unmatchedToday: unmatched,
+          openOffers: offered,
+          offerSeconds: Math.max(15, parseInt(process.env.AUTO_ASSIGN_OFFER_SECONDS || '45', 10) || 45),
+          maxAttempts: Math.max(1, parseInt(process.env.AUTO_ASSIGN_MAX_ATTEMPTS || '5', 10) || 5),
         },
         incidentsSummary: { sos: sosCount, latePickups: lateCount || incidents.rows.length - sosCount },
         incidents: incidents.rows,
@@ -675,7 +699,7 @@ adminMockupRouter.patch('/dispatch/settings', authenticateToken, requireAdmin, a
 adminMockupRouter.post('/dispatch/force-assign-all', authenticateToken, requireAdmin, async (_req: AuthRequest, res: Response) => {
   try {
     const queue = await safeQuery(
-      `SELECT id FROM rides WHERE status IN ('requested','searching','pending')
+      `SELECT id FROM rides WHERE status IN ('requested','searching','pending','offered')
        ORDER BY created_at ASC LIMIT 50`
     );
     const drivers = await safeQuery(

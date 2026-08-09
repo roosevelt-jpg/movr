@@ -69,14 +69,20 @@ export class RideBookingService {
       ) * 111;
     const durationMinutes = Math.ceil(distanceKm * 2);
 
-    const estimatedFare = await this.matching.calculateFare(
-      distanceKm,
-      durationMinutes,
-      rideType,
-      countryCode,
-      input.pickupLat,
-      input.pickupLng
-    );
+    const { fare: estimatedFare, breakdown: pricingBreakdown } =
+      await this.matching.calculateFareWithBreakdown(
+        distanceKm,
+        durationMinutes,
+        rideType,
+        countryCode,
+        input.pickupLat,
+        input.pickupLng,
+        undefined,
+        {
+          destLat: input.dropoffLat,
+          destLng: input.dropoffLng,
+        }
+      );
 
     const city = await this.localization.getCityPricing(
       input.pickupLat,
@@ -88,8 +94,8 @@ export class RideBookingService {
       `INSERT INTO rides (
          customer_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng,
          pickup_address, dropoff_address, ride_type, status, estimated_fare,
-         distance_km, estimated_duration_minutes, source_channel, created_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'requested',$9,$10,$11,$12,NOW())
+         distance_km, estimated_duration_minutes, source_channel, surge_multiplier, created_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'requested',$9,$10,$11,$12,$13,NOW())
        RETURNING *`,
       [
         input.userId,
@@ -104,6 +110,7 @@ export class RideBookingService {
         distanceKm,
         durationMinutes,
         input.sourceChannel || 'app',
+        Number(pricingBreakdown?.finalMultiplier || 1),
       ]
     );
 
@@ -113,6 +120,34 @@ export class RideBookingService {
       input.pickupLng,
       rideType
     );
+
+    let assignmentStatus: 'assigned' | 'offered' | 'searching' | 'no_drivers' = 'searching';
+    let offeredDriverId: string | null = null;
+
+    try {
+      const autoAssign = await this.matching.isAutoAssignEnabled();
+      if (autoAssign && drivers.length) {
+        const result = await this.matching.assignNearestDriver(
+          'ride',
+          ride.id,
+          input.pickupLat,
+          input.pickupLng,
+          { rideType }
+        );
+        offeredDriverId = result.driverId;
+        assignmentStatus =
+          result.assignmentStatus === 'assigned'
+            ? 'assigned'
+            : result.driverId
+              ? 'offered'
+              : 'no_drivers';
+      } else if (!drivers.length) {
+        assignmentStatus = 'no_drivers';
+      }
+    } catch (e: any) {
+      this.logger.warn('auto-assign skipped', { error: e?.message });
+      assignmentStatus = drivers.length ? 'searching' : 'no_drivers';
+    }
 
     // Phase 25 — bump zone demand snapshot (not global-only)
     try {
@@ -136,8 +171,12 @@ export class RideBookingService {
     await this.inbox.sendInboxMessage(
       input.userId,
       'ride_update',
-      'Ride requested',
-      `Looking for a driver. Est. ${this.localization.formatCurrency(estimatedFare, city.currency_code)}.`,
+      assignmentStatus === 'offered' || assignmentStatus === 'assigned'
+        ? 'Driver found'
+        : 'Ride requested',
+      assignmentStatus === 'offered' || assignmentStatus === 'assigned'
+        ? `A driver has been offered your trip. Est. ${this.localization.formatCurrency(estimatedFare, city.currency_code)}.`
+        : `Looking for a driver. Est. ${this.localization.formatCurrency(estimatedFare, city.currency_code)}.`,
       `/ride/active/${ride.id}`
     );
 
@@ -145,6 +184,7 @@ export class RideBookingService {
       rideId: ride.id,
       channel: input.sourceChannel || 'app',
       drivers: drivers.length,
+      assignmentStatus,
     });
 
     return {
@@ -156,6 +196,8 @@ export class RideBookingService {
       timezone: city.timezone,
       driversNotified: drivers.length,
       drivers,
+      assignmentStatus,
+      offeredDriverId,
     };
   }
 

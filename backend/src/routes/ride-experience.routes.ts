@@ -14,12 +14,14 @@ import maskedCommunication from '../services/masked-communication.service';
 import { advanceReferralMilestone } from './referrals.routes';
 import { RewardsEngineService } from '../services/rewards-engine.service';
 import { DriverPerformanceService } from '../services/driver-performance.service';
+import { ReviewAutonomyService } from '../services/review-autonomy.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
 const points = new PointsService(db);
 const rewards = new RewardsEngineService(db);
 const performance = new DriverPerformanceService(db);
+const reviews = new ReviewAutonomyService(db);
 
 export const rideExperienceRouter = Router();
 export const sosRouter = Router();
@@ -59,17 +61,14 @@ rideExperienceRouter.post(
             `/ride/${ride.rows[0].id}`
           );
         }
-        if (ride.rows[0].driver_id) {
-          await inboxSvc.sendInboxMessage(
-            ride.rows[0].driver_id,
-            'ride_update',
-            'Trip completed',
-            `Ride ${ride.rows[0].id} marked complete.`,
-            `/ride/${ride.rows[0].id}`
-          );
-        }
       } catch {
         /* inbox optional */
+      }
+
+      try {
+        await reviews.promptAfterComplete(ride.rows[0].id);
+      } catch {
+        /* review prompt optional */
       }
 
       res.json({ status: 'success', data: ride.rows[0] });
@@ -161,67 +160,53 @@ rideExperienceRouter.post(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { rating, review, comment, tags } = req.body;
+      const { rating, review, comment, tags, asDriver } = req.body;
       const score = Number(rating);
       if (!score || score < 1 || score > 5) {
         return res.status(400).json({ status: 'error', message: 'Rating must be between 1 and 5' });
       }
-      const tagList = Array.isArray(tags) ? tags.map(String) : [];
-      const reviewText = String(review || comment || '');
 
       const ride = await db.query(`SELECT * FROM rides WHERE id = $1`, [req.params.id]);
       if (!ride.rows[0]) {
         return res.status(404).json({ status: 'error', message: 'Ride not found' });
       }
 
-      await db.query(
-        `UPDATE rides
-         SET rating = $1,
-             review = $2,
-             rating_tags = $3,
-             updated_at = NOW()
-         WHERE id = $4`,
-        [score, reviewText || null, tagList, req.params.id]
-      ).catch(async () => {
-        await db.query(
-          `UPDATE rides SET rating = $1, updated_at = NOW() WHERE id = $2`,
-          [score, req.params.id]
-        );
-      });
+      const uid = req.user!.id;
+      const isDriver =
+        Boolean(asDriver) ||
+        ride.rows[0].driver_id === uid ||
+        String(req.user!.user_type || '').toLowerCase() === 'driver';
+      const isCustomer = ride.rows[0].customer_id === uid;
 
-      await db
-        .query(
-          `INSERT INTO ride_ratings (ride_id, customer_id, driver_id, rating, comment, tags)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (ride_id) DO UPDATE
-           SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, tags = EXCLUDED.tags`,
-          [
-            req.params.id,
-            ride.rows[0].customer_id,
-            ride.rows[0].driver_id,
-            score,
-            reviewText || null,
-            tagList,
-          ]
-        )
-        .catch(() => undefined);
-
-      if (ride.rows[0].driver_id) {
-        await db
-          .query(
-            `UPDATE drivers SET rating = (
-               SELECT ROUND(AVG(rating)::numeric, 2) FROM rides
-               WHERE driver_id = $1 AND rating IS NOT NULL
-             ) WHERE user_id = $1`,
-            [ride.rows[0].driver_id]
-          )
-          .catch(() => undefined);
+      if (!isDriver && !isCustomer) {
+        return res.status(403).json({ status: 'error', message: 'Not a party on this ride' });
       }
+
+      const raterRole: 'customer' | 'driver' =
+        isDriver && ride.rows[0].driver_id === uid ? 'driver' : 'customer';
+
+      if (raterRole === 'customer' && ride.rows[0].customer_id !== uid) {
+        return res.status(403).json({ status: 'error', message: 'Only the rider can submit a customer rating' });
+      }
+      if (raterRole === 'driver' && ride.rows[0].driver_id !== uid) {
+        return res.status(403).json({ status: 'error', message: 'Only the assigned driver can rate the rider' });
+      }
+
+      const data = await reviews.submitRating({
+        rideId: req.params.id,
+        raterId: uid,
+        raterRole,
+        rating: score,
+        comment: String(review || comment || ''),
+        tags: Array.isArray(tags) ? tags : [],
+      });
 
       res.json({
         status: 'success',
-        message: 'Ride rated successfully',
-        data: { rideId: req.params.id, rating: score, tags: tagList },
+        message: data.moderated
+          ? 'Rating saved (comment moderated)'
+          : 'Ride rated successfully',
+        data,
       });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message || 'Failed to rate ride' });

@@ -22,6 +22,9 @@ type QueueRide = {
   priority?: string;
   fare?: number;
   distanceKm?: number;
+  assignAttempts?: number;
+  offeredDriverId?: string | null;
+  unmatchedAt?: string | null;
 };
 
 type Driver = {
@@ -123,6 +126,12 @@ export default function DispatcherPanelPage() {
   const [surge, setSurge] = useState(1);
   const [autoAssign, setAutoAssign] = useState(true);
   const [nearestFirst, setNearestFirst] = useState(true);
+  const [autonomy, setAutonomy] = useState({
+    unmatchedToday: 0,
+    openOffers: 0,
+    offerSeconds: 45,
+    maxAttempts: 5,
+  });
   const [incidentsSummary, setIncidentsSummary] = useState({ sos: 0, latePickups: 0 });
   const [queue, setQueue] = useState<QueueRide[]>([]);
   const [activeList, setActiveList] = useState<QueueRide[]>([]);
@@ -163,6 +172,12 @@ export default function DispatcherPanelPage() {
       setSurge(Number(d.surgeMultiplier || 1));
       setAutoAssign(Boolean(d.settings?.autoAssign ?? true));
       setNearestFirst(Boolean(d.settings?.nearestFirst ?? true));
+      setAutonomy({
+        unmatchedToday: Number(d.autonomy?.unmatchedToday || 0),
+        openOffers: Number(d.autonomy?.openOffers || 0),
+        offerSeconds: Number(d.autonomy?.offerSeconds || 45),
+        maxAttempts: Number(d.autonomy?.maxAttempts || 5),
+      });
       setIncidentsSummary(d.incidentsSummary || { sos: 0, latePickups: 0 });
       setQueue(d.queue || []);
       setActiveList(d.activeList || []);
@@ -410,7 +425,13 @@ export default function DispatcherPanelPage() {
               <button type="button" className="admin-btn" style={styles.secondaryBtn} onClick={clearResolved}>
                 Clear Resolved
               </button>
-              <button type="button" className="admin-btn" style={styles.primaryBtn} onClick={forceAssignAll}>
+              <button
+                type="button"
+                className="admin-btn"
+                style={styles.primaryBtn}
+                onClick={forceAssignAll}
+                title="Emergency override — hard-assigns without waiting for offer accept"
+              >
                 Force Assign All
               </button>
             </>
@@ -419,7 +440,13 @@ export default function DispatcherPanelPage() {
               <button type="button" className="admin-btn" style={styles.secondaryBtn} onClick={broadcast} disabled={broadcasting}>
                 {broadcasting ? 'Sending…' : 'Broadcast Alert'}
               </button>
-              <button type="button" className="admin-btn" style={styles.primaryBtn} onClick={() => forceAssign()}>
+              <button
+                type="button"
+                className="admin-btn"
+                style={styles.primaryBtn}
+                onClick={() => forceAssign()}
+                title="Emergency override — hard-assigns without waiting for offer accept"
+              >
                 Force Assign
               </button>
             </>
@@ -497,7 +524,12 @@ export default function DispatcherPanelPage() {
                         {r.distanceKm ? ` · ${r.distanceKm}km` : ''}
                         {r.fare ? ` · ₦${Math.round(r.fare).toLocaleString()}` : ''}
                       </div>
-                      <div style={styles.queueWait}>{waitLabel(r.waitMin)}</div>
+                      <div style={styles.queueWait}>
+                        {waitLabel(r.waitMin)}
+                        {r.status ? ` · ${r.status}` : ''}
+                        {r.assignAttempts ? ` · attempt ${r.assignAttempts}` : ''}
+                        {r.unmatchedAt ? ' · unmatched' : ''}
+                      </div>
                     </div>
                     {queueFilter === 'queue' ? (
                       <button
@@ -563,9 +595,13 @@ export default function DispatcherPanelPage() {
             </div>
 
             <div style={styles.panel}>
-              <h2 style={styles.panelTitle}>Auto-Dispatch</h2>
+              <h2 style={styles.panelTitle}>Autonomous dispatch</h2>
+              <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                When auto-assign is on, Movr offers rides to the best driver and reassigns on timeout —
+                Force Assign is emergency override only.
+              </p>
               <label style={styles.toggleRow}>
-                <span>Auto-assign</span>
+                <span>Auto-assign (live)</span>
                 <input
                   type="checkbox"
                   checked={autoAssign}
@@ -580,6 +616,18 @@ export default function DispatcherPanelPage() {
                   onChange={(e) => patchSettings({ nearestFirst: e.target.checked })}
                 />
               </label>
+              <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)', display: 'grid', gap: 6 }}>
+                <div>
+                  Open offers: <strong style={{ color: 'var(--text-primary)' }}>{autonomy.openOffers}</strong>
+                </div>
+                <div>
+                  Unmatched today:{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>{autonomy.unmatchedToday}</strong>
+                </div>
+                <div>
+                  Offer window {autonomy.offerSeconds}s · max {autonomy.maxAttempts} attempts
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -626,7 +674,12 @@ export default function DispatcherPanelPage() {
                         <div style={styles.queueMeta}>
                           {r.from} → {r.to}
                         </div>
-                        <div style={styles.queueWait}>{waitLabel(r.waitMin)}</div>
+                        <div style={styles.queueWait}>
+                        {waitLabel(r.waitMin)}
+                        {r.status ? ` · ${r.status}` : ''}
+                        {r.assignAttempts ? ` · attempt ${r.assignAttempts}` : ''}
+                        {r.unmatchedAt ? ' · unmatched' : ''}
+                      </div>
                       </button>
                     </div>
                     <button

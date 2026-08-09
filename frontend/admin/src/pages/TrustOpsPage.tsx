@@ -9,7 +9,7 @@ const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_adm
 
 /**
  * Trust Ops — SOS, disputes/refunds, agent confirm codes, reliability credits, receipts.
- * Complements Dispatcher SOS & Disputes tab with a dedicated finance/trust surface.
+ * Autonomy closes most items on policy timers; this UI is override / audit.
  */
 export default function TrustOpsPage() {
   const [promise, setPromise] = useState<any>(null);
@@ -129,7 +129,8 @@ export default function TrustOpsPage() {
           <div>
             <h1 style={styles.h1}>Trust & Settlement</h1>
             <p style={styles.sub}>
-              SOS runbook · disputes/refunds · agent codes · SLA / no-show credits · payout retry
+              Autonomy auto-closes SOS, disputes, tickets, and incidents on policy timers —
+              this panel is override and audit only.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

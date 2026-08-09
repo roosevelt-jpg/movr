@@ -148,7 +148,14 @@ trustRouter.post('/disputes', async (req: AuthRequest, res: Response) => {
       reason: req.body.reason,
       refundAmount: req.body.refundAmount != null ? Number(req.body.refundAmount) : undefined,
     });
-    res.status(201).json({ status: 'success', data: row });
+    res.status(201).json({
+      status: 'success',
+      data: row,
+      message:
+        String(row?.status || '').toLowerCase() === 'resolved'
+          ? 'Dispute auto-resolved by Movr policy'
+          : 'Dispute opened — will auto-close under autonomy policy if still open',
+    });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }
