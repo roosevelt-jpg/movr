@@ -78,11 +78,23 @@ adminPricingRouter.get('/zones/live', authenticateToken, requireAdmin, async (_r
           radiusKm: z.radius_km,
           demandMultiplier: b.demandMultiplier,
           timeMultiplier: b.timeMultiplier,
+          dayMultiplier: b.dayMultiplier,
           weatherMultiplier: b.weatherMultiplier,
+          trafficMultiplier: b.trafficMultiplier,
+          eventMultiplier: b.eventMultiplier,
           combinedMultiplier: b.finalMultiplier,
+          riderMultiplier: b.riderMultiplier ?? b.finalMultiplier,
+          driverMultiplier: b.driverMultiplier ?? b.finalMultiplier,
+          maxSurgeCap: z.max_surge_cap,
+          minRiderMult: z.min_rider_mult,
+          driverIncentiveFlat: z.driver_incentive_flat,
+          driverIncentiveMult: z.driver_incentive_mult,
+          destinationBonusFlat: z.destination_bonus_flat,
           maxCap: Number(z.max_surge_cap || b.cappedAt || 2),
           isActive: z.is_active,
           reasonSummary: b.reasonSummary,
+          riderReason: b.riderReason,
+          driverReason: b.driverReason,
         };
       })
     );
@@ -101,6 +113,13 @@ adminPricingRouter.post('/zones', authenticateToken, requireAdmin, async (req: A
       centerLng: Number(req.body.centerLng),
       radiusKm: req.body.radiusKm != null ? Number(req.body.radiusKm) : undefined,
       maxSurgeCap: req.body.maxSurgeCap != null ? Number(req.body.maxSurgeCap) : undefined,
+      minRiderMult: req.body.minRiderMult != null ? Number(req.body.minRiderMult) : undefined,
+      driverIncentiveFlat:
+        req.body.driverIncentiveFlat != null ? Number(req.body.driverIncentiveFlat) : undefined,
+      driverIncentiveMult:
+        req.body.driverIncentiveMult != null ? Number(req.body.driverIncentiveMult) : undefined,
+      destinationBonusFlat:
+        req.body.destinationBonusFlat != null ? Number(req.body.destinationBonusFlat) : undefined,
     });
     await auditPricing(req.user!.id, 'create_pricing_zone', 'pricing_zone', row.id, {}, row, req.body.reason);
     res.status(201).json({ status: 'success', data: row });
@@ -123,6 +142,15 @@ adminPricingRouter.patch(
         radiusKm: req.body.radiusKm != null ? Number(req.body.radiusKm) : undefined,
         maxSurgeCap: req.body.maxSurgeCap != null ? Number(req.body.maxSurgeCap) : undefined,
         isActive: req.body.isActive,
+        minRiderMult: req.body.minRiderMult != null ? Number(req.body.minRiderMult) : undefined,
+        driverIncentiveFlat:
+          req.body.driverIncentiveFlat != null ? Number(req.body.driverIncentiveFlat) : undefined,
+        driverIncentiveMult:
+          req.body.driverIncentiveMult != null ? Number(req.body.driverIncentiveMult) : undefined,
+        destinationBonusFlat:
+          req.body.destinationBonusFlat != null
+            ? Number(req.body.destinationBonusFlat)
+            : undefined,
       });
       await auditPricing(
         req.user!.id,
@@ -158,6 +186,48 @@ adminPricingRouter.patch(
         before,
         row,
         req.body.reason || 'max surge cap update'
+      );
+      res.json({ status: 'success', data: row });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+adminPricingRouter.get('/fare-modes', authenticateToken, requireAdmin, async (_req, res: Response) => {
+  try {
+    res.json({ status: 'success', data: await pricing.listFareModes() });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+adminPricingRouter.patch(
+  '/zones/:id/incentives',
+  authenticateToken,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const before = (await pricing.listZones()).find((z: any) => z.id === req.params.id);
+      const row = await pricing.updateZone(req.params.id, {
+        minRiderMult: req.body.minRiderMult != null ? Number(req.body.minRiderMult) : undefined,
+        driverIncentiveFlat:
+          req.body.driverIncentiveFlat != null ? Number(req.body.driverIncentiveFlat) : undefined,
+        driverIncentiveMult:
+          req.body.driverIncentiveMult != null ? Number(req.body.driverIncentiveMult) : undefined,
+        destinationBonusFlat:
+          req.body.destinationBonusFlat != null
+            ? Number(req.body.destinationBonusFlat)
+            : undefined,
+      });
+      await auditPricing(
+        req.user!.id,
+        'update_zone_incentives',
+        'pricing_zone',
+        req.params.id,
+        before,
+        row,
+        req.body.reason || 'dual pricing incentives'
       );
       res.json({ status: 'success', data: row });
     } catch (error: any) {

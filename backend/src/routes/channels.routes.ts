@@ -100,6 +100,7 @@ rideBookingRouter.post(
         vehicleTypeCode: req.body.vehicleTypeCode,
         sourceChannel: 'app',
         countryCode: req.body.countryCode,
+        fareMode: req.body.fareMode || 'now',
       });
       res.status(201).json({ status: 'success', data: result });
     } catch (error: any) {

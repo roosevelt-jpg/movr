@@ -10,6 +10,7 @@ export interface PricingInput {
   at?: Date;
   destLat?: number;
   destLng?: number;
+  fareMode?: string;
 }
 
 export interface PricingBreakdown {
@@ -20,10 +21,38 @@ export interface PricingBreakdown {
   weatherMultiplier: number;
   trafficMultiplier: number;
   eventMultiplier: number;
+  /** Context product (may be <1 for off-peak). */
   finalMultiplier: number;
+  /** Rider-facing multiplier after mode + floor/cap. */
+  riderMultiplier: number;
+  /** Driver-facing multiplier (never below context peak floor of 1 for payouts). */
+  driverMultiplier: number;
   cappedAt: number;
+  minRiderMult: number;
   reasonSummary: string | null;
+  riderReason: string | null;
+  driverReason: string | null;
   factors: Array<{ type: string; multiplier: number; label: string }>;
+  fareMode: string;
+  driverIncentiveFlat: number;
+  destinationBonusFlat: number;
+}
+
+export interface DualFareQuote {
+  baseBeforeSurge: number;
+  riderFare: number;
+  driverPayout: number;
+  platformSubsidy: number;
+  surgeBonus: number;
+  dvtReward: number;
+  breakdown: PricingBreakdown;
+  fareMode: {
+    code: string;
+    name: string;
+    description: string | null;
+    etaExtraMinutes: number;
+    walkMeters: number;
+  };
 }
 
 /**
@@ -61,8 +90,13 @@ export class PricingEngineService {
 
   async calculateMultiplier(input: PricingInput): Promise<PricingBreakdown> {
     const at = input.at || new Date();
+    const fareModeCode = String(input.fareMode || 'now').toLowerCase();
     const zone = await this.findZone(input.lat, input.lng);
     const cap = zone ? Number(zone.max_surge_cap) : 2.0;
+    const minRider = zone ? Number(zone.min_rider_mult ?? 0.7) : 0.7;
+    const driverIncentiveFlat = zone ? Number(zone.driver_incentive_flat || 0) : 0;
+    const driverIncentiveMult = zone ? Number(zone.driver_incentive_mult || 1) : 1;
+    const destinationBonusFlat = zone ? Number(zone.destination_bonus_flat || 0) : 0;
 
     const empty: PricingBreakdown = {
       zoneId: zone?.id || null,
@@ -73,12 +107,27 @@ export class PricingEngineService {
       trafficMultiplier: 1,
       eventMultiplier: 1,
       finalMultiplier: 1,
+      riderMultiplier: 1,
+      driverMultiplier: 1,
       cappedAt: cap,
+      minRiderMult: minRider,
       reasonSummary: null,
+      riderReason: null,
+      driverReason: null,
       factors: [],
+      fareMode: fareModeCode,
+      driverIncentiveFlat,
+      destinationBonusFlat,
     };
 
-    if (!zone) return empty;
+    const mode = await this.getFareMode(fareModeCode);
+
+    if (!zone) {
+      empty.riderMultiplier = Math.max(minRider, Math.min(cap, Number(mode.rider_mult) || 1));
+      empty.driverMultiplier = Math.max(1, Number(mode.driver_keep_mult) || 1) * driverIncentiveMult;
+      empty.fareMode = mode.code;
+      return empty;
+    }
 
     const factors = await this.db.query(
       `SELECT * FROM pricing_factors WHERE zone_id = $1 AND is_active = TRUE`,
@@ -102,13 +151,54 @@ export class PricingEngineService {
 
     const raw =
       demand.mult * time.mult * day.mult * weather.mult * traffic.mult * event.mult;
-    const final = Math.min(Math.max(raw, 1), cap);
+    // Context may be <1 (off-peak) or >1 (peak); clamp to [minRider, cap]
+    const context = Math.min(Math.max(raw, minRider), cap);
 
-    const active = [demand, time, day, weather, traffic, event].filter((f) => f.mult > 1);
-    const reasonSummary =
-      final > 1
-        ? `Fares are higher due to ${active.map((a) => a.label).join(', ') || 'local conditions'}`
-        : null;
+    const riderRaw = context * Number(mode.rider_mult || 1);
+    const riderMultiplier = Math.min(Math.max(riderRaw, minRider), cap);
+
+    // Drivers never earn below "fair peak floor": max(context, 1) × incentives × mode keep
+    const driverContext = Math.max(context, 1);
+    const driverMultiplier =
+      Math.round(driverContext * driverIncentiveMult * Number(mode.driver_keep_mult || 1) * 1000) /
+      1000;
+
+    const active = [demand, time, day, weather, traffic, event].filter(
+      (f) => Math.abs(f.mult - 1) > 0.001
+    );
+    const up = active.filter((f) => f.mult > 1);
+    const down = active.filter((f) => f.mult < 1);
+
+    let reasonSummary: string | null = null;
+    if (up.length) {
+      reasonSummary = `Fares are higher due to ${up.map((a) => a.label).join(', ')}`;
+    } else if (down.length) {
+      reasonSummary = `Cheaper fares from ${down.map((a) => a.label).join(', ')}`;
+    }
+
+    let riderReason = reasonSummary;
+    if (mode.code !== 'now' && Number(mode.rider_mult) < 1) {
+      riderReason = [
+        reasonSummary,
+        `${mode.name}: save ~${Math.round((1 - Number(mode.rider_mult)) * 100)}%`,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
+
+    const driverReasonParts: string[] = [];
+    if (driverContext > 1) driverReasonParts.push(`demand ${driverContext.toFixed(2)}x`);
+    if (driverIncentiveMult > 1) driverReasonParts.push(`zone incentive ${driverIncentiveMult}x`);
+    if (driverIncentiveFlat > 0) driverReasonParts.push(`+${driverIncentiveFlat} flat`);
+    if (destinationBonusFlat > 0 && input.destLat != null) {
+      driverReasonParts.push(`+${destinationBonusFlat} destination bonus`);
+    }
+    if (Number(mode.driver_keep_mult) > 1) {
+      driverReasonParts.push(`${mode.name} driver boost`);
+    }
+    const driverReason = driverReasonParts.length
+      ? `Driver earnings boosted: ${driverReasonParts.join(', ')}`
+      : null;
 
     const breakdown: PricingBreakdown = {
       zoneId: zone.id,
@@ -118,32 +208,169 @@ export class PricingEngineService {
       weatherMultiplier: weather.mult,
       trafficMultiplier: traffic.mult,
       eventMultiplier: event.mult,
-      finalMultiplier: Math.round(final * 1000) / 1000,
+      finalMultiplier: Math.round(context * 1000) / 1000,
+      riderMultiplier: Math.round(riderMultiplier * 1000) / 1000,
+      driverMultiplier,
       cappedAt: cap,
+      minRiderMult: minRider,
       reasonSummary,
+      riderReason,
+      driverReason,
       factors: active.map((a) => ({ type: a.type, multiplier: a.mult, label: a.label })),
+      fareMode: mode.code,
+      driverIncentiveFlat,
+      destinationBonusFlat,
     };
 
-    await this.db.query(
-      `INSERT INTO pricing_multiplier_log (
-         ride_id, zone_id, demand_multiplier, time_multiplier, day_multiplier,
-         weather_multiplier, traffic_multiplier, event_multiplier, final_multiplier, reason_summary
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        input.rideId || null,
-        zone.id,
-        breakdown.demandMultiplier,
-        breakdown.timeMultiplier,
-        breakdown.dayMultiplier,
-        breakdown.weatherMultiplier,
-        breakdown.trafficMultiplier,
-        breakdown.eventMultiplier,
-        breakdown.finalMultiplier,
-        breakdown.reasonSummary,
-      ]
-    );
+    await this.db
+      .query(
+        `INSERT INTO pricing_multiplier_log (
+           ride_id, zone_id, demand_multiplier, time_multiplier, day_multiplier,
+           weather_multiplier, traffic_multiplier, event_multiplier, final_multiplier, reason_summary,
+           rider_multiplier, driver_multiplier, fare_mode
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [
+          input.rideId || null,
+          zone.id,
+          breakdown.demandMultiplier,
+          breakdown.timeMultiplier,
+          breakdown.dayMultiplier,
+          breakdown.weatherMultiplier,
+          breakdown.trafficMultiplier,
+          breakdown.eventMultiplier,
+          breakdown.finalMultiplier,
+          breakdown.reasonSummary,
+          breakdown.riderMultiplier,
+          breakdown.driverMultiplier,
+          breakdown.fareMode,
+        ]
+      )
+      .catch(async () => {
+        await this.db.query(
+          `INSERT INTO pricing_multiplier_log (
+             ride_id, zone_id, demand_multiplier, time_multiplier, day_multiplier,
+             weather_multiplier, traffic_multiplier, event_multiplier, final_multiplier, reason_summary
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [
+            input.rideId || null,
+            zone.id,
+            breakdown.demandMultiplier,
+            breakdown.timeMultiplier,
+            breakdown.dayMultiplier,
+            breakdown.weatherMultiplier,
+            breakdown.trafficMultiplier,
+            breakdown.eventMultiplier,
+            breakdown.finalMultiplier,
+            breakdown.reasonSummary,
+          ]
+        );
+      });
 
     return breakdown;
+  }
+
+  async getFareMode(code: string) {
+    const c = String(code || 'now').toLowerCase();
+    try {
+      const row = await this.db.query(
+        `SELECT * FROM fare_modes WHERE code = $1 AND is_active = TRUE LIMIT 1`,
+        [c]
+      );
+      if (row.rows[0]) return row.rows[0];
+    } catch {
+      /* table may be missing until migrate */
+    }
+    return {
+      code: 'now',
+      name: 'Go now',
+      description: 'Standard pickup',
+      rider_mult: 1,
+      driver_keep_mult: 1,
+      eta_extra_minutes: 0,
+      walk_meters: 0,
+    };
+  }
+
+  async listFareModes() {
+    try {
+      return (
+        await this.db.query(
+          `SELECT * FROM fare_modes WHERE is_active = TRUE ORDER BY sort_order, code`
+        )
+      ).rows;
+    } catch {
+      return [
+        {
+          code: 'now',
+          name: 'Go now',
+          rider_mult: 1,
+          driver_keep_mult: 1,
+          eta_extra_minutes: 0,
+          walk_meters: 0,
+        },
+      ];
+    }
+  }
+
+  /**
+   * Dual-sided quote: rider pays riderFare; driver earns driverPayout (may be higher via subsidy).
+   */
+  async quoteDualFare(
+    baseBeforeSurge: number,
+    input: PricingInput
+  ): Promise<DualFareQuote> {
+    const breakdown = await this.calculateMultiplier(input);
+    const mode = await this.getFareMode(input.fareMode || breakdown.fareMode || 'now');
+
+    const riderFare = Math.round(baseBeforeSurge * breakdown.riderMultiplier * 100) / 100;
+    let driverPayout =
+      Math.round(baseBeforeSurge * breakdown.driverMultiplier * 100) / 100 +
+      Number(breakdown.driverIncentiveFlat || 0);
+
+    if (input.destLat != null && input.destLng != null) {
+      driverPayout += Number(breakdown.destinationBonusFlat || 0);
+    }
+
+    // Movr 0% take-rate: if rider pays less than driver payout, platform subsidizes the gap
+    const platformSubsidy = Math.max(0, Math.round((driverPayout - riderFare) * 100) / 100);
+    const surgeBonus = Math.max(
+      0,
+      Math.round((driverPayout - baseBeforeSurge) * 100) / 100
+    );
+    const dvtReward = Math.round(Math.max(driverPayout, riderFare) * 0.04 * 100) / 100;
+
+    // Best-effort enrich log with amounts
+    if (breakdown.zoneId) {
+      await this.db
+        .query(
+          `UPDATE pricing_multiplier_log SET
+             rider_fare = $1, driver_payout = $2, platform_subsidy = $3
+           WHERE id = (
+             SELECT id FROM pricing_multiplier_log
+             WHERE zone_id = $4
+             ORDER BY calculated_at DESC LIMIT 1
+           )`,
+          [riderFare, driverPayout, platformSubsidy, breakdown.zoneId]
+        )
+        .catch(() => undefined);
+    }
+
+    return {
+      baseBeforeSurge,
+      riderFare,
+      driverPayout,
+      platformSubsidy,
+      surgeBonus,
+      dvtReward,
+      breakdown,
+      fareMode: {
+        code: mode.code,
+        name: mode.name,
+        description: mode.description || null,
+        etaExtraMinutes: Number(mode.eta_extra_minutes || 0),
+        walkMeters: Number(mode.walk_meters || 0),
+      },
+    };
   }
 
   private async demandMultiplier(zoneId: string, factor?: any) {
@@ -187,10 +414,14 @@ export class PricingEngineService {
     const hour = at.getHours();
     for (const b of bands) {
       if (hour >= Number(b.start) && hour < Number(b.end)) {
-        return { type: 'time_of_day', mult: Number(b.mult) || 1, label: 'rush hour' };
+        const mult = Number(b.mult) || 1;
+        const label =
+          b.label ||
+          (mult > 1 ? 'rush hour' : mult < 1 ? 'off-peak / shoulder discount' : 'standard hours');
+        return { type: 'time_of_day', mult, label };
       }
     }
-    return { type: 'time_of_day', mult: 1, label: 'off-peak' };
+    return { type: 'time_of_day', mult: 1, label: 'standard hours' };
   }
 
   private dayOfWeekMultiplier(at: Date, factor?: any) {
@@ -201,7 +432,7 @@ export class PricingEngineService {
     return {
       type: 'day_of_week',
       mult,
-      label: mult > 1 ? 'weekend / peak day' : 'weekday',
+      label: mult > 1 ? 'weekend / peak day' : mult < 1 ? 'weekday discount' : 'weekday',
     };
   }
 
@@ -350,11 +581,18 @@ export class PricingEngineService {
     centerLng: number;
     radiusKm?: number;
     maxSurgeCap?: number;
+    minRiderMult?: number;
+    driverIncentiveFlat?: number;
+    driverIncentiveMult?: number;
+    destinationBonusFlat?: number;
   }) {
     return (
       await this.db.query(
-        `INSERT INTO pricing_zones (name, country_code, center_lat, center_lng, radius_km, max_surge_cap)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        `INSERT INTO pricing_zones (
+           name, country_code, center_lat, center_lng, radius_km, max_surge_cap,
+           min_rider_mult, driver_incentive_flat, driver_incentive_mult, destination_bonus_flat
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
         [
           input.name,
           input.countryCode || 'GH',
@@ -362,6 +600,10 @@ export class PricingEngineService {
           input.centerLng,
           input.radiusKm ?? 5,
           input.maxSurgeCap ?? 2,
+          input.minRiderMult ?? 0.7,
+          input.driverIncentiveFlat ?? 50,
+          input.driverIncentiveMult ?? 1.05,
+          input.destinationBonusFlat ?? 30,
         ]
       )
     ).rows[0];
@@ -376,6 +618,10 @@ export class PricingEngineService {
       radiusKm: number;
       maxSurgeCap: number;
       isActive: boolean;
+      minRiderMult: number;
+      driverIncentiveFlat: number;
+      driverIncentiveMult: number;
+      destinationBonusFlat: number;
     }>
   ) {
     return (
@@ -386,8 +632,12 @@ export class PricingEngineService {
            center_lng = COALESCE($3, center_lng),
            radius_km = COALESCE($4, radius_km),
            max_surge_cap = COALESCE($5, max_surge_cap),
-           is_active = COALESCE($6, is_active)
-         WHERE id = $7 RETURNING *`,
+           is_active = COALESCE($6, is_active),
+           min_rider_mult = COALESCE($7, min_rider_mult),
+           driver_incentive_flat = COALESCE($8, driver_incentive_flat),
+           driver_incentive_mult = COALESCE($9, driver_incentive_mult),
+           destination_bonus_flat = COALESCE($10, destination_bonus_flat)
+         WHERE id = $11 RETURNING *`,
         [
           input.name ?? null,
           input.centerLat ?? null,
@@ -395,6 +645,10 @@ export class PricingEngineService {
           input.radiusKm ?? null,
           input.maxSurgeCap ?? null,
           input.isActive ?? null,
+          input.minRiderMult ?? null,
+          input.driverIncentiveFlat ?? null,
+          input.driverIncentiveMult ?? null,
+          input.destinationBonusFlat ?? null,
           id,
         ]
       )

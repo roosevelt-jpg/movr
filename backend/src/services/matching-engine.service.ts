@@ -526,15 +526,21 @@ export class MatchingEngineService {
 
       const ride = await this.db.query(
         `SELECT pickup_address, dropoff_address, distance_km, estimated_duration_minutes,
-                estimated_fare, surge_multiplier, dvt_reward
+                estimated_fare, surge_multiplier, dvt_reward, driver_earnings, platform_subsidy,
+                pricing_meta
          FROM rides WHERE id = $1`,
         [rideId]
       );
       const r = ride.rows[0] || {};
       const fare = Number(r.estimated_fare || 0);
       const surge = Number(r.surge_multiplier || 1);
-      const earnings = Math.round(fare * 0.85 * 100) / 100;
-      const surgeBonus = Math.round(Math.max(0, fare - fare / Math.max(surge, 1)) * 100) / 100;
+      const earnings = Number(r.driver_earnings || fare);
+      const meta = r.pricing_meta || {};
+      const surgeBonus = Number(
+        meta.surgeBonus != null
+          ? meta.surgeBonus
+          : Math.max(0, earnings - fare)
+      );
 
       await this.db.query(
         `INSERT INTO ride_offers (
@@ -553,10 +559,10 @@ export class MatchingEngineService {
           r.dropoff_address || 'Dropoff',
           Number(r.distance_km || 0),
           Math.max(3, Number(r.estimated_duration_minutes || 15)),
-          earnings || fare,
+          earnings,
           surge,
           surgeBonus,
-          Number(r.dvt_reward || Math.round(fare * 0.04) || 0),
+          Number(r.dvt_reward || Math.round(earnings * 0.04) || 0),
         ]
       );
     } catch (e: any) {
@@ -695,7 +701,7 @@ export class MatchingEngineService {
     pickupLat?: number,
     pickupLng?: number,
     precomputedBreakdown?: any,
-    opts?: { destLat?: number; destLng?: number; rideId?: string }
+    opts?: { destLat?: number; destLng?: number; rideId?: string; fareMode?: string }
   ) {
     const cacheKey = `fare:${countryCode}:${rideType}`;
     let pricing: any = null;
@@ -765,22 +771,45 @@ export class MatchingEngineService {
       distanceKm * Number(pricing.per_km_rate) +
       durationMinutes * Number(pricing.per_minute_rate);
     const floored = Math.max(total, Number(pricing.minimum_fare || 0));
-    let breakdown = precomputedBreakdown;
-    if (!breakdown) {
-      const { PricingEngineService } = require('./pricing-engine.service');
-      const pricingEngine = new PricingEngineService(this.db, this.redis);
-      const lat = pickupLat ?? 5.6037;
-      const lng = pickupLng ?? -0.187;
-      breakdown = await pricingEngine.calculateMultiplier({
+    const fareMode = opts?.fareMode || 'now';
+    const { PricingEngineService } = require('./pricing-engine.service');
+    const pricingEngine = new PricingEngineService(this.db, this.redis);
+    const lat = pickupLat ?? 5.6037;
+    const lng = pickupLng ?? -0.187;
+
+    let quote;
+    if (precomputedBreakdown?.riderMultiplier != null && precomputedBreakdown?.driverMultiplier != null) {
+      // Reuse shared context but re-quote with mode if needed
+      quote = await pricingEngine.quoteDualFare(floored, {
         lat,
         lng,
         destLat: opts?.destLat,
         destLng: opts?.destLng,
         rideId: opts?.rideId,
+        fareMode,
+      });
+    } else {
+      quote = await pricingEngine.quoteDualFare(floored, {
+        lat,
+        lng,
+        destLat: opts?.destLat,
+        destLng: opts?.destLng,
+        rideId: opts?.rideId,
+        fareMode,
       });
     }
-    const fare = Math.round(floored * breakdown.finalMultiplier * 100) / 100;
-    return { fare, breakdown, baseBeforeSurge: floored };
+
+    return {
+      fare: quote.riderFare,
+      riderFare: quote.riderFare,
+      driverPayout: quote.driverPayout,
+      platformSubsidy: quote.platformSubsidy,
+      surgeBonus: quote.surgeBonus,
+      dvtReward: quote.dvtReward,
+      breakdown: quote.breakdown,
+      baseBeforeSurge: floored,
+      fareMode: quote.fareMode,
+    };
   }
 
   async calculateFare(
@@ -790,7 +819,7 @@ export class MatchingEngineService {
     countryCode: string = 'GH',
     pickupLat?: number,
     pickupLng?: number,
-    opts?: { destLat?: number; destLng?: number; rideId?: string }
+    opts?: { destLat?: number; destLng?: number; rideId?: string; fareMode?: string }
   ): Promise<number> {
     const result = await this.calculateFareWithBreakdown(
       distanceKm,

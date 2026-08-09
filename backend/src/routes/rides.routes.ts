@@ -41,6 +41,7 @@ router.post('/request', authenticateToken, requireCustomer, async (req, res) => 
       vehicleTypeCode: req.body.vehicleTypeCode,
       sourceChannel: 'app',
       countryCode: req.body.countryCode,
+      fareMode: req.body.fareMode || 'now',
     });
 
     const realtime = req.app.locals.realtime;

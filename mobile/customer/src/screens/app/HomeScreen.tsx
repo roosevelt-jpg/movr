@@ -21,6 +21,18 @@ type VehicleOption = {
   distance?: number;
 };
 
+type FareModeOption = {
+  code: string;
+  name: string;
+  riderFare: number;
+  driverPayout?: number;
+  savingsPercent?: number;
+  etaMinutes?: number;
+  walkMeters?: number;
+  description?: string;
+  isCheapest?: boolean;
+};
+
 /** Prefer affordable African-first tiers; fall back to whatever the API returns. */
 const PREFERRED_ORDER = [
   'okada',
@@ -87,6 +99,8 @@ export default function HomeScreen({
 }) {
   const [loading, setLoading] = useState(true);
   const [options, setOptions] = useState<VehicleOption[]>([]);
+  const [fareModes, setFareModes] = useState<FareModeOption[]>([]);
+  const [fareMode, setFareMode] = useState('now');
   const [selected, setSelected] = useState<string>('economy');
   const [currency, setCurrency] = useState('NGN');
   const [pickup, setPickup] = useState(pickupLabel);
@@ -94,6 +108,7 @@ export default function HomeScreen({
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState('');
   const [promise, setPromise] = useState<any>(null);
+  const [driverReason, setDriverReason] = useState('');
 
   useEffect(() => {
     fetch(`${API}/trust/promise`)
@@ -130,6 +145,25 @@ export default function HomeScreen({
             distance: Number(o.distance ?? o.distanceFare ?? 0) || undefined,
           }));
           setCurrency(estimates.currency || 'NGN');
+          if (estimates.fareModes?.length) {
+            setFareModes(
+              estimates.fareModes.map((m: any) => ({
+                code: m.code,
+                name: m.name,
+                riderFare: Number(m.riderFare || 0),
+                driverPayout: Number(m.driverPayout || 0),
+                savingsPercent: Number(m.savingsPercent || 0),
+                etaMinutes: m.etaMinutes,
+                walkMeters: m.walkMeters,
+                description: m.description,
+                isCheapest: Boolean(m.isCheapest),
+              }))
+            );
+            setFareMode('now');
+          } else {
+            setFareModes([]);
+          }
+          setDriverReason(estimates.driverReason || '');
         } else {
           list = (json.data?.vehicleTypes || []).map((t: any) => ({
             code: t.code,
@@ -199,10 +233,12 @@ export default function HomeScreen({
   }, [region, pickupLat, pickupLng, dropoffLat, dropoffLng]);
 
   const active = options.find((o) => o.code === selected) || options[0];
-  const fare = Number(active?.price || 1200);
+  const activeMode = fareModes.find((m) => m.code === fareMode);
+  const fare = Number(activeMode?.riderFare || active?.price || 1200);
+  const driverPayout = Number(activeMode?.driverPayout || fare);
   const base = Number(active?.base || Math.round(fare * 0.7));
   const distancePart = Number(active?.distance || Math.max(0, fare - base));
-  const dvt = useMemo(() => Math.round(fare * 0.1), [fare]);
+  const dvt = useMemo(() => Math.round(Math.max(fare, driverPayout) * 0.1), [fare, driverPayout]);
 
   const confirm = async () => {
     setConfirming(true);
@@ -210,6 +246,12 @@ export default function HomeScreen({
     try {
       onSelectType?.(selected);
       onConfirm?.({ code: selected, price: fare, dvt });
+      const rideType =
+        selected === 'okada'
+          ? 'motorcycle'
+          : selected === 'economy'
+            ? 'standard'
+            : selected;
       const res = await fetch(`${API}/rides/request`, {
         method: 'POST',
         headers: authHeaders(),
@@ -218,9 +260,12 @@ export default function HomeScreen({
           pickupLng,
           dropoffLat,
           dropoffLng,
-          rideType: selected === 'okada' ? 'motorcycle' : selected === 'economy' ? 'standard' : selected,
           pickupAddress: pickup,
           dropoffAddress: destination,
+          vehicleTypeCode: selected,
+          rideType,
+          fareMode,
+          countryCode: region,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -300,6 +345,37 @@ export default function HomeScreen({
         </ScrollView>
       )}
 
+      {fareModes.length > 0 ? (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={styles.fareLabel}>Save with smart timing</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
+            {fareModes.map((m) => {
+              const on = fareMode === m.code;
+              return (
+                <Pressable
+                  key={m.code}
+                  style={[styles.card, on && styles.cardOn, { minWidth: 110 }]}
+                  onPress={() => setFareMode(m.code)}
+                >
+                  <Text style={styles.cardName}>{m.name}</Text>
+                  <Text style={styles.cardPrice}>{formatCurrency(m.riderFare, currency)}</Text>
+                  {m.savingsPercent ? (
+                    <Text style={{ color: '#4ade80', fontSize: 11, marginTop: 4 }}>
+                      −{m.savingsPercent}%
+                    </Text>
+                  ) : null}
+                  {m.walkMeters ? (
+                    <Text style={{ color: '#94a3b8', fontSize: 10, marginTop: 2 }}>
+                      Walk {m.walkMeters}m
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+
       <View style={styles.breakdown}>
         <Text style={styles.fareLabel}>Fare breakdown</Text>
         <View style={styles.brRow}>
@@ -311,6 +387,10 @@ export default function HomeScreen({
           <Text style={styles.brV}>{formatCurrency(distancePart, currency)}</Text>
         </View>
         <View style={styles.brRow}>
+          <Text style={styles.brK}>You pay</Text>
+          <Text style={styles.brV}>{formatCurrency(fare, currency)}</Text>
+        </View>
+        <View style={styles.brRow}>
           <Text style={styles.brK}>Platform fee</Text>
           <Text style={[styles.brV, { color: '#4ade80' }]}>
             {formatCurrency(0, currency)}
@@ -320,7 +400,15 @@ export default function HomeScreen({
           <Text style={styles.fareLabel}>Estimated total</Text>
           <Text style={styles.fareValue}>{formatCurrency(fare, currency)}</Text>
         </View>
-        <Text style={styles.keep}>Driver keeps {formatCurrency(fare, currency)} (100%)</Text>
+        <Text style={styles.keep}>
+          Driver earns {formatCurrency(driverPayout, currency)}
+          {driverPayout > fare ? ' (includes zone / mode boost)' : ' (0% take-rate)'}
+        </Text>
+        {driverReason ? (
+          <Text style={[styles.dvt, { color: '#94a3b8' }]} numberOfLines={2}>
+            {driverReason}
+          </Text>
+        ) : null}
         <Text style={styles.dvt}>+{dvt} DVT tokens earned</Text>
       </View>
 

@@ -82,7 +82,13 @@ export default function PricingEnginePage() {
         time: Number(z.timeMultiplier || 1),
         weather: Number(z.weatherMultiplier || 1),
         combined: Number(z.combinedMultiplier || 1),
+        rider: Number(z.riderMultiplier || z.combinedMultiplier || 1),
+        driver: Number(z.driverMultiplier || z.combinedMultiplier || 1),
         cap: Number(z.maxCap || 2),
+        incentiveFlat: Number(z.driverIncentiveFlat || 0),
+        incentiveMult: Number(z.driverIncentiveMult || 1),
+        destBonus: Number(z.destinationBonusFlat || 0),
+        minRider: Number(z.minRiderMult || 0.7),
       }));
     }
     return zones.map((z) => ({
@@ -92,7 +98,13 @@ export default function PricingEnginePage() {
       time: 1,
       weather: 1,
       combined: 1,
+      rider: 1,
+      driver: 1,
       cap: Number(z.max_surge_cap || 2),
+      incentiveFlat: Number(z.driver_incentive_flat || 0),
+      incentiveMult: Number(z.driver_incentive_mult || 1),
+      destBonus: Number(z.destination_bonus_flat || 0),
+      minRider: Number(z.min_rider_mult || 0.7),
     }));
   }, [zones, liveZones]);
 
@@ -143,6 +155,30 @@ export default function PricingEnginePage() {
     await load();
   };
 
+  const saveIncentives = async (r: any) => {
+    const flat = prompt('Driver flat incentive', String(r.incentiveFlat ?? 50));
+    if (flat == null) return;
+    const mult = prompt('Driver incentive multiplier', String(r.incentiveMult ?? 1.05));
+    if (mult == null) return;
+    const dest = prompt('Destination bonus', String(r.destBonus ?? 30));
+    if (dest == null) return;
+    const minR = prompt('Min rider multiplier (discount floor)', String(r.minRider ?? 0.7));
+    if (minR == null) return;
+    await axios.patch(
+      `${API}/admin/pricing/zones/${r.id}/incentives`,
+      {
+        driverIncentiveFlat: Number(flat),
+        driverIncentiveMult: Number(mult),
+        destinationBonusFlat: Number(dest),
+        minRiderMult: Number(minR),
+        reason: 'dual pricing incentives',
+      },
+      { headers: headers() }
+    );
+    setMessage('Zone incentives updated');
+    await load();
+  };
+
   const combinedTone = (n: number) =>
     n >= 1.45
       ? { background: 'rgba(63,112,72,0.35)', color: 'var(--success)' }
@@ -167,11 +203,16 @@ export default function PricingEnginePage() {
 
       {breakdown ? (
         <p style={styles.live}>
-          Live {regionLabel}: demand {breakdown.demandMultiplier}x · time {breakdown.timeMultiplier}x · day{' '}
-          {breakdown.dayMultiplier}x · weather {breakdown.weatherMultiplier}x · traffic{' '}
-          {breakdown.trafficMultiplier}x · event {breakdown.eventMultiplier}x →{' '}
-          <strong>{breakdown.finalMultiplier}x</strong>
-          {breakdown.reasonSummary ? ` · ${breakdown.reasonSummary}` : ''}
+          Dual pricing {regionLabel}: rider{' '}
+          <strong>{breakdown.riderMultiplier ?? breakdown.finalMultiplier}x</strong>
+          {' · '}driver{' '}
+          <strong>{breakdown.driverMultiplier ?? breakdown.finalMultiplier}x</strong>
+          {' · '}context {breakdown.finalMultiplier}x (demand {breakdown.demandMultiplier}x · time{' '}
+          {breakdown.timeMultiplier}x · day {breakdown.dayMultiplier}x · weather{' '}
+          {breakdown.weatherMultiplier}x · traffic {breakdown.trafficMultiplier}x · event{' '}
+          {breakdown.eventMultiplier}x)
+          {breakdown.riderReason ? ` · ${breakdown.riderReason}` : ''}
+          {breakdown.driverReason ? ` · ${breakdown.driverReason}` : ''}
           {breakdown.cappedAt ? ` (cap ${breakdown.cappedAt}x)` : ''}
         </p>
       ) : null}
@@ -180,7 +221,7 @@ export default function PricingEnginePage() {
         <table style={styles.table}>
           <thead>
             <tr>
-              {['Zone', 'Demand', 'Time of day', 'Weather', 'Combined', 'Cap'].map((h) => (
+              {['Zone', 'Demand', 'Time', 'Weather', 'Rider', 'Driver', 'Cap', 'Incentives'].map((h) => (
                 <th key={h} style={styles.th}>
                   {h}
                 </th>
@@ -190,7 +231,7 @@ export default function PricingEnginePage() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td style={styles.td} colSpan={6}>
+                <td style={styles.td} colSpan={8}>
                   No pricing zones configured
                 </td>
               </tr>
@@ -202,8 +243,13 @@ export default function PricingEnginePage() {
                   <td style={styles.td}>{fmtMult(r.time)}</td>
                   <td style={styles.td}>{fmtMult(r.weather)}</td>
                   <td style={styles.td}>
-                    <span style={{ ...styles.pill, ...combinedTone(Number(r.combined)) }}>
-                      {fmtMult(r.combined)}
+                    <span style={{ ...styles.pill, ...combinedTone(Number(r.rider)) }}>
+                      {fmtMult(r.rider)}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    <span style={{ ...styles.pill, ...combinedTone(Number(r.driver)) }}>
+                      {fmtMult(r.driver)}
                     </span>
                   </td>
                   <td style={styles.td}>
@@ -216,6 +262,11 @@ export default function PricingEnginePage() {
                       }}
                     >
                       {fmtMult(r.cap)}
+                    </button>
+                  </td>
+                  <td style={styles.td}>
+                    <button type="button" style={styles.btn} onClick={() => saveIncentives(r)}>
+                      +{r.incentiveFlat} · {fmtMult(r.incentiveMult)}
                     </button>
                   </td>
                 </tr>
