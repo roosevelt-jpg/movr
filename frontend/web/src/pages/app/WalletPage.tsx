@@ -36,6 +36,7 @@ const WalletPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [promise, setPromise] = useState<any>(null);
+  const [mobilityCredit, setMobilityCredit] = useState(0);
 
   useEffect(() => {
     fetch(`${API}/wallet/portfolio`, { headers: authHeaders() })
@@ -52,6 +53,10 @@ const WalletPage: React.FC = () => {
       })
       .catch(() => setError('Could not load wallet'))
       .finally(() => setLoading(false));
+    fetch(`${API}/rails/credit`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setMobilityCredit(Number(j?.data?.mobilityCredit || 0)))
+      .catch(() => undefined);
     fetch(`${API}/trust/promise`)
       .then((r) => r.json())
       .then((j) => setPromise(j?.data || null))
@@ -62,12 +67,13 @@ const WalletPage: React.FC = () => {
 
   const actions = [
     { label: 'Top Up', icon: ArrowUp, to: '/wallet/topup' },
+    { label: 'Ride credit', icon: Landmark, to: '/wallet/topup?mobility=1' },
+    { label: 'Family gifts', icon: ArrowLeftRight, to: '/wallet/settlement?gifts=1' },
     { label: 'Settle', icon: Landmark, to: '/wallet/settlement' },
     { label: 'Cards', icon: CreditCard, to: '/wallet/payment-methods' },
     { label: 'Withdraw', icon: ArrowDown, to: '/wallet/withdraw' },
     { label: 'Transfer', icon: ArrowLeftRight, to: '/token' },
     { label: 'Claim DVT', icon: Link2, to: '/claim' },
-    { label: 'Redeem', icon: ArrowUp, to: '/token/redeem' },
   ];
 
   return (
@@ -91,12 +97,14 @@ const WalletPage: React.FC = () => {
             <p className="font-bold mt-1">{fmt(fiat)}</p>
           </div>
           <div>
-            <p className="text-white/70 text-xs font-semibold">DVT Tokens</p>
-            <p className="font-bold mt-1">{dvt.toLocaleString()}</p>
+            <p className="text-white/70 text-xs font-semibold">Ride credit</p>
+            <p className="font-bold mt-1">{fmt(mobilityCredit)}</p>
           </div>
           <div>
-            <p className="text-white/70 text-xs font-semibold">Points</p>
-            <p className="font-bold mt-1">{points.toLocaleString()}</p>
+            <p className="text-white/70 text-xs font-semibold">DVT / Points</p>
+            <p className="font-bold mt-1">
+              {dvt.toLocaleString()} · {points.toLocaleString()}
+            </p>
           </div>
         </div>
       </div>

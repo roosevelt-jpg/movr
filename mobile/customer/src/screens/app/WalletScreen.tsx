@@ -60,6 +60,7 @@ export default function WalletScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [promise, setPromise] = useState<any>(null);
+  const [mobilityCredit, setMobilityCredit] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +77,8 @@ export default function WalletScreen({
       setPoints(Number(d.points ?? 0));
       setCurrency(d.currency || 'NGN');
       if (Array.isArray(d.transactions)) setTxs(d.transactions);
+      const cr = await fetch(`${API}/rails/credit`, { headers: authHeaders() }).then((r) => r.json());
+      setMobilityCredit(Number(cr?.data?.mobilityCredit || 0));
     } catch (e: any) {
       setPortfolio(0);
       setFiat(0);
@@ -104,7 +107,8 @@ export default function WalletScreen({
 
   const actions = [
     { key: 'topup', label: 'Top Up', icon: '↑', onPress: onTopUp },
-    { key: 'settle', label: 'Settle', icon: '🏦', onPress: onSettlement },
+    { key: 'credit', label: 'Ride credit', icon: '🎫', onPress: onTopUp },
+    { key: 'settle', label: 'Gifts · Settle', icon: '🏦', onPress: onSettlement },
     { key: 'methods', label: 'Cards', icon: '💳', onPress: onPaymentMethods },
     { key: 'withdraw', label: 'Withdraw', icon: '↓', onPress: onWithdraw || onTopUp },
     { key: 'transfer', label: 'Transfer', icon: '↔', onPress: onTransfer },
@@ -133,12 +137,14 @@ export default function WalletScreen({
             <Text style={styles.metricVal}>{formatCurrency(fiat, currency)}</Text>
           </View>
           <View style={styles.metric}>
-            <Text style={styles.metricLabel}>DVT Tokens</Text>
-            <Text style={styles.metricVal}>{Number(dvt).toLocaleString()}</Text>
+            <Text style={styles.metricLabel}>Ride credit</Text>
+            <Text style={styles.metricVal}>{formatCurrency(mobilityCredit, currency)}</Text>
           </View>
           <View style={styles.metric}>
-            <Text style={styles.metricLabel}>Points</Text>
-            <Text style={styles.metricVal}>{Number(points).toLocaleString()}</Text>
+            <Text style={styles.metricLabel}>DVT / Points</Text>
+            <Text style={styles.metricVal}>
+              {Number(dvt).toLocaleString()} · {Number(points).toLocaleString()}
+            </Text>
           </View>
         </View>
       </View>

@@ -101,6 +101,8 @@ export default function HomeScreen({
   const [options, setOptions] = useState<VehicleOption[]>([]);
   const [fareModes, setFareModes] = useState<FareModeOption[]>([]);
   const [fareMode, setFareMode] = useState('now');
+  const [payWithCredit, setPayWithCredit] = useState(false);
+  const [mobilityCredit, setMobilityCredit] = useState(0);
   const [selected, setSelected] = useState<string>('economy');
   const [currency, setCurrency] = useState('NGN');
   const [pickup, setPickup] = useState(pickupLabel);
@@ -114,6 +116,10 @@ export default function HomeScreen({
     fetch(`${API}/trust/promise`)
       .then((r) => r.json())
       .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+    fetch(`${API}/rails/credit`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setMobilityCredit(Number(j?.data?.mobilityCredit || 0)))
       .catch(() => undefined);
   }, []);
 
@@ -252,10 +258,36 @@ export default function HomeScreen({
           : selected === 'economy'
             ? 'standard'
             : selected;
-      const res = await fetch(`${API}/rides/request`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
+      const isShare = fareMode === 'share' || selected === 'shared';
+      let url = `${API}/rides/request`;
+      let body: any = {
+        pickupLat,
+        pickupLng,
+        dropoffLat,
+        dropoffLng,
+        pickupAddress: pickup,
+        dropoffAddress: destination,
+        vehicleTypeCode: selected,
+        rideType,
+        fareMode,
+        countryCode: region,
+      };
+      if (isShare) {
+        url = `${API}/rails/share/join`;
+        body = {
+          pickupLat,
+          pickupLng,
+          dropoffLat,
+          dropoffLng,
+          pickupAddress: pickup,
+          dropoffAddress: destination,
+          countryCode: region,
+          payWithMobilityCredit: payWithCredit,
+        };
+      } else {
+        // All bookings go through rails (corridor caps + optional credit)
+        url = `${API}/rails/book`;
+        body = {
           pickupLat,
           pickupLng,
           dropoffLat,
@@ -263,14 +295,27 @@ export default function HomeScreen({
           pickupAddress: pickup,
           dropoffAddress: destination,
           vehicleTypeCode: selected,
-          rideType,
           fareMode,
           countryCode: region,
-        }),
+          payWithMobilityCredit: payWithCredit,
+          sourceChannel: 'app',
+        };
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
-      if (res.ok) setMsg('Ride requested');
-      else setMsg(json.message || 'Ride queued');
+      if (res.ok) {
+        setMsg(
+          isShare
+            ? 'Joined shared pool'
+            : payWithCredit
+              ? 'Booked with ride credit'
+              : 'Ride requested'
+        );
+      } else setMsg(json.message || 'Ride queued');
     } catch (e: any) {
       setMsg(e.message || 'Could not confirm');
     } finally {
@@ -414,10 +459,31 @@ export default function HomeScreen({
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
+      <Pressable
+        onPress={() => setPayWithCredit((v) => !v)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}
+        disabled={fareMode === 'share' || selected === 'shared'}
+      >
+        <Text style={{ color: payWithCredit ? '#A855F7' : '#71717A', fontSize: 18 }}>
+          {payWithCredit ? '☑' : '☐'}
+        </Text>
+        <Text style={{ color: '#A1A1AA', fontSize: 13, flex: 1 }}>
+          Pay with ride credit ({formatCurrency(mobilityCredit, currency)})
+        </Text>
+      </Pressable>
+
       <Pressable style={styles.cta} onPress={confirm} disabled={confirming}>
         <View style={styles.ctaA} />
         <View style={styles.ctaB} />
-        <Text style={styles.ctaText}>{confirming ? 'Confirming…' : 'Confirm Ride'}</Text>
+        <Text style={styles.ctaText}>
+          {confirming
+            ? 'Confirming…'
+            : fareMode === 'share' || selected === 'shared'
+              ? 'Join share pool'
+              : payWithCredit
+                ? 'Book with credit'
+                : 'Confirm Ride'}
+        </Text>
       </Pressable>
     </ScrollView>
   );

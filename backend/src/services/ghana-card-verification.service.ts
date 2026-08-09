@@ -83,20 +83,66 @@ export class GhanaCardVerifier implements NationalIdVerifier {
   }
 }
 
-/** Nigeria NIN stub — same NationalIdVerifier interface. */
+/** Nigeria NIN — live when Integrations Hub has nimc_nin api_key; else manual review. */
 export class NigeriaNinVerifier implements NationalIdVerifier {
   countryCode = 'NG';
   idType = 'nigeria_nin';
+  private logger = getLogger('nimc-nin');
+
+  constructor(
+    private db: DatabaseService,
+    private integrations: IntegrationsService
+  ) {}
 
   async verify(input: NationalIdVerifyInput): Promise<NationalIdVerifyResult> {
-    return {
-      matched: false,
-      confidence: 0,
-      provider: 'nimc_nin',
-      pendingManualReview: true,
-      message: 'NIMC integration pending credentials',
-      biodata: { fullName: input.fullName, idNumber: input.idNumber },
-    };
+    const apiKey = await this.integrations.getCredential('nimc_nin', 'api_key');
+    const base =
+      (await this.integrations.getCredential('nimc_nin', 'base_url')) ||
+      'https://api.nimc.gov.ng';
+
+    if (!apiKey) {
+      // Format gate: 11-digit NIN → soft pass for demo, still pending manual
+      const digits = String(input.idNumber || '').replace(/\D/g, '');
+      const formatOk = digits.length === 11;
+      return {
+        matched: false,
+        confidence: formatOk ? 40 : 0,
+        provider: 'nimc_nin',
+        pendingManualReview: true,
+        message: formatOk
+          ? 'NIMC credentials missing — format OK, pending manual review'
+          : 'Invalid NIN format (expect 11 digits)',
+        biodata: { fullName: input.fullName, idNumber: input.idNumber },
+      };
+    }
+
+    try {
+      const res = await axios.post(
+        `${base}/v1/verify`,
+        {
+          nin: input.idNumber,
+          fullName: input.fullName,
+          dateOfBirth: input.dateOfBirth,
+        },
+        { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 8000 }
+      );
+      const confidence = Number(res.data?.confidence ?? 0);
+      return {
+        matched: Boolean(res.data?.matched) && confidence >= 70,
+        confidence,
+        biodata: res.data?.biodata || {},
+        provider: 'nimc_nin',
+      };
+    } catch (err: any) {
+      this.logger.warn('NIMC verify failed', { error: err.message });
+      return {
+        matched: false,
+        confidence: 0,
+        provider: 'nimc_nin',
+        pendingManualReview: true,
+        message: err.message,
+      };
+    }
   }
 }
 
@@ -142,7 +188,7 @@ export class NationalIdVerificationService {
     this.integrations = new IntegrationsService(db);
     this.verifiers = [
       new GhanaCardVerifier(db, this.integrations),
-      new NigeriaNinVerifier(),
+      new NigeriaNinVerifier(db, this.integrations),
       new CoteDivoireOneciVerifier(),
       new SenegalCniVerifier(),
     ];

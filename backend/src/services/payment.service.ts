@@ -198,7 +198,7 @@ export class PaymentService {
     userId: string;
     amount: number;
     currency?: string;
-    paymentType: 'subscription' | 'ride' | 'wallet' | 'marketplace' | 'rental' | 'transfer';
+    paymentType: 'subscription' | 'ride' | 'wallet' | 'marketplace' | 'rental' | 'transfer' | 'mobility';
     email: string;
     fullName: string;
     phone?: string;
@@ -327,7 +327,40 @@ export class PaymentService {
 
     const { user_id: userId, amount, metadata } = paymentResult.rows[0];
     const paymentType = metadata?.paymentType;
-    if (paymentType === 'wallet') {
+    const wantsMobility =
+      paymentType === 'mobility' ||
+      metadata?.mobility === true ||
+      metadata?.source === 'momo' ||
+      metadata?.creditType === 'mobility';
+
+    if (wantsMobility) {
+      try {
+        const { AfricaMobilityRailsService } = require('./africa-mobility-rails.service');
+        const { MatchingEngineService } = require('./matching-engine.service');
+        const { RideBookingService } = require('./ride-booking.service');
+        const matching = new MatchingEngineService(this.db);
+        const booking = new RideBookingService(this.db, matching);
+        const rails = new AfricaMobilityRailsService(this.db, matching, booking);
+        await rails.topUpMobilityCredit({
+          userId,
+          amount: Number(amount),
+          currency: metadata?.currency || 'GHS',
+          source: String(metadata?.source || 'momo'),
+          reference,
+          meta: { provider: metadata?.provider || 'paystack', paymentType },
+        });
+        await this.db
+          .query(
+            `UPDATE mobility_topup_intents SET status = 'completed', completed_at = NOW()
+             WHERE payment_reference = $1`,
+            [reference]
+          )
+          .catch(() => undefined);
+      } catch (e) {
+        // Fallback to wallet if rails unavailable
+        await this.creditWallet(userId, Number(amount));
+      }
+    } else if (paymentType === 'wallet') {
       await this.creditWallet(userId, Number(amount));
     } else if (paymentType === 'subscription') {
       await this.activateSubscription(userId, metadata);

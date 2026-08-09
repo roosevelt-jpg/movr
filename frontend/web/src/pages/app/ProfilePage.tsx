@@ -44,6 +44,9 @@ const ProfilePage: React.FC = () => {
   const [points, setPoints] = useState(0);
   const [unread, setUnread] = useState(0);
 
+  const [unread, setUnread] = useState(0);
+  const [trustScore, setTrustScore] = useState<any>(null);
+
   useEffect(() => {
     fetch(`${API}/users/me/profile`, { headers: authHeaders() })
       .then((r) => r.json())
@@ -60,6 +63,10 @@ const ProfilePage: React.FC = () => {
         }
         if (u.unreadNotifications != null) setUnread(Number(u.unreadNotifications));
       })
+      .catch(() => undefined);
+    fetch(`${API}/rails/trust-score`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setTrustScore(j?.data || null))
       .catch(() => undefined);
   }, []);
 
@@ -121,6 +128,10 @@ const ProfilePage: React.FC = () => {
           { v: rides, l: 'Rides' },
           { v: rating.toFixed(1), l: 'Rating' },
           { v: points, l: 'Points' },
+          {
+            v: trustScore?.score != null ? Number(trustScore.score).toFixed(0) : '—',
+            l: 'Trust',
+          },
         ].map((s, i) => (
           <React.Fragment key={s.l}>
             {i > 0 ? <div className="w-px h-7 bg-zinc-800 mx-2" /> : null}
@@ -131,6 +142,9 @@ const ProfilePage: React.FC = () => {
           </React.Fragment>
         ))}
       </div>
+      {trustScore?.kyc_boost ? (
+        <p className="text-center text-xs text-emerald-400 mb-4">KYC verified · trust boost active</p>
+      ) : null}
 
       <p className="text-xs tracking-wider text-zinc-500 mb-1">ACCOUNT</p>
       <div className="mb-6">
@@ -157,6 +171,12 @@ const ProfilePage: React.FC = () => {
       <p className="text-xs tracking-wider text-zinc-500 mb-1">ACTIVITY</p>
       <div className="mb-6">
         <Row icon={History} iconClass="text-blue-400" label="Activity History" onClick={() => navigate('/history')} />
+        <Row
+          icon={Gift}
+          iconClass="text-emerald-400"
+          label="Family gifts & circles"
+          onClick={() => navigate('/wallet/settlement?gifts=1')}
+        />
         <Row icon={Shield} iconClass="text-red-400" label="Safety Center" onClick={() => navigate('/safety')} />
       </div>
 

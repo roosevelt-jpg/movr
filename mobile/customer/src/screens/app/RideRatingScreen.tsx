@@ -90,13 +90,26 @@ export default function RideRatingScreen({
     setMsg('');
     try {
       if (rideId) {
-        const rateRes = await fetch(`${API}/rides/${rideId}/rate`, {
+        let ok = false;
+        const railsRes = await fetch(`${API}/rails/channel/rate`, {
           method: 'POST',
           headers: authHeaders(),
-          body: JSON.stringify({ rating }),
-        });
-        const rateJson = await rateRes.json().catch(() => ({}));
-        if (!rateRes.ok) throw new Error(rateJson.message || 'Failed to save rating');
+          body: JSON.stringify({
+            rideId,
+            rating,
+            channel: 'app',
+          }),
+        }).catch(() => null);
+        if (railsRes?.ok) ok = true;
+        if (!ok) {
+          const rateRes = await fetch(`${API}/rides/${rideId}/rate`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ rating }),
+          });
+          const rateJson = await rateRes.json().catch(() => ({}));
+          if (!rateRes.ok) throw new Error(rateJson.message || 'Failed to save rating');
+        }
         if (tipAmount > 0) {
           await fetch(`${API}/rides/${rideId}/tip`, {
             method: 'POST',

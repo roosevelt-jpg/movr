@@ -285,6 +285,16 @@ export class AfricaMobilityRailsService {
     let best: any = null;
     let bestScore = Infinity;
     for (const c of rows.rows) {
+      const inOrigin = c.origin_polygon
+        ? this.pointInPolygon(pickupLng, pickupLat, c.origin_polygon)
+        : null;
+      const inDest = c.dest_polygon
+        ? this.pointInPolygon(dropoffLng, dropoffLat, c.dest_polygon)
+        : null;
+      if (inOrigin === true && inDest === true) {
+        return c;
+      }
+
       if (c.origin_lat == null || c.dest_lat == null) continue;
       const oDist =
         Math.sqrt(
@@ -306,6 +316,27 @@ export class AfricaMobilityRailsService {
       }
     }
     return best;
+  }
+
+  /** GeoJSON Polygon point-in-polygon (lng, lat). */
+  pointInPolygon(lng: number, lat: number, polygon: any): boolean {
+    try {
+      const rings = polygon?.coordinates?.[0];
+      if (!Array.isArray(rings) || rings.length < 3) return false;
+      let inside = false;
+      for (let i = 0, j = rings.length - 1; i < rings.length; j = i++) {
+        const xi = Number(rings[i][0]);
+        const yi = Number(rings[i][1]);
+        const xj = Number(rings[j][0]);
+        const yj = Number(rings[j][1]);
+        const intersect =
+          yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 1e-12) + xi;
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    } catch {
+      return false;
+    }
   }
 
   async book(input: {
@@ -331,6 +362,25 @@ export class AfricaMobilityRailsService {
       fareMode: input.fareMode,
       vehicleCode: input.vehicleTypeCode,
     });
+
+    if (input.payWithMobilityCredit) {
+      const fare = Number(
+        (quote.options || []).find((o: any) => o.code === (input.vehicleTypeCode || o.code))
+          ?.riderFare ??
+          quote.options?.[0]?.riderFare ??
+          0
+      );
+      if (fare > 0) {
+        const bal = await this.getMobilityBalance(input.userId);
+        if (bal.mobilityCredit + bal.walletBalance < fare) {
+          throw new Error(
+            `Insufficient ride credit (need ${fare} ${bal.currency}, have ${
+              bal.mobilityCredit + bal.walletBalance
+            })`
+          );
+        }
+      }
+    }
 
     const result = await this.booking.createRideRequest({
       userId: input.userId,
@@ -379,8 +429,26 @@ export class AfricaMobilityRailsService {
       const fare = Number(opt?.riderFare ?? result.estimatedFare ?? 0);
       try {
         await this.spendMobilityCredit(input.userId, fare, `RIDE-${result.rideId}`);
+        await this.db
+          .query(
+            `UPDATE rides SET
+               payment_method = 'mobility_credit',
+               pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
+             WHERE id = $1`,
+            [result.rideId, JSON.stringify({ paidWithMobilityCredit: true, fare })]
+          )
+          .catch(() => undefined);
       } catch (e: any) {
-        this.logger.warn(`mobility credit pay skipped: ${e?.message}`);
+        await this.db
+          .query(
+            `UPDATE rides SET status = 'cancelled',
+               cancellation_reason = 'mobility_credit_failed',
+               updated_at = NOW()
+             WHERE id = $1`,
+            [result.rideId]
+          )
+          .catch(() => undefined);
+        throw e;
       }
     }
 
@@ -389,7 +457,11 @@ export class AfricaMobilityRailsService {
       userId: input.userId,
       rideId: result.rideId,
       eventType: 'booked',
-      payload: { fareMode: input.fareMode, vehicle: input.vehicleTypeCode },
+      payload: {
+        fareMode: input.fareMode,
+        vehicle: input.vehicleTypeCode,
+        payWithMobilityCredit: Boolean(input.payWithMobilityCredit),
+      },
     });
 
     await this.recomputeTrustScore(input.userId).catch(() => undefined);
@@ -473,24 +545,27 @@ export class AfricaMobilityRailsService {
     recipientId?: string;
     note?: string;
     ridesCount?: number;
+    /** When true, caller already debited sender (corridor FX path). */
+    skipDebit?: boolean;
   }) {
     const amount = Number(input.amount);
     if (!amount || amount <= 0) throw new Error('Invalid amount');
     const claimCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
-    // Debit sender
     const bal = await this.getMobilityBalance(input.senderId);
-    if (bal.walletBalance + bal.mobilityCredit < amount) {
-      throw new Error('Insufficient balance to gift rides');
+    if (!input.skipDebit) {
+      if (bal.walletBalance + bal.mobilityCredit < amount) {
+        throw new Error('Insufficient balance to gift rides');
+      }
+      await this.db.query(
+        `UPDATE wallets SET
+           mobility_credit = GREATEST(0, COALESCE(mobility_credit,0) - LEAST(COALESCE(mobility_credit,0), $2)),
+           balance_fiat = balance_fiat - GREATEST(0, $2 - LEAST(COALESCE(mobility_credit,0), $2)),
+           last_updated = NOW()
+         WHERE user_id = $1`,
+        [input.senderId, amount]
+      );
     }
-    await this.db.query(
-      `UPDATE wallets SET
-         mobility_credit = GREATEST(0, COALESCE(mobility_credit,0) - LEAST(COALESCE(mobility_credit,0), $2)),
-         balance_fiat = balance_fiat - GREATEST(0, $2 - LEAST(COALESCE(mobility_credit,0), $2)),
-         last_updated = NOW()
-       WHERE user_id = $1`,
-      [input.senderId, amount]
-    );
 
     const row = await this.db.query(
       `INSERT INTO remittance_ride_gifts (
@@ -697,11 +772,18 @@ export class AfricaMobilityRailsService {
         [userId]
       )
       .catch(() => ({ rows: [] as any[] }));
+    const driverKyc = await this.db
+      .query(`SELECT kyc_status FROM drivers WHERE user_id = $1 LIMIT 1`, [userId])
+      .catch(() => ({ rows: [] as any[] }));
 
     const completed = Number(rides.rows[0]?.completed || 0);
     const noshows = Number(rides.rows[0]?.noshows || 0);
     const lost = Number(disputes.rows[0]?.c || 0);
-    const kycBoost = /approved|verified/i.test(String(kyc.rows[0]?.status || '')) ? 10 : 0;
+    const kycBoost =
+      /approved|verified/i.test(String(kyc.rows[0]?.status || '')) ||
+      /approved|verified/i.test(String(driverKyc.rows[0]?.kyc_status || ''))
+        ? 10
+        : 0;
     const score = Math.max(
       0,
       Math.min(100, 70 + Math.min(20, completed * 0.5) + kycBoost - noshows * 5 - lost * 8)
@@ -745,5 +827,304 @@ export class AfricaMobilityRailsService {
       /* */
     }
     return {};
+  }
+
+  /** Start MoMo/card gateway top-up that credits mobility_credit on webhook. */
+  async startMobilityTopUp(input: {
+    userId: string;
+    amount: number;
+    currency?: string;
+    source?: string;
+    provider?: string;
+    email?: string;
+    phone?: string;
+    countryCode?: string;
+  }) {
+    const amount = Number(input.amount);
+    if (!amount || amount <= 0) throw new Error('Invalid amount');
+    const source = String(input.source || 'momo');
+    const currency = input.currency || 'GHS';
+
+    if (source === 'airtime' || source === 'salary') {
+      const intent = await this.db.query(
+        `INSERT INTO mobility_topup_intents (user_id, amount, currency, source, provider, status, meta)
+         VALUES ($1,$2,$3,$4,$5,'pending',$6::jsonb) RETURNING *`,
+        [
+          input.userId,
+          amount,
+          currency,
+          source,
+          source === 'airtime' ? 'airtime_gateway' : 'payroll',
+          JSON.stringify({ phone: input.phone || null }),
+        ]
+      );
+      if (process.env.NODE_ENV !== 'production' || process.env.AUTO_COMPLETE_ALT_TOPUPS === 'true') {
+        await this.topUpMobilityCredit({
+          userId: input.userId,
+          amount,
+          currency,
+          source,
+          reference: `ALT-${intent.rows[0].id}`,
+        });
+        await this.db.query(
+          `UPDATE mobility_topup_intents SET status = 'completed', completed_at = NOW() WHERE id = $1`,
+          [intent.rows[0].id]
+        );
+        return {
+          mode: 'instant',
+          source,
+          intent: { ...intent.rows[0], status: 'completed' },
+          balance: await this.getMobilityBalance(input.userId),
+        };
+      }
+      return { mode: 'pending_provider', intent: intent.rows[0] };
+    }
+
+    const { PaymentService } = require('./payment.service');
+    const payments = new PaymentService(this.db);
+
+    // Demo / local: complete MoMo/card instantly when gateways are not configured
+    const demoComplete =
+      process.env.NODE_ENV !== 'production' || process.env.AUTO_COMPLETE_ALT_TOPUPS === 'true';
+
+    let init: any;
+    try {
+      init = await payments.initializePayment({
+        userId: input.userId,
+        amount,
+        currency,
+        paymentType: 'mobility' as any,
+        email: input.email || `user-${input.userId.slice(0, 8)}@movr.local`,
+        fullName: 'Movr Rider',
+        phone: input.phone,
+        countryCode: input.countryCode || 'GH',
+        metadata: {
+          mobility: true,
+          source,
+          provider: input.provider || 'paystack',
+          paymentType: 'mobility',
+        },
+      });
+    } catch (e: any) {
+      if (!demoComplete) throw e;
+      init = { success: false, message: e?.message };
+    }
+
+    if (!init?.success || !init?.paymentLink) {
+      if (demoComplete) {
+        const intent = await this.db.query(
+          `INSERT INTO mobility_topup_intents (user_id, amount, currency, source, provider, status, meta)
+           VALUES ($1,$2,$3,$4,$5,'completed',$6::jsonb) RETURNING *`,
+          [
+            input.userId,
+            amount,
+            currency,
+            source,
+            input.provider || 'paystack',
+            JSON.stringify({ demo: true, reason: init?.message || 'no_gateway' }),
+          ]
+        );
+        await this.topUpMobilityCredit({
+          userId: input.userId,
+          amount,
+          currency,
+          source,
+          reference: `DEMO-${intent.rows[0].id}`,
+        });
+        return {
+          mode: 'instant',
+          source,
+          intent: intent.rows[0],
+          balance: await this.getMobilityBalance(input.userId),
+          demo: true,
+        };
+      }
+      throw new Error(init?.message || 'Payment gateway unavailable — configure Paystack/Flutterwave');
+    }
+
+    const ref = init.reference || init.txRef || init.data?.reference;
+    await this.db
+      .query(
+        `INSERT INTO mobility_topup_intents (
+           user_id, amount, currency, source, provider, status, payment_reference, meta
+         ) VALUES ($1,$2,$3,$4,$5,'awaiting_payment',$6,$7::jsonb)`,
+        [
+          input.userId,
+          amount,
+          currency,
+          source,
+          input.provider || 'paystack',
+          ref || null,
+          JSON.stringify({ init }),
+        ]
+      )
+      .catch(() => undefined);
+
+    return {
+      mode: 'gateway',
+      payment: {
+        ...init,
+        authorization_url: init.paymentLink,
+        checkoutUrl: init.paymentLink,
+        paymentLink: init.paymentLink,
+      },
+      source,
+    };
+  }
+
+  async joinSharePool(input: {
+    userId: string;
+    pickupLat: number;
+    pickupLng: number;
+    dropoffLat: number;
+    dropoffLng: number;
+    pickupAddress?: string;
+    dropoffAddress?: string;
+    countryCode?: string;
+    payWithMobilityCredit?: boolean;
+  }) {
+    const country = input.countryCode || 'GH';
+    const open = await this.db.query(
+      `SELECT * FROM share_pools
+       WHERE status IN ('open','matching') AND rider_count < max_riders
+         AND COALESCE(country_code,'GH') = $1
+       ORDER BY created_at ASC LIMIT 40`,
+      [country]
+    );
+
+    let pool = open.rows.find((p: any) => {
+      const o =
+        Math.sqrt(
+          Math.pow(input.pickupLat - Number(p.origin_lat), 2) +
+            Math.pow(input.pickupLng - Number(p.origin_lng), 2)
+        ) * 111;
+      const d =
+        Math.sqrt(
+          Math.pow(input.dropoffLat - Number(p.dest_lat), 2) +
+            Math.pow(input.dropoffLng - Number(p.dest_lng), 2)
+        ) * 111;
+      return o <= Number(p.pickup_radius_km || 1.2) && d <= Number(p.dropoff_radius_km || 1.5);
+    });
+
+    if (!pool) {
+      const created = await this.db.query(
+        `INSERT INTO share_pools (
+           origin_lat, origin_lng, dest_lat, dest_lng, country_code, status, rider_count
+         ) VALUES ($1,$2,$3,$4,$5,'open',0) RETURNING *`,
+        [input.pickupLat, input.pickupLng, input.dropoffLat, input.dropoffLng, country]
+      );
+      pool = created.rows[0];
+    }
+
+      const booked = await this.book({
+      userId: input.userId,
+      pickupLat: input.pickupLat,
+      pickupLng: input.pickupLng,
+      dropoffLat: input.dropoffLat,
+      dropoffLng: input.dropoffLng,
+      pickupAddress: input.pickupAddress,
+      dropoffAddress: input.dropoffAddress,
+      vehicleTypeCode: 'shared',
+      fareMode: 'share',
+      sourceChannel: 'app',
+      countryCode: country,
+      payWithMobilityCredit: Boolean(input.payWithMobilityCredit),
+    });
+
+    const rideId = booked.rideId || booked.id;
+    await this.db.query(
+      `INSERT INTO share_pool_members (pool_id, user_id, ride_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (pool_id, user_id) DO UPDATE SET ride_id = EXCLUDED.ride_id`,
+      [
+        pool.id,
+        input.userId,
+        rideId,
+        input.pickupLat,
+        input.pickupLng,
+        input.dropoffLat,
+        input.dropoffLng,
+      ]
+    );
+
+    const updated = await this.db.query(
+      `UPDATE share_pools SET
+         rider_count = rider_count + 1,
+         ride_ids = array_append(COALESCE(ride_ids,'{}'), $2::uuid),
+         status = CASE WHEN rider_count + 1 >= max_riders THEN 'full' ELSE 'matching' END
+       WHERE id = $1 RETURNING *`,
+      [pool.id, rideId]
+    );
+
+    return { pool: updated.rows[0], booking: booked };
+  }
+
+  async listRemittanceCorridors() {
+    return (
+      await this.db
+        .query(`SELECT * FROM remittance_corridors WHERE is_active = TRUE ORDER BY name`)
+        .catch(() => ({ rows: [] as any[] }))
+    ).rows;
+  }
+
+  async quoteRemittanceGift(input: { corridorId: string; amountFrom: number }) {
+    const c = await this.db.query(`SELECT * FROM remittance_corridors WHERE id = $1`, [
+      input.corridorId,
+    ]);
+    const corridor = c.rows[0];
+    if (!corridor) throw new Error('Corridor not found');
+    const amountFrom = Number(input.amountFrom);
+    if (amountFrom < Number(corridor.min_amount) || amountFrom > Number(corridor.max_amount)) {
+      throw new Error(
+        `Amount must be between ${corridor.min_amount} and ${corridor.max_amount} ${corridor.currency_from}`
+      );
+    }
+    const fee =
+      amountFrom * (Number(corridor.fee_percent) / 100) + Number(corridor.fee_flat || 0);
+    const net = amountFrom - fee;
+    const creditTo = Math.round(net * Number(corridor.fx_rate) * 100) / 100;
+    return {
+      corridor,
+      amountFrom,
+      fee: Math.round(fee * 100) / 100,
+      creditTo,
+      currencyTo: corridor.currency_to,
+      complianceNote: corridor.compliance_note,
+    };
+  }
+
+  async sendRemittanceViaCorridor(input: {
+    senderId: string;
+    corridorId: string;
+    amountFrom: number;
+    recipientPhone?: string;
+    recipientId?: string;
+    note?: string;
+  }) {
+    const q = await this.quoteRemittanceGift({
+      corridorId: input.corridorId,
+      amountFrom: input.amountFrom,
+    });
+    const bal = await this.getMobilityBalance(input.senderId);
+    if (bal.walletBalance + bal.mobilityCredit < q.amountFrom) {
+      throw new Error('Insufficient balance for remittance');
+    }
+    await this.db.query(
+      `UPDATE wallets SET
+         mobility_credit = GREATEST(0, COALESCE(mobility_credit,0) - LEAST(COALESCE(mobility_credit,0), $2)),
+         balance_fiat = balance_fiat - GREATEST(0, $2 - LEAST(COALESCE(mobility_credit,0), $2)),
+         last_updated = NOW()
+       WHERE user_id = $1`,
+      [input.senderId, q.amountFrom]
+    );
+    return this.createRemittanceGift({
+      senderId: input.senderId,
+      amount: q.creditTo,
+      currency: q.currencyTo,
+      recipientPhone: input.recipientPhone,
+      recipientId: input.recipientId,
+      note: input.note || `Remittance via ${q.corridor.name}`,
+      skipDebit: true,
+    });
   }
 }

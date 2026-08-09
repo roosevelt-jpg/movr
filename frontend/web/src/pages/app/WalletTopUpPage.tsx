@@ -17,18 +17,28 @@ function authHeaders() {
   };
 }
 
-const ICONS: Record<string, string> = { card: '💳', momo: '📱', crypto: '⛓', phone: '📱', chain: '⛓' };
+const ICONS: Record<string, string> = {
+  card: '💳',
+  momo: '📱',
+  airtime: '📶',
+  salary: '💼',
+  cash_agent: '🏪',
+};
 
-/** Top Up Wallet (mockup). */
+/** Top Up Wallet — fiat or ring-fenced mobility (ride) credit via MoMo/card/airtime. */
 export default function WalletTopUpPage() {
   const navigate = useNavigate();
   const [amount, setAmount] = useState(5000);
   const [custom, setCustom] = useState(false);
   const [customText, setCustomText] = useState('');
   const [available, setAvailable] = useState(0);
+  const [mobilityCredit, setMobilityCredit] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [methods, setMethods] = useState<any[]>([]);
-  const [methodId, setMethodId] = useState('card');
+  const [methodId, setMethodId] = useState('momo');
+  const [asMobility, setAsMobility] = useState(
+    () => new URLSearchParams(window.location.search).get('mobility') === '1'
+  );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -39,14 +49,17 @@ export default function WalletTopUpPage() {
         if (j?.data?.currency) setCurrency(j.data.currency);
       })
       .catch(() => undefined);
-    fetch(`${API}/wallet/payment-methods?catalog=1`, { headers: authHeaders() })
+    fetch(`${API}/rails/credit`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((body) => {
-        const rows = body?.data || [];
-        setMethods(rows);
-        if (rows[0]) setMethodId(String(rows[0].id));
-      })
+      .then((j) => setMobilityCredit(Number(j?.data?.mobilityCredit || 0)))
       .catch(() => undefined);
+    setMethods([
+      { id: 'momo', label: 'Mobile Money', subtitle: 'MTN / Vodafone / AirtelTigo' },
+      { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
+      { id: 'airtime', label: 'Airtime convert', subtitle: 'Convert airtime to ride credit' },
+      { id: 'salary', label: 'Salary advance', subtitle: 'Payroll deduction (demo)' },
+      { id: 'cash_agent', label: 'Cash agent', subtitle: 'Pay at agent · confirm code' },
+    ]);
   }, []);
 
   const display = custom ? Number(customText || 0) : amount;
@@ -58,6 +71,43 @@ export default function WalletTopUpPage() {
     }
     setLoading(true);
     try {
+      if (methodId === 'cash_agent') {
+        toast.success('Open Settle to pick an agent and get a confirm code');
+        navigate('/wallet/settlement');
+        return;
+      }
+      if (asMobility || methodId === 'momo' || methodId === 'airtime' || methodId === 'salary') {
+        const res = await fetch(`${API}/rails/credit/checkout`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            amount: display,
+            currency,
+            source: methodId === 'card' ? 'momo' : methodId,
+            provider: 'paystack',
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || 'Top-up failed');
+        if (
+          json.data?.payment?.authorization_url ||
+          json.data?.payment?.checkoutUrl ||
+          json.data?.payment?.paymentLink
+        ) {
+          window.location.href =
+            json.data.payment.authorization_url ||
+            json.data.payment.checkoutUrl ||
+            json.data.payment.paymentLink;
+          return;
+        }
+        toast.success(
+          json.data?.mode === 'instant' || json.data?.demo
+            ? 'Ride credit added'
+            : 'Top-up started — complete payment if prompted'
+        );
+        navigate('/wallet');
+        return;
+      }
       const res = await fetch(`${API}/wallet/topup`, {
         method: 'POST',
         headers: authHeaders(),
@@ -68,8 +118,7 @@ export default function WalletTopUpPage() {
       toast.success('Top-up completed');
       navigate('/wallet');
     } catch (e: any) {
-      toast.success(e.message || 'Top-up completed');
-      navigate('/wallet');
+      toast.error(e.message || 'Top-up failed');
     } finally {
       setLoading(false);
     }
@@ -78,17 +127,29 @@ export default function WalletTopUpPage() {
   return (
     <div className="min-h-[70vh] bg-black text-white max-w-xl mx-auto p-4" data-force-dark>
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/wallet" className="text-xl">
+        <Link to="/wallet" className="text-zinc-400 hover:text-white text-xl">
           ←
         </Link>
-        <h1 className="text-xl font-extrabold flex-1 text-center pr-6">Top Up Wallet</h1>
+        <h1 className="text-xl font-extrabold flex-1 text-center pr-6">Top Up</h1>
       </div>
+
+      <p className="text-sm text-zinc-400 mb-2">
+        Wallet {formatCurrency(available, currency)} · Ride credit{' '}
+        {formatCurrency(mobilityCredit, currency)}
+      </p>
+      <label className="flex items-center gap-2 text-sm mb-4 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={asMobility}
+          onChange={(e) => setAsMobility(e.target.checked)}
+        />
+        Credit as ride mobility credit (ring-fenced for trips)
+      </label>
 
       <p className="text-[11px] tracking-wider text-zinc-500 font-bold">ENTER AMOUNT</p>
       <p className="text-4xl font-extrabold mt-2">{formatCurrency(display || 0, currency)}</p>
-      <p className="text-zinc-400 mt-1 mb-5">Available: {formatCurrency(available, currency)}</p>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-4 mt-5">
         {PRESETS.map((p) => (
           <button
             key={p}
@@ -134,9 +195,9 @@ export default function WalletTopUpPage() {
               String(methodId) === String(m.id) ? 'border-purple-500' : 'border-transparent'
             }`}
           >
-            <span className="text-xl">{ICONS[m.icon_key] || ICONS[m.method_type] || '💳'}</span>
+            <span className="text-xl">{ICONS[m.id] || '💳'}</span>
             <div className="flex-1 text-left">
-              <p className="font-bold">{m.label || m.provider}</p>
+              <p className="font-bold">{m.label}</p>
               <p className="text-xs text-zinc-400">{m.subtitle || ''}</p>
             </div>
             <span

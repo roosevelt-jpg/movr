@@ -32,6 +32,7 @@ export default function ProfileSettingsScreen({
   onDeals,
   onWishlist,
   onMerchantPayouts,
+  onSettlement,
 }: {
   onSignOut?: () => void;
   onEditProfile?: () => void;
@@ -49,6 +50,7 @@ export default function ProfileSettingsScreen({
   onDeals?: () => void;
   onWishlist?: () => void;
   onMerchantPayouts?: () => void;
+  onSettlement?: () => void;
 }) {
   const [name, setName] = useState('Traveler');
   const [initials, setInitials] = useState('?');
@@ -58,6 +60,9 @@ export default function ProfileSettingsScreen({
   const [rating, setRating] = useState(0);
   const [points, setPoints] = useState(0);
   const [unread, setUnread] = useState(0);
+
+  const [unread, setUnread] = useState(0);
+  const [trustScore, setTrustScore] = useState<any>(null);
 
   useEffect(() => {
     fetch(`${API}/users/me/profile`, { headers: authHeaders() })
@@ -75,6 +80,10 @@ export default function ProfileSettingsScreen({
         }
         if (u.unreadNotifications != null) setUnread(Number(u.unreadNotifications));
       })
+      .catch(() => undefined);
+    fetch(`${API}/rails/trust-score`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setTrustScore(j?.data || null))
       .catch(() => undefined);
   }, []);
 
@@ -145,7 +154,19 @@ export default function ProfileSettingsScreen({
           <Text style={styles.statVal}>{points}</Text>
           <Text style={styles.statLabel}>Points</Text>
         </View>
+        <View style={styles.statDivider} />
+        <View style={styles.stat}>
+          <Text style={styles.statVal}>
+            {trustScore?.score != null ? Number(trustScore.score).toFixed(0) : '—'}
+          </Text>
+          <Text style={styles.statLabel}>Trust</Text>
+        </View>
       </View>
+      {trustScore?.kyc_boost ? (
+        <Text style={{ color: '#34d399', textAlign: 'center', fontSize: 12, marginBottom: 8 }}>
+          KYC verified · trust boost
+        </Text>
+      ) : null}
 
       <Text style={styles.section}>ACCOUNT</Text>
       <View style={styles.group}>
@@ -179,6 +200,7 @@ export default function ProfileSettingsScreen({
         <Row icon="♡" iconColor="#F472B6" label="Wishlist" onPress={onWishlist} />
         <Row icon="🏦" iconColor="#34D399" label="Merchant payouts" onPress={onMerchantPayouts} />
         <Row icon="📋" iconColor="#60A5FA" label="Activity History" onPress={onHistory} />
+        <Row icon="🎁" iconColor="#34d399" label="Family gifts & circles" onPress={onSettlement} />
         <Row icon="🛡" iconColor="#EF4444" label="Safety Center" onPress={onSafety} />
       </View>
 

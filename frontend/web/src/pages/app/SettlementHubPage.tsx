@@ -27,6 +27,20 @@ export default function SettlementHubPage() {
   const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [corridors, setCorridors] = useState<any[]>([]);
+  const [corridorId, setCorridorId] = useState('');
+  const [giftPhone, setGiftPhone] = useState('');
+  const [giftAmount, setGiftAmount] = useState('50');
+  const [claimCode, setClaimCode] = useState('');
+  const [giftQuote, setGiftQuote] = useState<any>(null);
+  const [family, setFamily] = useState<any[]>([]);
+  const [circleName, setCircleName] = useState('Family');
+  const [memberId, setMemberId] = useState('');
+  const [directGiftAmt, setDirectGiftAmt] = useState('20');
+  const [directGiftPhone, setDirectGiftPhone] = useState('');
+  const showGifts =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('gifts') === '1';
 
   const load = async () => {
     setLoading(true);
@@ -49,6 +63,18 @@ export default function SettlementHubPage() {
 
   useEffect(() => {
     load();
+    fetch(`${API}/rails/remittance/corridors`)
+      .then((r) => r.json())
+      .then((j) => {
+        const rows = j?.data || [];
+        setCorridors(rows);
+        if (rows[0]) setCorridorId(rows[0].id);
+      })
+      .catch(() => undefined);
+    fetch(`${API}/rails/family`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setFamily(j?.data || []))
+      .catch(() => undefined);
   }, []);
 
   const saveMomo = async () => {
@@ -110,6 +136,96 @@ export default function SettlementHubPage() {
     await load();
   };
 
+  const quoteGift = async () => {
+    if (!corridorId) return;
+    const res = await fetch(`${API}/rails/remittance/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ corridorId, amountFrom: Number(giftAmount) }),
+    });
+    const j = await res.json();
+    if (!res.ok) {
+      setMsg(j.message || 'Quote failed');
+      return;
+    }
+    setGiftQuote(j.data);
+    setMsg(`Quote: ${j.data.creditTo} ${j.data.currencyTo} ride credit after fees`);
+  };
+
+  const sendGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        corridorId,
+        amountFrom: Number(giftAmount),
+        recipientPhone: giftPhone,
+      }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? `Gift sent · claim code ${j.data?.claim_code || j.data?.claimCode || ''}`
+        : j.message || 'Send failed'
+    );
+  };
+
+  const claimGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ claimCode }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Ride gift claimed into mobility credit' : j.message || 'Claim failed');
+    setClaimCode('');
+  };
+
+  const createCircle = async () => {
+    const res = await fetch(`${API}/rails/family/circles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ name: circleName || 'Family' }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Family circle created' : j.message || 'Failed');
+    const fam = await fetch(`${API}/rails/family`, { headers: authHeaders() }).then((r) => r.json());
+    setFamily(fam?.data || []);
+  };
+
+  const addMember = async () => {
+    const circle = family.find((c) => c.role === 'owner') || family[0];
+    if (!circle?.id || !memberId) {
+      setMsg('Create a circle and enter member user id');
+      return;
+    }
+    const res = await fetch(`${API}/rails/family/circles/${circle.id}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ memberId, dailyLimit: 50 }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Member added' : j.message || 'Failed');
+  };
+
+  const sendDirectGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/gift`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        amount: Number(directGiftAmt),
+        recipientPhone: directGiftPhone,
+        note: 'Ride gift',
+      }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? `Gift sent · claim ${j.data?.claim_code || j.data?.claimCode || ''}`
+        : j.message || 'Gift failed'
+    );
+  };
+
   const currency = 'NGN';
   const promise = rails?.promise;
 
@@ -126,6 +242,108 @@ export default function SettlementHubPage() {
 
       {loading ? <p className="text-zinc-400">Loading rails…</p> : null}
       {msg ? <p className="text-sm text-emerald-400">{msg}</p> : null}
+
+      <section
+        id="gifts"
+        className={`rounded-2xl border p-5 text-white space-y-3 ${
+          showGifts ? 'border-emerald-600 bg-zinc-950' : 'border-zinc-800 bg-zinc-950'
+        }`}
+      >
+        <h2 className="font-bold text-lg">Family remittance → ride gifts</h2>
+        <p className="text-xs text-zinc-500">
+          Diaspora corridors fund ring-fenced mobility credit — not a licensed money transmitter.
+        </p>
+        <select
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          value={corridorId}
+          onChange={(e) => setCorridorId(e.target.value)}
+        >
+          {corridors.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} ({c.currency_from}→{c.currency_to})
+            </option>
+          ))}
+        </select>
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          type="number"
+          value={giftAmount}
+          onChange={(e) => setGiftAmount(e.target.value)}
+          placeholder="Amount (from currency)"
+        />
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          value={giftPhone}
+          onChange={(e) => setGiftPhone(e.target.value)}
+          placeholder="Recipient phone"
+        />
+        <div className="flex gap-2">
+          <button type="button" onClick={quoteGift} className="flex-1 rounded-xl bg-zinc-800 py-2 font-bold">
+            Quote
+          </button>
+          <button type="button" onClick={sendGift} className="flex-1 rounded-xl bg-emerald-700 py-2 font-bold">
+            Send gift
+          </button>
+        </div>
+        {giftQuote ? (
+          <p className="text-xs text-zinc-400">
+            Fee {giftQuote.fee} · credit {giftQuote.creditTo} {giftQuote.currencyTo}
+          </p>
+        ) : null}
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          placeholder="Claim code"
+          value={claimCode}
+          onChange={(e) => setClaimCode(e.target.value)}
+        />
+        <button type="button" onClick={claimGift} className="rounded-xl bg-indigo-600 px-4 py-2 font-bold">
+          Claim gift
+        </button>
+        <p className="text-xs text-zinc-500 pt-2">Or send a local ride gift (no FX corridor)</p>
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          type="number"
+          value={directGiftAmt}
+          onChange={(e) => setDirectGiftAmt(e.target.value)}
+          placeholder="Amount"
+        />
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          value={directGiftPhone}
+          onChange={(e) => setDirectGiftPhone(e.target.value)}
+          placeholder="Recipient phone"
+        />
+        <button type="button" onClick={sendDirectGift} className="rounded-xl bg-zinc-800 px-4 py-2 font-bold">
+          Send local gift
+        </button>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-white space-y-3">
+        <h2 className="font-bold text-lg">Family share circle</h2>
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          value={circleName}
+          onChange={(e) => setCircleName(e.target.value)}
+          placeholder="Circle name"
+        />
+        <button type="button" onClick={createCircle} className="rounded-xl bg-indigo-600 px-4 py-2 font-bold">
+          Create circle
+        </button>
+        <input
+          className="w-full rounded-xl bg-black border border-zinc-700 px-3 py-2"
+          value={memberId}
+          onChange={(e) => setMemberId(e.target.value)}
+          placeholder="Member user id (UUID)"
+        />
+        <button type="button" onClick={addMember} className="rounded-xl bg-zinc-800 px-4 py-2 font-bold">
+          Add member
+        </button>
+        {family.map((c) => (
+          <p key={c.id} className="text-xs text-zinc-400">
+            {c.name} · {c.role} · {c.currency || ''}
+          </p>
+        ))}
+      </section>
 
       <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-white space-y-3">
         <h2 className="font-bold text-lg">Payment rails</h2>

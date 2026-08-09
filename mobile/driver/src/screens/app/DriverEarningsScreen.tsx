@@ -28,6 +28,8 @@ function fmtAt(iso: string) {
 export default function DriverEarningsScreen({
   onWithdraw,
   onSettlement,
+  onDestination,
+  onGuarantee,
   onPerformance,
   onSubscription,
 }: {
@@ -35,6 +37,8 @@ export default function DriverEarningsScreen({
   onTopUp?: () => void;
   onWithdraw?: () => void;
   onSettlement?: () => void;
+  onDestination?: () => void;
+  onGuarantee?: () => void;
   onDemand?: () => void;
   onVehicle?: () => void;
   onPerformance?: () => void;
@@ -169,6 +173,16 @@ export default function DriverEarningsScreen({
         {onSettlement ? (
           <Pressable onPress={onSettlement} style={{ marginTop: 10 }}>
             <Text style={styles.withdraw}>Settlement rails (MoMo · agents) →</Text>
+          </Pressable>
+        ) : null}
+        {onDestination ? (
+          <Pressable onPress={onDestination} style={{ marginTop: 10 }}>
+            <Text style={styles.withdraw}>Destination mode →</Text>
+          </Pressable>
+        ) : null}
+        {onGuarantee ? (
+          <Pressable onPress={onGuarantee} style={{ marginTop: 10 }}>
+            <Text style={styles.withdraw}>Income floor guarantee →</Text>
           </Pressable>
         ) : null}
         {promise?.keep100Note ? (

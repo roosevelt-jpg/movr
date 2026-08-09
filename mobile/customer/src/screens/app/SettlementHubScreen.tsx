@@ -26,23 +26,40 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
   const [confirmCode, setConfirmCode] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [corridors, setCorridors] = useState<any[]>([]);
+  const [corridorId, setCorridorId] = useState('');
+  const [giftPhone, setGiftPhone] = useState('');
+  const [giftAmount, setGiftAmount] = useState('50');
+  const [claimCodeGift, setClaimCodeGift] = useState('');
+  const [giftQuote, setGiftQuote] = useState<any>(null);
+  const [family, setFamily] = useState<any[]>([]);
+  const [circleName, setCircleName] = useState('Family');
+  const [memberId, setMemberId] = useState('');
+  const [directGiftAmt, setDirectGiftAmt] = useState('20');
+  const [directGiftPhone, setDirectGiftPhone] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, rec] = await Promise.all([
+      const [r, rec, corr, fam] = await Promise.all([
         fetch(`${API}/trust/rails`, { headers: authHeaders() }).then((x) => x.json()),
         fetch(`${API}/trust/receipts`, { headers: authHeaders() }).then((x) => x.json()),
+        fetch(`${API}/rails/remittance/corridors`).then((x) => x.json()).catch(() => ({ data: [] })),
+        fetch(`${API}/rails/family`, { headers: authHeaders() }).then((x) => x.json()).catch(() => ({ data: [] })),
       ]);
       setRails(r.data || null);
       setReceipts(rec.data || []);
       if (r.data?.cashAgents?.[0] && !agentId) setAgentId(r.data.cashAgents[0].id);
+      const rows = corr.data || [];
+      setCorridors(rows);
+      if (rows[0] && !corridorId) setCorridorId(rows[0].id);
+      setFamily(fam.data || []);
     } catch (e: any) {
       setMsg(e.message || 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [agentId]);
+  }, [agentId, corridorId]);
 
   useEffect(() => {
     load();
@@ -106,6 +123,95 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
     await load();
   };
 
+  const quoteGift = async () => {
+    if (!corridorId) return;
+    const res = await fetch(`${API}/rails/remittance/quote`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ corridorId, amountFrom: Number(giftAmount) }),
+    });
+    const j = await res.json();
+    if (!res.ok) {
+      setMsg(j.message || 'Quote failed');
+      return;
+    }
+    setGiftQuote(j.data);
+    setMsg(`Quote: ${j.data.creditTo} ${j.data.currencyTo} ride credit after fees`);
+  };
+
+  const sendGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/send`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        corridorId,
+        amountFrom: Number(giftAmount),
+        recipientPhone: giftPhone,
+      }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? `Gift sent · claim ${j.data?.claim_code || j.data?.claimCode || ''}`
+        : j.message || 'Send failed'
+    );
+  };
+
+  const claimGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/claim`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ claimCode: claimCodeGift }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Ride gift claimed into mobility credit' : j.message || 'Claim failed');
+    setClaimCodeGift('');
+  };
+
+  const createCircle = async () => {
+    const res = await fetch(`${API}/rails/family/circles`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name: circleName || 'Family' }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Family circle created' : j.message || 'Failed');
+    await load();
+  };
+
+  const addMember = async () => {
+    const circle = family.find((c: any) => c.role === 'owner') || family[0];
+    if (!circle?.id || !memberId) {
+      setMsg('Create a circle and enter member user id');
+      return;
+    }
+    const res = await fetch(`${API}/rails/family/circles/${circle.id}/members`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ memberId, dailyLimit: 50 }),
+    });
+    const j = await res.json();
+    setMsg(res.ok ? 'Member added' : j.message || 'Failed');
+  };
+
+  const sendDirectGift = async () => {
+    const res = await fetch(`${API}/rails/remittance/gift`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        amount: Number(directGiftAmt),
+        recipientPhone: directGiftPhone,
+        note: 'Ride gift',
+      }),
+    });
+    const j = await res.json();
+    setMsg(
+      res.ok
+        ? `Gift sent · claim ${j.data?.claim_code || j.data?.claimCode || ''}`
+        : j.message || 'Gift failed'
+    );
+  };
+
   const promise = rails?.promise;
   const currency = 'NGN';
 
@@ -123,6 +229,113 @@ export default function SettlementHubScreen({ onBack }: { onBack?: () => void })
       </Text>
       {loading ? <Text style={styles.muted}>Loading…</Text> : null}
       {msg ? <Text style={styles.ok}>{msg}</Text> : null}
+
+      <Text style={styles.h2}>Family remittance → ride gifts</Text>
+      <Text style={styles.muted}>
+        Diaspora corridors fund ring-fenced ride credit — not a licensed money transmitter.
+      </Text>
+      {(corridors.length ? corridors : []).map((c: any) => (
+        <Pressable
+          key={c.id}
+          style={[styles.chip, corridorId === c.id && styles.chipOn]}
+          onPress={() => setCorridorId(c.id)}
+        >
+          <Text style={styles.chipTitle}>
+            {c.name} ({c.currency_from}→{c.currency_to})
+          </Text>
+        </Pressable>
+      ))}
+      <TextInput
+        style={styles.input}
+        value={giftAmount}
+        onChangeText={setGiftAmount}
+        keyboardType="numeric"
+        placeholder="Amount (from currency)"
+        placeholderTextColor="#666"
+      />
+      <TextInput
+        style={styles.input}
+        value={giftPhone}
+        onChangeText={setGiftPhone}
+        placeholder="Recipient phone"
+        placeholderTextColor="#666"
+        keyboardType="phone-pad"
+      />
+      <View style={styles.row}>
+        <Pressable style={[styles.btn, styles.half]} onPress={quoteGift}>
+          <Text style={styles.btnText}>Quote</Text>
+        </Pressable>
+        <Pressable style={[styles.btn, styles.half, styles.green]} onPress={sendGift}>
+          <Text style={styles.btnText}>Send gift</Text>
+        </Pressable>
+      </View>
+      {giftQuote ? (
+        <Text style={styles.muted}>
+          Fee {giftQuote.fee} · credit {giftQuote.creditTo} {giftQuote.currencyTo}
+        </Text>
+      ) : null}
+      <TextInput
+        style={styles.input}
+        value={claimCodeGift}
+        onChangeText={setClaimCodeGift}
+        placeholder="Claim code"
+        placeholderTextColor="#666"
+        autoCapitalize="characters"
+      />
+      <Pressable style={styles.btn} onPress={claimGift}>
+        <Text style={styles.btnText}>Claim gift</Text>
+      </Pressable>
+
+      <Text style={styles.h2}>Family share circle</Text>
+      <TextInput
+        style={styles.input}
+        value={circleName}
+        onChangeText={setCircleName}
+        placeholder="Circle name"
+        placeholderTextColor="#666"
+      />
+      <Pressable style={styles.btn} onPress={createCircle}>
+        <Text style={styles.btnText}>Create circle</Text>
+      </Pressable>
+      <TextInput
+        style={styles.input}
+        value={memberId}
+        onChangeText={setMemberId}
+        placeholder="Member user id (UUID)"
+        placeholderTextColor="#666"
+        autoCapitalize="none"
+      />
+      <Pressable style={styles.btn} onPress={addMember}>
+        <Text style={styles.btnText}>Add member</Text>
+      </Pressable>
+      {family.map((c: any) => (
+        <View key={c.id} style={styles.chip}>
+          <Text style={styles.chipTitle}>
+            {c.name} · {c.role}
+          </Text>
+        </View>
+      ))}
+
+      <Text style={styles.h2}>Local ride gift</Text>
+      <TextInput
+        style={styles.input}
+        value={directGiftAmt}
+        onChangeText={setDirectGiftAmt}
+        keyboardType="numeric"
+        placeholder="Amount"
+        placeholderTextColor="#666"
+      />
+      <TextInput
+        style={styles.input}
+        value={directGiftPhone}
+        onChangeText={setDirectGiftPhone}
+        placeholder="Recipient phone"
+        placeholderTextColor="#666"
+        keyboardType="phone-pad"
+      />
+      <Pressable style={styles.btn} onPress={sendDirectGift}>
+        <Text style={styles.btnText}>Send local gift</Text>
+      </Pressable>
 
       <Text style={styles.h2}>Rails</Text>
       <Text style={styles.muted}>USSD {rails?.ussdCode || '*920*MOVR#'} · offline OK</Text>

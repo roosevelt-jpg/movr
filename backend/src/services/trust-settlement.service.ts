@@ -361,12 +361,39 @@ export class TrustSettlementService {
     }
 
     if (receipt.kind === 'cash_agent_deposit' && receipt.status === 'pending_agent_confirm') {
-      await this.creditWallet(
-        receipt.user_id,
-        Number(receipt.amount),
-        `AGENT-IN-${receipt.reference}`,
-        'topup'
-      );
+      const agentId = receipt.metadata?.agentId;
+      const amount = Number(receipt.amount);
+
+      // Prefer mobility credit for Africa rails (also bumps wallet)
+      try {
+        const { AfricaMobilityRailsService } = require('./africa-mobility-rails.service');
+        const { MatchingEngineService } = require('./matching-engine.service');
+        const { RideBookingService } = require('./ride-booking.service');
+        const matching = new MatchingEngineService(this.db);
+        const booking = new RideBookingService(this.db, matching);
+        const rails = new AfricaMobilityRailsService(this.db, matching, booking);
+        await rails.topUpMobilityCredit({
+          userId: receipt.user_id,
+          amount,
+          currency: receipt.currency || 'GHS',
+          source: 'cash_agent',
+          reference: `AGENT-IN-${receipt.reference || receipt.id}`,
+          meta: { agentId },
+        });
+      } catch {
+        await this.creditWallet(
+          receipt.user_id,
+          amount,
+          `AGENT-IN-${receipt.reference}`,
+          'topup'
+        );
+      }
+
+      // Debit agent float
+      if (agentId) {
+        await this.adjustAgentFloat(agentId, -amount, 'deposit_confirm', receipt.id);
+      }
+
       const updated = await this.db.query(
         `UPDATE settlement_receipts SET status = 'completed',
            metadata = COALESCE(metadata,'{}'::jsonb) || $2::jsonb
@@ -379,13 +406,22 @@ export class TrustSettlementService {
       await this.notify(
         receipt.user_id,
         'Cash deposit credited',
-        `${receipt.amount} added to your Movr Wallet.`,
+        `${receipt.amount} added as Movr mobility credit.`,
         '/wallet'
       );
       return { receipt: updated.rows[0], credited: true };
     }
 
     if (receipt.kind === 'cash_agent_withdraw' && receipt.status === 'pending_pickup') {
+      const agentId = receipt.metadata?.agentId;
+      if (agentId) {
+        await this.adjustAgentFloat(
+          agentId,
+          Number(receipt.amount),
+          'withdraw_confirm',
+          receipt.id
+        );
+      }
       const updated = await this.db.query(
         `UPDATE settlement_receipts SET status = 'collected',
            metadata = COALESCE(metadata,'{}'::jsonb) || $2::jsonb
@@ -402,6 +438,34 @@ export class TrustSettlementService {
     }
 
     throw new Error(`Cannot confirm receipt in status ${receipt.status}`);
+  }
+
+  async adjustAgentFloat(
+    agentId: string,
+    delta: number,
+    kind: string,
+    receiptId?: string
+  ) {
+    await this.db.query(
+      `INSERT INTO cash_agent_accounts (agent_id, balance, currency)
+       VALUES ($1, GREATEST(0, $2), 'GHS')
+       ON CONFLICT (agent_id) DO UPDATE SET
+         balance = GREATEST(0, cash_agent_accounts.balance + $2),
+         updated_at = NOW()`,
+      [agentId, delta]
+    );
+    const bal = await this.db.query(
+      `SELECT balance FROM cash_agent_accounts WHERE agent_id = $1`,
+      [agentId]
+    );
+    await this.db
+      .query(
+        `INSERT INTO cash_agent_float_ledger (agent_id, amount, balance_after, kind, receipt_id)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [agentId, delta, Number(bal.rows[0]?.balance || 0), kind, receiptId || null]
+      )
+      .catch(() => undefined);
+    return bal.rows[0];
   }
 
   async listReceipts(userId: string) {

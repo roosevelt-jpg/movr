@@ -432,6 +432,19 @@ identityLinkRouter.post(
         req.body.fullName,
         req.body.dateOfBirth
       );
+      if (result.matched && req.user?.id) {
+        try {
+          const { MatchingEngineService } = require('../services/matching-engine.service');
+          const { RideBookingService } = require('../services/ride-booking.service');
+          const { AfricaMobilityRailsService } = require('../services/africa-mobility-rails.service');
+          const matching = new MatchingEngineService(db);
+          const booking = new RideBookingService(db, matching);
+          const rails = new AfricaMobilityRailsService(db, matching, booking);
+          await rails.recomputeTrustScore(req.user.id);
+        } catch {
+          /* */
+        }
+      }
       res.json({ status: 'success', data: { ...result, field: pattern } });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });

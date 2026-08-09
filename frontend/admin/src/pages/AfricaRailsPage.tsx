@@ -6,23 +6,37 @@ import { API } from '../lib/apiBase';
 
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('movr_admin_token') || ''}` });
 
-/** Africa mobility rails — credit, guarantees, corridors, remittance gifts overview. */
+/** Africa mobility rails — credit, pools, corridors, remittance, agent float. */
 export default function AfricaRailsPage() {
   const [overview, setOverview] = useState<any>(null);
   const [corridors, setCorridors] = useState<any[]>([]);
+  const [pools, setPools] = useState<any[]>([]);
+  const [remits, setRemits] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any>(null);
   const [error, setError] = useState('');
+  const [floatAgentId, setFloatAgentId] = useState('');
+  const [floatAmt, setFloatAmt] = useState('500');
+  const [msg, setMsg] = useState('');
 
   const load = async () => {
     try {
-      const [o, c, cat] = await Promise.all([
+      const [o, c, cat, p, r, a] = await Promise.all([
         axios.get(`${API}/admin/rails/overview`, { headers: headers() }),
         axios.get(`${API}/admin/rails/corridors`, { headers: headers() }),
         axios.get(`${API}/rails/catalog?countryCode=GH`),
+        axios.get(`${API}/admin/rails/share-pools`, { headers: headers() }).catch(() => ({ data: { data: [] } })),
+        axios.get(`${API}/admin/rails/remittance-corridors`, { headers: headers() }).catch(() => ({ data: { data: [] } })),
+        axios.get(`${API}/admin/rails/agent-float`, { headers: headers() }).catch(() => ({ data: { data: [] } })),
       ]);
       setOverview(o.data?.data || null);
       setCorridors(c.data?.data || []);
       setCatalog(cat.data?.data || null);
+      setPools(p.data?.data || []);
+      setRemits(r.data?.data || []);
+      const agentRows = a.data?.data || [];
+      setAgents(agentRows);
+      if (agentRows[0] && !floatAgentId) setFloatAgentId(agentRows[0].id);
       setError('');
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Failed to load rails');
@@ -33,15 +47,30 @@ export default function AfricaRailsPage() {
     load();
   }, []);
 
+  const topUpFloat = async () => {
+    try {
+      await axios.post(
+        `${API}/admin/rails/agent-float/topup`,
+        { agentId: floatAgentId, amount: Number(floatAmt) },
+        { headers: headers() }
+      );
+      setMsg('Agent float topped up');
+      await load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || e.message || 'Float top-up failed');
+    }
+  };
+
   return (
     <AdminShell activeLabel="Africa rails" hidePageTitle>
       <AdminOpsNav />
       <h1 style={styles.h1}>Africa mobility rails</h1>
       <p style={styles.sub}>
-        Wallet credit · channel-first booking · driver income floors · city corridors · family remittance gifts ·
-        portable trust scores
+        Wallet credit · share pools · MoMo top-ups · agent float · city polygons · remittance gifts ·
+        channel booking
       </p>
       {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+      {msg ? <p style={{ color: 'var(--success, #16a34a)' }}>{msg}</p> : null}
 
       {overview ? (
         <div style={styles.stats}>
@@ -50,6 +79,9 @@ export default function AfricaRailsPage() {
             ['Active guarantees', overview.activeGuarantees],
             ['Pending ride gifts', overview.pendingGifts],
             ['City corridors', overview.activeCorridors],
+            ['Share pools open', overview.openSharePools],
+            ['Remittance corridors', overview.remittanceCorridors],
+            ['Agent float total', overview.agentFloatTotal],
             ['Channel events (24h)', overview.channelEvents24h],
           ].map(([label, val]) => (
             <div key={String(label)} style={styles.stat}>
@@ -86,7 +118,7 @@ export default function AfricaRailsPage() {
           <table style={styles.table}>
             <thead>
               <tr>
-                {['Name', 'City', 'Max rider fare', 'Driver min', 'Municipal'].map((h) => (
+                {['Name', 'City', 'Max rider fare', 'Driver min', 'Polygon', 'Municipal'].map((h) => (
                   <th key={h} style={styles.th}>
                     {h}
                   </th>
@@ -102,12 +134,108 @@ export default function AfricaRailsPage() {
                   </td>
                   <td style={styles.td}>{c.max_rider_fare}</td>
                   <td style={styles.td}>{c.driver_min_payout}</td>
+                  <td style={styles.td}>{c.origin_polygon ? 'yes' : 'radius'}</td>
                   <td style={styles.td}>{c.municipal_code || '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+      </div>
+
+      <div style={styles.panel}>
+        <h2 style={styles.h2}>Share pools</h2>
+        {pools.length === 0 ? (
+          <p style={styles.meta}>No active pools</p>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {['Status', 'Riders', 'Country', 'Created'].map((h) => (
+                  <th key={h} style={styles.th}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pools.slice(0, 15).map((p) => (
+                <tr key={p.id}>
+                  <td style={styles.td}>{p.status}</td>
+                  <td style={styles.td}>
+                    {p.rider_count}/{p.max_riders}
+                  </td>
+                  <td style={styles.td}>{p.country_code}</td>
+                  <td style={styles.td}>{String(p.created_at || '').slice(0, 19)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={styles.panel}>
+        <h2 style={styles.h2}>Remittance corridors</h2>
+        {remits.length === 0 ? (
+          <p style={styles.meta}>None seeded</p>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {['Name', 'FX', 'Fee %', 'Range'].map((h) => (
+                  <th key={h} style={styles.th}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {remits.map((r) => (
+                <tr key={r.id}>
+                  <td style={styles.td}>{r.name}</td>
+                  <td style={styles.td}>
+                    {r.fx_rate} {r.currency_from}→{r.currency_to}
+                  </td>
+                  <td style={styles.td}>{r.fee_percent}%</td>
+                  <td style={styles.td}>
+                    {r.min_amount}–{r.max_amount}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={styles.panel}>
+        <h2 style={styles.h2}>Cash agent float</h2>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <select
+            value={floatAgentId}
+            onChange={(e) => setFloatAgentId(e.target.value)}
+            style={{ padding: 8, minWidth: 180 }}
+          >
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} · {a.float_balance}
+              </option>
+            ))}
+          </select>
+          <input
+            value={floatAmt}
+            onChange={(e) => setFloatAmt(e.target.value)}
+            style={{ padding: 8, width: 100 }}
+            type="number"
+          />
+          <button type="button" onClick={topUpFloat} style={styles.btn}>
+            Top up float
+          </button>
+        </div>
+        {agents.slice(0, 10).map((a) => (
+          <p key={a.id} style={styles.meta}>
+            {a.name} ({a.city}) — float {a.float_balance} {a.currency || 'GHS'}
+          </p>
+        ))}
       </div>
     </AdminShell>
   );
@@ -151,4 +279,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid var(--border)',
   },
   td: { padding: '10px 6px', borderBottom: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13 },
+  btn: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: 'none',
+    background: 'var(--accent, #4f46e5)',
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };

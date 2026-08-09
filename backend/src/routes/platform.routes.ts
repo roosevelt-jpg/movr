@@ -3206,6 +3206,19 @@ adminOpsRouter.patch(
           approvalTimestamp: new Date(),
           verifierAdminId: req.user!.id,
         });
+        if (status === 'approved') {
+          try {
+            const { MatchingEngineService } = require('../services/matching-engine.service');
+            const { RideBookingService } = require('../services/ride-booking.service');
+            const { AfricaMobilityRailsService } = require('../services/africa-mobility-rails.service');
+            const matching = new MatchingEngineService(db);
+            const booking = new RideBookingService(db, matching);
+            const rails = new AfricaMobilityRailsService(db, matching, booking);
+            await rails.recomputeTrustScore(userId);
+          } catch {
+            /* trust table optional */
+          }
+        }
       }
 
       res.json({ status: 'success', data: { id: req.params.id, status, attestation: mapped } });

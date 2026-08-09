@@ -46,25 +46,32 @@ export default function WalletTopUpScreen({
   const [currency, setCurrency] = useState('NGN');
   const [methods, setMethods] = useState<any[]>([
     {
+      id: 'momo',
+      label: 'Mobile Money',
+      subtitle: 'MTN MoMo, Airtel, Vodafone',
+      icon_key: 'phone',
+    },
+    {
       id: 'card',
       label: 'Debit/Credit Card',
       subtitle: 'Visa, Mastercard',
       icon_key: 'card',
     },
     {
-      id: 'momo',
-      label: 'Mobile Money',
-      subtitle: 'MTN MoMo, Airtel',
+      id: 'airtime',
+      label: 'Airtime convert',
+      subtitle: 'Convert airtime to ride credit',
       icon_key: 'phone',
     },
     {
-      id: 'crypto',
-      label: 'Crypto / DVT',
-      subtitle: 'Polygon, BSC',
-      icon_key: 'chain',
+      id: 'salary',
+      label: 'Salary advance',
+      subtitle: 'Payroll deduction (demo)',
+      icon_key: 'card',
     },
   ]);
-  const [methodId, setMethodId] = useState('card');
+  const [methodId, setMethodId] = useState('momo');
+  const [asMobility, setAsMobility] = useState(true);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -74,23 +81,6 @@ export default function WalletTopUpScreen({
       .then((j) => {
         if (j?.data?.fiatBalance != null) setAvailable(Number(j.data.fiatBalance));
         if (j?.data?.currency) setCurrency(j.data.currency);
-      })
-      .catch(() => undefined);
-    fetch(`${API}/wallet/payment-methods?catalog=1`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((body) => {
-        const rows = body?.data || [];
-        if (rows.length) {
-          setMethods(
-            rows.map((m: any) => ({
-              id: m.id || m.method_type,
-              label: m.label || m.provider,
-              subtitle: m.subtitle || '',
-              icon_key: m.icon_key || m.method_type,
-            }))
-          );
-          setMethodId(String(rows[0].id || rows[0].method_type || 'card'));
-        }
       })
       .catch(() => undefined);
   }, []);
@@ -104,6 +94,29 @@ export default function WalletTopUpScreen({
     setLoading(true);
     setMsg('');
     try {
+      if (asMobility || methodId === 'momo' || methodId === 'airtime' || methodId === 'salary') {
+        const res = await fetch(`${API}/rails/credit/checkout`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            amount: amt,
+            currency,
+            source: methodId === 'card' ? 'momo' : methodId,
+            provider: 'paystack',
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || 'Top-up failed');
+        setMsg(
+          json.data?.mode === 'instant' || json.data?.demo
+            ? 'Ride credit added'
+            : json.data?.payment?.paymentLink || json.data?.payment?.authorization_url
+              ? 'Complete payment in browser'
+              : 'Top-up started — complete payment if prompted'
+        );
+        onDone?.();
+        return;
+      }
       const res = await fetch(`${API}/wallet/topup`, {
         method: 'POST',
         headers: authHeaders(),
@@ -115,8 +128,7 @@ export default function WalletTopUpScreen({
       setMsg('Top-up completed');
       onDone?.();
     } catch (e: any) {
-      setMsg(e.message || 'Top-up completed');
-      onDone?.();
+      setMsg(e.message || 'Top-up failed');
     } finally {
       setLoading(false);
     }
@@ -137,6 +149,17 @@ export default function WalletTopUpScreen({
       <Text style={styles.label}>ENTER AMOUNT</Text>
       <Text style={styles.amount}>{formatCurrency(displayAmt || 0, currency)}</Text>
       <Text style={styles.available}>Available: {formatCurrency(available, currency)}</Text>
+      <Pressable
+        onPress={() => setAsMobility((v) => !v)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}
+      >
+        <Text style={{ color: asMobility ? '#A855F7' : '#71717A', fontSize: 18 }}>
+          {asMobility ? '☑' : '☐'}
+        </Text>
+        <Text style={{ color: '#A1A1AA', fontSize: 13, flex: 1 }}>
+          Credit as ride mobility credit (ring-fenced)
+        </Text>
+      </Pressable>
 
       <View style={styles.grid}>
         {PRESETS.map((p) => (

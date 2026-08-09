@@ -7,9 +7,11 @@ import DriverEarningsScreen from './DriverEarningsScreen';
 import SettlementHubScreen from './SettlementHubScreen';
 import VerificationStatusScreen from './VerificationStatusScreen';
 import WithdrawEarningsScreen from './WithdrawEarningsScreen';
+import DestinationPrefScreen from './DestinationPrefScreen';
+import EarningsGuaranteeScreen from './EarningsGuaranteeScreen';
 
 /**
- * Driver dashboard host — Home map (mockup), incoming offer overlay, active nav, earnings.
+ * Driver dashboard host — Home map, offer, nav, earnings, destination, guarantees.
  */
 export default function DashboardScreen(props: {
   onWithdraw?: () => void;
@@ -19,7 +21,15 @@ export default function DashboardScreen(props: {
   onSubscription?: () => void;
 }) {
   const [mode, setMode] = useState<
-    'home' | 'offer' | 'nav' | 'earnings' | 'settlement' | 'withdraw' | 'verify'
+    | 'home'
+    | 'offer'
+    | 'nav'
+    | 'earnings'
+    | 'settlement'
+    | 'withdraw'
+    | 'verify'
+    | 'destination'
+    | 'guarantee'
   >('home');
   const [offerId, setOfferId] = useState<string | undefined>();
   const [rideId, setRideId] = useState<string | undefined>();
@@ -54,6 +64,22 @@ export default function DashboardScreen(props: {
     );
   }
 
+  if (mode === 'destination') {
+    return (
+      <View style={styles.root}>
+        <DestinationPrefScreen onBack={() => setMode('earnings')} />
+      </View>
+    );
+  }
+
+  if (mode === 'guarantee') {
+    return (
+      <View style={styles.root}>
+        <EarningsGuaranteeScreen onBack={() => setMode('earnings')} />
+      </View>
+    );
+  }
+
   if (mode === 'verify') {
     return (
       <View style={styles.root}>
@@ -82,6 +108,8 @@ export default function DashboardScreen(props: {
         <DriverEarningsScreen
           onWithdraw={() => setMode('withdraw')}
           onSettlement={() => setMode('settlement')}
+          onDestination={() => setMode('destination')}
+          onGuarantee={() => setMode('guarantee')}
           onDemand={props.onDemand}
           onVehicle={props.onVehicle}
           onPerformance={props.onPerformance}

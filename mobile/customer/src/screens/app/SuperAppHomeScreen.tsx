@@ -246,6 +246,7 @@ export default function SuperAppHomeScreen({
           onWishlist={() => setService('wishlist')}
           onMerchantPayouts={() => setService('merchant_payouts')}
           onOpenAi={() => setService('ai')}
+          onSettlement={() => setService('settlement')}
         />
         {tabBar}
       </View>

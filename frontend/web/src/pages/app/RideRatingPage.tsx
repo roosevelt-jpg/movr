@@ -72,7 +72,19 @@ const RideRatingPage: React.FC = () => {
     setLoading(true);
     try {
       if (id) {
-        await ridesApi.rateRide(id, { rating });
+        const rateRes = await fetch(`${API}/rails/channel/rate`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            rideId: id,
+            rating,
+            channel: 'app',
+            comment: tipAmount > 0 ? `tip:${tipAmount}` : undefined,
+          }),
+        });
+        if (!rateRes.ok) {
+          await ridesApi.rateRide(id, { rating });
+        }
         if (tipAmount > 0) await ridesApi.addTip(id, tipAmount);
       }
       toast.success('Thanks for riding with Movr');

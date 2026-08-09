@@ -88,7 +88,8 @@ rideBookingRouter.post(
   requireCustomer,
   async (req: AuthRequest, res: Response) => {
     try {
-      const result = await booking.createRideRequest({
+      const { africaRailsService } = require('./africa-mobility-rails.routes');
+      const data = await africaRailsService.book({
         userId: req.user!.id,
         pickupLat: Number(req.body.pickupLat),
         pickupLng: Number(req.body.pickupLng),
@@ -96,25 +97,13 @@ rideBookingRouter.post(
         dropoffLng: Number(req.body.dropoffLng),
         pickupAddress: req.body.pickupAddress,
         dropoffAddress: req.body.dropoffAddress,
-        rideType: req.body.rideType,
-        vehicleTypeCode: req.body.vehicleTypeCode,
+        vehicleTypeCode: req.body.vehicleTypeCode || req.body.rideType || 'economy',
+        fareMode: req.body.fareMode || 'now',
         sourceChannel: 'app',
         countryCode: req.body.countryCode,
-        fareMode: req.body.fareMode || 'now',
+        payWithMobilityCredit: Boolean(req.body.payWithMobilityCredit),
       });
-      try {
-        const { africaRailsService } = require('./africa-mobility-rails.routes');
-        await africaRailsService.logChannelEvent({
-          channel: 'app',
-          userId: req.user!.id,
-          rideId: result.rideId || result.id,
-          eventType: 'booked',
-          payload: { fareMode: req.body.fareMode || 'now' },
-        });
-      } catch {
-        /* optional */
-      }
-      res.status(201).json({ status: 'success', data: result });
+      res.status(201).json({ status: 'success', data });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
@@ -220,18 +209,44 @@ voiceRouter.post('/confirm', authenticateToken, requireCustomer, async (req: Aut
       }
     }
 
-    const result = await booking.createRideRequest({
-      userId: req.user!.id,
-      pickupLat: Number(req.body.pickupLat),
-      pickupLng: Number(req.body.pickupLng),
-      dropoffLat: Number(req.body.dropoffLat),
-      dropoffLng: Number(req.body.dropoffLng),
-      pickupAddress: req.body.pickupAddress,
-      dropoffAddress: req.body.dropoffAddress,
-      rideType: req.body.rideType || req.body.vehicleTypeCode || 'standard',
-      sourceChannel: req.body.sourceChannel || 'voice',
-      countryCode: req.body.countryCode,
-    });
+    const { africaRailsService } = require('./africa-mobility-rails.routes');
+    const bal = await africaRailsService.getMobilityBalance(req.user!.id).catch(() => ({
+      mobilityCredit: 0,
+      walletBalance: 0,
+    }));
+    let result: any;
+    try {
+      result = await africaRailsService.book({
+        userId: req.user!.id,
+        pickupLat: Number(req.body.pickupLat),
+        pickupLng: Number(req.body.pickupLng),
+        dropoffLat: Number(req.body.dropoffLat),
+        dropoffLng: Number(req.body.dropoffLng),
+        pickupAddress: req.body.pickupAddress,
+        dropoffAddress: req.body.dropoffAddress,
+        vehicleTypeCode: req.body.rideType || req.body.vehicleTypeCode || 'economy',
+        fareMode: req.body.fareMode || 'now',
+        sourceChannel: req.body.sourceChannel || 'voice',
+        countryCode: req.body.countryCode,
+        payWithMobilityCredit: Number(bal.mobilityCredit || 0) > 0,
+      });
+    } catch (e: any) {
+      if (!/Insufficient ride credit/i.test(String(e?.message || ''))) throw e;
+      result = await africaRailsService.book({
+        userId: req.user!.id,
+        pickupLat: Number(req.body.pickupLat),
+        pickupLng: Number(req.body.pickupLng),
+        dropoffLat: Number(req.body.dropoffLat),
+        dropoffLng: Number(req.body.dropoffLng),
+        pickupAddress: req.body.pickupAddress,
+        dropoffAddress: req.body.dropoffAddress,
+        vehicleTypeCode: req.body.rideType || req.body.vehicleTypeCode || 'economy',
+        fareMode: req.body.fareMode || 'now',
+        sourceChannel: req.body.sourceChannel || 'voice',
+        countryCode: req.body.countryCode,
+        payWithMobilityCredit: false,
+      });
+    }
 
     // Enrich confirmation for WhatsApp/voice chat UIs
     const driver = await db
@@ -343,17 +358,46 @@ async function stageChannelBooking(opts: {
 async function confirmChannelBooking(sessionKey: string) {
   const pending = await sessions.getPending(sessionKey);
   if (!pending) throw new Error('No pending booking — send your trip details first');
-  const result = await booking.createRideRequest({
-    userId: pending.userId,
-    pickupLat: pending.pickup.lat,
-    pickupLng: pending.pickup.lng,
-    dropoffLat: pending.dest.lat,
-    dropoffLng: pending.dest.lng,
-    pickupAddress: pending.origin,
-    dropoffAddress: pending.destination,
-    rideType: pending.rideType,
-    sourceChannel: pending.sourceChannel,
-  });
+  const { africaRailsService } = require('./africa-mobility-rails.routes');
+  const bal = await africaRailsService.getMobilityBalance(pending.userId).catch(() => ({
+    mobilityCredit: 0,
+    walletBalance: 0,
+  }));
+  const quoted = Number(pending.quotedPrice || 0);
+  const useCredit =
+    Number(bal.mobilityCredit || 0) > 0 &&
+    (quoted <= 0 || bal.mobilityCredit + bal.walletBalance >= quoted);
+  let result: any;
+  try {
+    result = await africaRailsService.book({
+      userId: pending.userId,
+      pickupLat: pending.pickup.lat,
+      pickupLng: pending.pickup.lng,
+      dropoffLat: pending.dest.lat,
+      dropoffLng: pending.dest.lng,
+      pickupAddress: pending.origin,
+      dropoffAddress: pending.destination,
+      vehicleTypeCode: pending.rideType || 'economy',
+      fareMode: 'now',
+      sourceChannel: pending.sourceChannel || 'whatsapp',
+      payWithMobilityCredit: useCredit,
+    });
+  } catch (e: any) {
+    if (!/Insufficient ride credit/i.test(String(e?.message || ''))) throw e;
+    result = await africaRailsService.book({
+      userId: pending.userId,
+      pickupLat: pending.pickup.lat,
+      pickupLng: pending.pickup.lng,
+      dropoffLat: pending.dest.lat,
+      dropoffLng: pending.dest.lng,
+      pickupAddress: pending.origin,
+      dropoffAddress: pending.destination,
+      vehicleTypeCode: pending.rideType || 'economy',
+      fareMode: 'now',
+      sourceChannel: pending.sourceChannel || 'whatsapp',
+      payWithMobilityCredit: false,
+    });
+  }
   await sessions.clearPending(sessionKey);
   return { ...result, quotedPrice: pending.quotedPrice, fare: pending.quotedPrice };
 }
@@ -399,6 +443,36 @@ channelWebhooksRouter.post('/whatsapp', async (req: any, res: Response) => {
         message: `Booked. Ride ${result.rideId || result.id}. Driver matching now.`,
         data: result,
       });
+    }
+
+    const rateMatch = String(body).trim().match(/^RATE\s+(\S+)\s+([1-5])(?:\s+(.*))?$/i);
+    if (rateMatch) {
+      try {
+        const { ReviewAutonomyService } = require('../services/review-autonomy.service');
+        const { africaRailsService } = require('./africa-mobility-rails.routes');
+        const reviews = new ReviewAutonomyService(db);
+        const data = await reviews.submitRating({
+          rideId: rateMatch[1],
+          raterId: user.id,
+          raterRole: 'customer',
+          rating: Number(rateMatch[2]),
+          comment: rateMatch[3] || undefined,
+        });
+        await africaRailsService.logChannelEvent({
+          channel: 'whatsapp',
+          userId: user.id,
+          rideId: rateMatch[1],
+          eventType: 'rated',
+          payload: { rating: Number(rateMatch[2]) },
+        });
+        return res.json({
+          status: 'success',
+          message: `Thanks — rated ${rateMatch[2]}/5`,
+          data,
+        });
+      } catch (e: any) {
+        return res.json({ status: 'error', message: e.message || 'Could not rate' });
+      }
     }
 
     const staged = await stageChannelBooking({

@@ -35,15 +35,36 @@ const DashboardPage: React.FC = () => {
   } | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [promise, setPromise] = useState<any>(null);
+  const [fareMode, setFareMode] = useState<'now' | 'share'>('now');
+  const [payWithCredit, setPayWithCredit] = useState(false);
+  const [mobilityCredit, setMobilityCredit] = useState(0);
+  const [catalogHint, setCatalogHint] = useState('');
 
   useEffect(() => {
     const API =
       (import.meta as any).env?.VITE_API_URL ||
       process.env.REACT_APP_API_URL ||
       'http://localhost:3000/api/v1';
+    const token =
+      localStorage.getItem('movr_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('accessToken');
     fetch(`${API}/trust/promise`)
       .then((r) => r.json())
       .then((j) => setPromise(j?.data || null))
+      .catch(() => undefined);
+    fetch(`${API}/rails/catalog?countryCode=GH`)
+      .then((r) => r.json())
+      .then((j) => {
+        const rails = (j?.data?.rails || []).slice(0, 4).join(' · ');
+        if (rails) setCatalogHint(rails);
+      })
+      .catch(() => undefined);
+    fetch(`${API}/rails/credit`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.json())
+      .then((j) => setMobilityCredit(Number(j?.data?.mobilityCredit || 0)))
       .catch(() => undefined);
   }, []);
 
@@ -107,19 +128,63 @@ const DashboardPage: React.FC = () => {
     }
     setIsRequesting(true);
     try {
-      const response = await ridesApi.requestRide({
-        pickupLat: pickup.latitude,
-        pickupLng: pickup.longitude,
-        dropoffLat: dropoff.latitude,
-        dropoffLng: dropoff.longitude,
-        rideType: 'standard',
-        pickupAddress,
-        dropoffAddress,
+      const API =
+        (import.meta as any).env?.VITE_API_URL ||
+        process.env.REACT_APP_API_URL ||
+        'http://localhost:3000/api/v1';
+      const token =
+        localStorage.getItem('movr_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('accessToken');
+      if (fareMode === 'share') {
+        const res = await fetch(`${API}/rails/share/join`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            pickupLat: pickup.latitude,
+            pickupLng: pickup.longitude,
+            dropoffLat: dropoff.latitude,
+            dropoffLng: dropoff.longitude,
+            pickupAddress,
+            dropoffAddress,
+            payWithMobilityCredit: payWithCredit,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || 'Share pool failed');
+        toast.success('Joined shared pool');
+        const rideId = json.data?.booking?.rideId || json.data?.booking?.id || json.data?.pool?.id;
+        navigate(rideId ? `/ride/active/${rideId}` : '/history');
+        return;
+      }
+      const res = await fetch(`${API}/rails/book`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          pickupLat: pickup.latitude,
+          pickupLng: pickup.longitude,
+          dropoffLat: dropoff.latitude,
+          dropoffLng: dropoff.longitude,
+          pickupAddress,
+          dropoffAddress,
+          vehicleTypeCode: 'economy',
+          fareMode: 'now',
+          payWithMobilityCredit: payWithCredit,
+          sourceChannel: 'app',
+        }),
       });
-      toast.success('Ride requested! Finding a driver...');
-      navigate(`/ride/active/${response.data.data.rideId}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Booking failed');
+      toast.success(payWithCredit ? 'Ride booked with ride credit' : 'Ride requested! Finding a driver...');
+      navigate(`/ride/active/${json.data?.rideId || json.data?.id}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to request ride');
+      toast.error(error.response?.data?.message || error.message || 'Failed to request ride');
     } finally {
       setIsRequesting(false);
     }
@@ -206,13 +271,51 @@ const DashboardPage: React.FC = () => {
               />
             </div>
 
+            <div className="flex gap-2">
+              {(
+                [
+                  { id: 'now' as const, label: 'Now' },
+                  { id: 'share' as const, label: 'Share pool' },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setFareMode(m.id)}
+                  className={`flex-1 rounded-full py-2 text-xs font-semibold ${
+                    fareMode === m.id
+                      ? 'bg-gradient-to-r from-[#6345ED] to-[#3B5CFF]'
+                      : 'bg-[#1A1A1A] text-zinc-400'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-xs text-zinc-400 px-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={payWithCredit}
+                onChange={(e) => setPayWithCredit(e.target.checked)}
+                disabled={fareMode === 'share'}
+              />
+              Pay with ride credit ({mobilityCredit.toLocaleString()})
+            </label>
+            {catalogHint ? (
+              <p className="text-[10px] text-zinc-600 px-1">Rails: {catalogHint}</p>
+            ) : null}
+
             <button
               type="button"
               onClick={handleConfirmPickup}
               disabled={isRequesting}
               className="w-full rounded-full py-3.5 font-semibold text-white bg-gradient-to-r from-[#6345ED] to-[#3B5CFF] disabled:opacity-50"
             >
-              {isRequesting ? 'Requesting...' : 'Confirm pickup'}
+              {isRequesting
+                ? 'Requesting...'
+                : fareMode === 'share'
+                  ? 'Join share pool'
+                  : 'Confirm pickup'}
             </button>
             {promise ? (
               <p className="text-[11px] text-zinc-500 leading-relaxed px-1">
