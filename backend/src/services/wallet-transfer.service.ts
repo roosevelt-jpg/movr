@@ -287,7 +287,7 @@ export class WalletTransferService {
     }
     const claimUrl =
       process.env.CLAIM_TRANSFER_URL ||
-      `${process.env.PUBLIC_WEB_URL || 'https://movr.io'}/claim/${claimCode}`;
+      `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/claim/${claimCode}`;
     const twilio = require('twilio')(sid, token);
     await twilio.messages.create({
       from,

@@ -173,8 +173,52 @@ export class AfricaMobilityRailsService {
     };
   }
 
-  async spendMobilityCredit(userId: string, amount: number, reference: string) {
+  /** Resolve who pays: rider wallet first, else an active family circle owner. */
+  async resolveRidePayer(userId: string, amount: number) {
     const bal = await this.getMobilityBalance(userId);
+    if (bal.mobilityCredit + bal.walletBalance >= amount) {
+      return { payerId: userId, viaFamily: false as const, membership: null as any, currency: bal.currency };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const memberships = await this.db
+      .query(
+        `SELECT m.*, c.owner_id, c.currency AS circle_currency
+         FROM wallet_share_members m
+         JOIN wallet_share_circles c ON c.id = m.circle_id
+         WHERE m.member_id = $1 AND m.status = 'active'
+         ORDER BY m.created_at ASC`,
+        [userId]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    for (const m of memberships.rows) {
+      const spentToday =
+        m.spent_on && String(m.spent_on).slice(0, 10) === today ? Number(m.spent_today || 0) : 0;
+      const remaining = Number(m.daily_limit || 0) - spentToday;
+      if (remaining < amount) continue;
+      const ownerBal = await this.getMobilityBalance(m.owner_id);
+      if (ownerBal.mobilityCredit + ownerBal.walletBalance >= amount) {
+        return {
+          payerId: m.owner_id,
+          viaFamily: true as const,
+          membership: m,
+          currency: ownerBal.currency || m.circle_currency || 'GHS',
+        };
+      }
+    }
+
+    throw new Error(
+      `Insufficient mobility credit (need ${amount} ${bal.currency}, have ${
+        bal.mobilityCredit + bal.walletBalance
+      })`
+    );
+  }
+
+  async spendMobilityCredit(userId: string, amount: number, reference: string) {
+    const resolved = await this.resolveRidePayer(userId, amount);
+    const payerId = resolved.payerId;
+    const bal = await this.getMobilityBalance(payerId);
     if (bal.mobilityCredit + bal.walletBalance < amount) {
       throw new Error('Insufficient mobility credit');
     }
@@ -186,16 +230,49 @@ export class AfricaMobilityRailsService {
          balance_fiat = balance_fiat - $3,
          last_updated = NOW()
        WHERE user_id = $1`,
-      [userId, fromCredit, fromWallet]
+      [payerId, fromCredit, fromWallet]
     );
     await this.db
       .query(
         `INSERT INTO mobility_credit_ledger (user_id, amount, currency, source, reference)
          VALUES ($1,$2,$3,'ride_spend',$4)`,
-        [userId, -amount, bal.currency, reference]
+        [payerId, -amount, bal.currency, reference]
       )
       .catch(() => undefined);
-    return { spent: amount, fromCredit, fromWallet };
+
+    if (resolved.viaFamily && resolved.membership) {
+      const today = new Date().toISOString().slice(0, 10);
+      const prevSpent =
+        resolved.membership.spent_on &&
+        String(resolved.membership.spent_on).slice(0, 10) === today
+          ? Number(resolved.membership.spent_today || 0)
+          : 0;
+      await this.db
+        .query(
+          `UPDATE wallet_share_members SET
+             spent_today = $2,
+             spent_on = $3::date
+           WHERE id = $1`,
+          [resolved.membership.id, prevSpent + amount, today]
+        )
+        .catch(() => undefined);
+      await this.db
+        .query(
+          `INSERT INTO mobility_credit_ledger (user_id, amount, currency, source, reference)
+           VALUES ($1,$2,$3,'family_spend',$4)`,
+          [userId, -amount, bal.currency, `${reference}:circle:${resolved.membership.circle_id}`]
+        )
+        .catch(() => undefined);
+    }
+
+    return {
+      spent: amount,
+      fromCredit,
+      fromWallet,
+      payerId,
+      viaFamily: resolved.viaFamily,
+      circleId: resolved.membership?.circle_id || null,
+    };
   }
 
   /** Multi-modal quote: vehicles + fare modes + corridor caps. */
@@ -352,6 +429,8 @@ export class AfricaMobilityRailsService {
     sourceChannel?: string;
     countryCode?: string;
     payWithMobilityCredit?: boolean;
+    /** Hold ride until share pool dispatches one vehicle. */
+    skipAutoAssign?: boolean;
   }) {
     const quote = await this.quote({
       pickupLat: input.pickupLat,
@@ -371,14 +450,8 @@ export class AfricaMobilityRailsService {
           0
       );
       if (fare > 0) {
-        const bal = await this.getMobilityBalance(input.userId);
-        if (bal.mobilityCredit + bal.walletBalance < fare) {
-          throw new Error(
-            `Insufficient ride credit (need ${fare} ${bal.currency}, have ${
-              bal.mobilityCredit + bal.walletBalance
-            })`
-          );
-        }
+        // Includes family-circle owner wallet when member balance is short
+        await this.resolveRidePayer(input.userId, fare);
       }
     }
 
@@ -395,6 +468,7 @@ export class AfricaMobilityRailsService {
       fareMode: input.fareMode || 'now',
       sourceChannel: (input.sourceChannel as any) || 'app',
       countryCode: input.countryCode,
+      skipAutoAssign: Boolean(input.skipAutoAssign || input.fareMode === 'share'),
     });
 
     // Apply corridor caps post-create if needed
@@ -428,14 +502,23 @@ export class AfricaMobilityRailsService {
     if (input.payWithMobilityCredit && result.rideId) {
       const fare = Number(opt?.riderFare ?? result.estimatedFare ?? 0);
       try {
-        await this.spendMobilityCredit(input.userId, fare, `RIDE-${result.rideId}`);
+        const spend = await this.spendMobilityCredit(input.userId, fare, `RIDE-${result.rideId}`);
         await this.db
           .query(
             `UPDATE rides SET
                payment_method = 'mobility_credit',
                pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
              WHERE id = $1`,
-            [result.rideId, JSON.stringify({ paidWithMobilityCredit: true, fare })]
+            [
+              result.rideId,
+              JSON.stringify({
+                paidWithMobilityCredit: true,
+                fare,
+                payerId: spend.payerId,
+                viaFamily: spend.viaFamily,
+                circleId: spend.circleId,
+              }),
+            ]
           )
           .catch(() => undefined);
       } catch (e: any) {
@@ -858,7 +941,10 @@ export class AfricaMobilityRailsService {
           JSON.stringify({ phone: input.phone || null }),
         ]
       );
-      if (process.env.NODE_ENV !== 'production' || process.env.AUTO_COMPLETE_ALT_TOPUPS === 'true') {
+      // Never auto-complete airtime/salary in production — even if AUTO_COMPLETE is set
+      const allowDemoAlt =
+        process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_TOPUPS !== 'false';
+      if (allowDemoAlt) {
         await this.topUpMobilityCredit({
           userId: input.userId,
           amount,
@@ -875,6 +961,7 @@ export class AfricaMobilityRailsService {
           source,
           intent: { ...intent.rows[0], status: 'completed' },
           balance: await this.getMobilityBalance(input.userId),
+          demo: true,
         };
       }
       return { mode: 'pending_provider', intent: intent.rows[0] };
@@ -883,9 +970,9 @@ export class AfricaMobilityRailsService {
     const { PaymentService } = require('./payment.service');
     const payments = new PaymentService(this.db);
 
-    // Demo / local: complete MoMo/card instantly when gateways are not configured
+    // Demo MoMo/card only outside production. Live keys required for production.
     const demoComplete =
-      process.env.NODE_ENV !== 'production' || process.env.AUTO_COMPLETE_ALT_TOPUPS === 'true';
+      process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_TOPUPS !== 'false';
 
     let init: any;
     try {
@@ -894,7 +981,7 @@ export class AfricaMobilityRailsService {
         amount,
         currency,
         paymentType: 'mobility' as any,
-        email: input.email || `user-${input.userId.slice(0, 8)}@movr.local`,
+        email: input.email || `user-${input.userId.slice(0, 8)}@mymovr.io`,
         fullName: 'Movr Rider',
         phone: input.phone,
         countryCode: input.countryCode || 'GH',
@@ -939,7 +1026,10 @@ export class AfricaMobilityRailsService {
           demo: true,
         };
       }
-      throw new Error(init?.message || 'Payment gateway unavailable — configure Paystack/Flutterwave');
+      throw new Error(
+        init?.message ||
+          'Payment gateway unavailable — set live Paystack/Flutterwave keys (Integrations Hub or env)'
+      );
     }
 
     const ref = init.reference || init.txRef || init.data?.reference;
@@ -972,6 +1062,27 @@ export class AfricaMobilityRailsService {
     };
   }
 
+  private async sharePoolSettings() {
+    try {
+      const r = await this.db.query(
+        `SELECT value FROM platform_settings WHERE key = 'share_pool_dispatch' LIMIT 1`
+      );
+      const v = r.rows[0]?.value;
+      const parsed = typeof v === 'string' ? JSON.parse(v) : v || {};
+      return {
+        waitSeconds: Number(parsed.waitSeconds ?? 180),
+        maxRiders: Number(parsed.maxRiders ?? 3),
+        equalFareSplit: parsed.equalFareSplit !== false,
+      };
+    } catch {
+      return { waitSeconds: 180, maxRiders: 3, equalFareSplit: true };
+    }
+  }
+
+  /**
+   * Join (or open) a share pool. Rides stay unmatched until the pool is full
+   * or match_after elapses — then one driver is assigned and fares are split.
+   */
   async joinSharePool(input: {
     userId: string;
     pickupLat: number;
@@ -984,10 +1095,12 @@ export class AfricaMobilityRailsService {
     payWithMobilityCredit?: boolean;
   }) {
     const country = input.countryCode || 'GH';
+    const settings = await this.sharePoolSettings();
     const open = await this.db.query(
       `SELECT * FROM share_pools
-       WHERE status IN ('open','matching') AND rider_count < max_riders
+       WHERE status IN ('open','waiting','matching') AND rider_count < max_riders
          AND COALESCE(country_code,'GH') = $1
+         AND driver_id IS NULL
        ORDER BY created_at ASC LIMIT 40`,
       [country]
     );
@@ -1009,14 +1122,27 @@ export class AfricaMobilityRailsService {
     if (!pool) {
       const created = await this.db.query(
         `INSERT INTO share_pools (
-           origin_lat, origin_lng, dest_lat, dest_lng, country_code, status, rider_count
-         ) VALUES ($1,$2,$3,$4,$5,'open',0) RETURNING *`,
-        [input.pickupLat, input.pickupLng, input.dropoffLat, input.dropoffLng, country]
+           origin_lat, origin_lng, dest_lat, dest_lng, country_code, status, rider_count,
+           max_riders, match_after, matching_started_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,'waiting',0,$6,
+           NOW() + ($7::text || ' seconds')::interval, NOW()
+         ) RETURNING *`,
+        [
+          input.pickupLat,
+          input.pickupLng,
+          input.dropoffLat,
+          input.dropoffLng,
+          country,
+          settings.maxRiders,
+          String(settings.waitSeconds),
+        ]
       );
       pool = created.rows[0];
     }
 
-      const booked = await this.book({
+    // Hold auto-assign; debit happens at pool dispatch with split fare
+    const booked = await this.book({
       userId: input.userId,
       pickupLat: input.pickupLat,
       pickupLng: input.pickupLng,
@@ -1028,14 +1154,18 @@ export class AfricaMobilityRailsService {
       fareMode: 'share',
       sourceChannel: 'app',
       countryCode: country,
-      payWithMobilityCredit: Boolean(input.payWithMobilityCredit),
+      payWithMobilityCredit: false,
+      skipAutoAssign: true,
     });
 
     const rideId = booked.rideId || booked.id;
     await this.db.query(
-      `INSERT INTO share_pool_members (pool_id, user_id, ride_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (pool_id, user_id) DO UPDATE SET ride_id = EXCLUDED.ride_id`,
+      `INSERT INTO share_pool_members (
+         pool_id, user_id, ride_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, pay_with_credit
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (pool_id, user_id) DO UPDATE SET
+         ride_id = EXCLUDED.ride_id,
+         pay_with_credit = EXCLUDED.pay_with_credit`,
       [
         pool.id,
         input.userId,
@@ -1044,6 +1174,7 @@ export class AfricaMobilityRailsService {
         input.pickupLng,
         input.dropoffLat,
         input.dropoffLng,
+        Boolean(input.payWithMobilityCredit),
       ]
     );
 
@@ -1051,12 +1182,222 @@ export class AfricaMobilityRailsService {
       `UPDATE share_pools SET
          rider_count = rider_count + 1,
          ride_ids = array_append(COALESCE(ride_ids,'{}'), $2::uuid),
-         status = CASE WHEN rider_count + 1 >= max_riders THEN 'full' ELSE 'matching' END
+         status = CASE
+           WHEN rider_count + 1 >= max_riders THEN 'full'
+           ELSE 'waiting'
+         END
        WHERE id = $1 RETURNING *`,
       [pool.id, rideId]
     );
+    pool = updated.rows[0];
 
-    return { pool: updated.rows[0], booking: booked };
+    let dispatch: any = null;
+    if (Number(pool.rider_count) >= Number(pool.max_riders)) {
+      dispatch = await this.dispatchSharePool(pool.id);
+    }
+
+    return {
+      pool: dispatch?.pool || pool,
+      booking: booked,
+      waitingForRiders: !dispatch,
+      sharedVehicle: Boolean(dispatch?.driverId),
+      fareSplit: dispatch?.fareSplit || null,
+      dispatch,
+    };
+  }
+
+  /** Assign one driver to every ride in the pool and apply equal fare split. */
+  async dispatchSharePool(poolId: string) {
+    const poolRes = await this.db.query(`SELECT * FROM share_pools WHERE id = $1`, [poolId]);
+    const pool = poolRes.rows[0];
+    if (!pool) throw new Error('Pool not found');
+    if (pool.driver_id) {
+      return { pool, driverId: pool.driver_id, alreadyDispatched: true };
+    }
+    if (Number(pool.rider_count || 0) < 1) {
+      return { pool, skipped: true, reason: 'empty' };
+    }
+
+    const members = await this.db.query(
+      `SELECT m.*, r.estimated_fare, r.driver_earnings, r.user_id AS rider_user_id,
+              r.pickup_latitude, r.pickup_longitude
+       FROM share_pool_members m
+       LEFT JOIN rides r ON r.id = m.ride_id
+       WHERE m.pool_id = $1
+       ORDER BY m.created_at ASC`,
+      [poolId]
+    );
+    const rows = members.rows.filter((m: any) => m.ride_id);
+    if (!rows.length) return { pool, skipped: true, reason: 'no_rides' };
+
+    const n = rows.length;
+    const settings = await this.sharePoolSettings();
+    const soloFares = rows.map((m: any) => Number(m.estimated_fare || 0));
+    const soloSum = soloFares.reduce((a: number, b: number) => a + b, 0) || 0;
+    const discount = n >= 3 ? 0.65 : n === 2 ? 0.75 : 1;
+    const perRider =
+      settings.equalFareSplit && soloSum > 0
+        ? Math.round(((soloSum / n) * discount + Number.EPSILON) * 100) / 100
+        : null;
+    const totalFare = perRider != null ? Math.round(perRider * n * 100) / 100 : soloSum;
+    const baseDriver = Math.max(
+      ...rows.map((m: any) => Number(m.driver_earnings || m.estimated_fare || 0)),
+      0
+    );
+    const driverPayout = Math.round(baseDriver * (1 + 0.25 * (n - 1)) * 100) / 100;
+
+    const avgLat =
+      rows.reduce(
+        (s: number, m: any) => s + Number(m.pickup_lat || m.pickup_latitude || pool.origin_lat),
+        0
+      ) / n;
+    const avgLng =
+      rows.reduce(
+        (s: number, m: any) => s + Number(m.pickup_lng || m.pickup_longitude || pool.origin_lng),
+        0
+      ) / n;
+
+    const drivers = await this.matching.findBestDrivers(avgLat, avgLng, 'shared');
+    const driverId = drivers?.[0]?.id || drivers?.[0]?.driver_id || drivers?.[0]?.user_id;
+    if (!driverId) {
+      await this.db.query(
+        `UPDATE share_pools SET status = 'matching', matching_started_at = COALESCE(matching_started_at, NOW())
+         WHERE id = $1`,
+        [poolId]
+      );
+      // Release rides back into normal matching so they are not stuck forever
+      for (const m of rows) {
+        await this.db
+          .query(
+            `UPDATE rides SET status = 'requested',
+               pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || '{"poolWaiting":false,"poolMatching":true}'::jsonb
+             WHERE id = $1 AND driver_id IS NULL`,
+            [m.ride_id]
+          )
+          .catch(() => undefined);
+        try {
+          await this.matching.findBestDrivers(
+            Number(m.pickup_lat || m.pickup_latitude),
+            Number(m.pickup_lng || m.pickup_longitude),
+            'shared'
+          );
+        } catch {
+          /* */
+        }
+      }
+      return { pool, skipped: true, reason: 'no_driver', fareSplit: { perRider, totalFare, driverPayout } };
+    }
+
+    for (const m of rows) {
+      const fareShare = perRider != null ? perRider : Number(m.estimated_fare || 0);
+      await this.db
+        .query(
+          `UPDATE rides SET
+             estimated_fare = $2,
+             driver_earnings = $3,
+             fare_mode = 'share',
+             pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $4::jsonb
+           WHERE id = $1`,
+          [
+            m.ride_id,
+            fareShare,
+            Math.round((driverPayout / n) * 100) / 100,
+            JSON.stringify({
+              sharePoolId: poolId,
+              fareShare,
+              sharedVehicle: true,
+              poolRiders: n,
+            }),
+          ]
+        )
+        .catch(() => undefined);
+
+      await this.db
+        .query(`UPDATE share_pool_members SET fare_share = $2, status = 'dispatched' WHERE id = $1`, [
+          m.id,
+          fareShare,
+        ])
+        .catch(() => undefined);
+
+      await this.matching.assignRideToDriver(m.ride_id, driverId);
+
+      if (m.pay_with_credit && fareShare > 0) {
+        try {
+          const spend = await this.spendMobilityCredit(
+            m.user_id || m.rider_user_id,
+            fareShare,
+            `POOL-${poolId}-${m.ride_id}`
+          );
+          await this.db
+            .query(
+              `UPDATE rides SET
+                 payment_method = 'mobility_credit',
+                 pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
+               WHERE id = $1`,
+              [
+                m.ride_id,
+                JSON.stringify({
+                  paidWithMobilityCredit: true,
+                  fare: fareShare,
+                  payerId: spend.payerId,
+                  viaFamily: spend.viaFamily,
+                }),
+              ]
+            )
+            .catch(() => undefined);
+        } catch (e: any) {
+          this.logger.warn(`pool credit fail ${m.ride_id}: ${e?.message || e}`);
+        }
+      }
+    }
+
+    const updated = await this.db.query(
+      `UPDATE share_pools SET
+         driver_id = $2,
+         status = 'en_route',
+         total_fare = $3,
+         per_rider_fare = $4,
+         driver_payout = $5,
+         closed_at = NULL
+       WHERE id = $1 RETURNING *`,
+      [poolId, driverId, totalFare, perRider, driverPayout]
+    );
+
+    return {
+      pool: updated.rows[0],
+      driverId,
+      fareSplit: { perRider, totalFare, driverPayout, riders: n, discount },
+    };
+  }
+
+  /** Job: dispatch full pools and timed-out waiting pools (same vehicle + fare split). */
+  async processSharePools() {
+    const due = await this.db
+      .query(
+        `SELECT id FROM share_pools
+         WHERE driver_id IS NULL
+           AND status IN ('open','waiting','matching','full')
+           AND rider_count >= 1
+           AND (
+             rider_count >= max_riders
+             OR match_after IS NULL
+             OR match_after <= NOW()
+           )
+         ORDER BY created_at ASC
+         LIMIT 20`
+      )
+      .catch(() => ({ rows: [] as any[] }));
+
+    let dispatched = 0;
+    for (const row of due.rows) {
+      try {
+        const r = await this.dispatchSharePool(row.id);
+        if (r?.driverId && !r.alreadyDispatched) dispatched += 1;
+      } catch (e: any) {
+        this.logger.warn(`share pool ${row.id}: ${e?.message || e}`);
+      }
+    }
+    return { checked: due.rows.length, dispatched };
   }
 
   async listRemittanceCorridors() {

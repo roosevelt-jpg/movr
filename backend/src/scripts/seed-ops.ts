@@ -64,7 +64,7 @@ async function main() {
        is_active = true,
        is_verified = true,
        updated_at = NOW()`,
-    ['admin@movr.app', '+233200000001', hash]
+    ['admin@mymovr.io', '+233200000001', hash]
   );
 
   await pool
@@ -72,7 +72,7 @@ async function main() {
       `INSERT INTO admin_roles (user_id, role)
        SELECT id, v.role
        FROM users, (VALUES ('super_admin'), ('trust_and_safety'), ('ops')) AS v(role)
-       WHERE lower(email) = 'admin@movr.app'
+       WHERE lower(email) = 'admin@mymovr.io'
        ON CONFLICT DO NOTHING`
     )
     .catch(() => undefined);
@@ -106,7 +106,7 @@ async function main() {
     )
     .catch(() => undefined);
 
-  console.log('Seeded admin@movr.app (password from SEED_ADMIN_PASSWORD or Admin123!)');
+  console.log('Seeded admin@mymovr.io (password from SEED_ADMIN_PASSWORD or Admin123!)');
   console.log('Seeded feature flags');
   await pool.end();
 }

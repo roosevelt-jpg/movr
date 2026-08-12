@@ -141,7 +141,7 @@ class SOSEmergencyService {
       });
 
       await transporter.sendMail({
-        from: 'security@movr.io',
+        from: 'security@mymovr.io',
         to: personnel.email,
         subject: `🚨 MOVR EMERGENCY SOS #${sosData.sosId}`,
         html: `
@@ -151,7 +151,7 @@ class SOSEmergencyService {
           <p><strong>Location:</strong> <a href="https://maps.google.com?q=${sosData.location.lat},${sosData.location.lng}">Map Link</a></p>
           <p><strong>Live Video Feed:</strong> Check your dashboard</p>
           <p><strong>Video Recording ID:</strong> ${sosData.recordingId}</p>
-          <button><a href="https://movr.io/security/sos/${sosData.sosId}">View Emergency Dashboard</a></button>
+          <button><a href="${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/security/sos/${sosData.sosId}">View Emergency Dashboard</a></button>
         `,
       });
 
@@ -231,7 +231,7 @@ class SOSEmergencyService {
         [recordingId, `emergency_${rideId}`, streamToken, new Date()]
       );
 
-      return `https://movr.io/emergency-stream/${rideId}?token=${streamToken}`;
+      return `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/emergency-stream/${rideId}?token=${streamToken}`;
     } catch (error) {
       console.error('❌ Failed to create emergency video stream:', error);
       return '';

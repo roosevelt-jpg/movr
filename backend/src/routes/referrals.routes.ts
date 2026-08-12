@@ -54,7 +54,8 @@ referralsRouter.get('/my-code', async (req: AuthRequest, res: Response) => {
       status: 'success',
       data: {
         code: row.rows[0].code,
-        shareLink: `https://movr.io/r/${row.rows[0].code}`,
+        shareLink: `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/r/${row.rows[0].code}`,
+        shareUrl: `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/r/${row.rows[0].code}`,
       },
     });
   } catch (error: any) {

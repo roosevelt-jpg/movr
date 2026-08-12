@@ -122,7 +122,7 @@ export default function AdminShell({
   const location = useLocation();
   const navigate = useNavigate();
   const { mode, setPreference } = useTheme();
-  const email = localStorage.getItem('movr_admin_email') || 'admin@movr.app';
+  const email = localStorage.getItem('movr_admin_email') || 'admin@mymovr.io';
   const initial = (email.trim()[0] || 'A').toUpperCase();
 
   const [navOpen, setNavOpen] = useState(false);

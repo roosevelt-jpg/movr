@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Movr",
+    "slug": "movr-customer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "android": {
+      "package": "io.movr.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "mymovr.io", "pathPrefix": "/trip" },
+            { "scheme": "movr" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "io.movr.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Movr uses your location to set pickup points and match nearby drivers.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Movr uses location during active trips for safety and navigation.",
+        "NSCameraUsageDescription": "Movr uses the camera for profile photos and support attachments.",
+        "NSMicrophoneUsageDescription": "Movr uses the microphone for optional voice booking.",
+        "NSPhotoLibraryUsageDescription": "Movr needs photo access for profile and KYC uploads."
+      }
+    },
+    "extra": {
+      "eas": { "projectId": "replace-with-eas-project-id" },
+      "apiUrl": "https://api.mymovr.io/api/v1",
+      "webUrl": "https://mymovr.io",
+      "privacyUrl": "https://mymovr.io/privacy",
+      "termsUrl": "https://mymovr.io/terms",
+      "deleteAccountUrl": "https://mymovr.io/delete-account"
+    },
+    "plugins": []
+  }
+}

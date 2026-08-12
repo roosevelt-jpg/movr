@@ -95,11 +95,11 @@ export default function SignupScreen({
 
       <Text style={styles.legal}>
         By continuing, you agree to Movr's{' '}
-        <Text style={styles.legalLink} onPress={() => Linking.openURL('https://movr.io/terms')}>
+        <Text style={styles.legalLink} onPress={() => Linking.openURL('https://mymovr.io/terms')}>
           Terms of Service
         </Text>{' '}
         and{' '}
-        <Text style={styles.legalLink} onPress={() => Linking.openURL('https://movr.io/privacy')}>
+        <Text style={styles.legalLink} onPress={() => Linking.openURL('https://mymovr.io/privacy')}>
           Privacy Policy
         </Text>
         .

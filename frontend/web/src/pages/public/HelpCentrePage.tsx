@@ -158,11 +158,11 @@ export default function HelpCentrePage() {
           </span>
           <span className="w-2 h-2 rounded-full bg-green-500" />
         </Link>
-        <a href="mailto:support@movr.app" className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3.5">
+        <a href="mailto:support@mymovr.io" className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3.5">
           <span className="text-xl">✉️</span>
           <span className="flex-1">
             <span className="block font-bold">Email Support</span>
-            <span className="text-xs text-zinc-500">support@movr.app</span>
+            <span className="text-xs text-zinc-500">support@mymovr.io</span>
           </span>
         </a>
         <button type="button" onClick={raise} className="w-full flex items-center gap-3 rounded-xl bg-zinc-900 p-3.5 text-left">

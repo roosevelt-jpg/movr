@@ -216,7 +216,7 @@ app.get('/', (req: Request, res: Response) => {
     name: 'MOVR Platform API',
     version: '1.0.0',
     status: 'running',
-    docs: 'https://docs.movr.io/api'
+    docs: 'https://docs.mymovr.io/api'
   });
 });
 

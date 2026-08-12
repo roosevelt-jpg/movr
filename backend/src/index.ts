@@ -2003,7 +2003,7 @@ app.get('/api/v1/rides/:id', authenticateToken, async (req: AuthRequest, res: Ex
       { key: 'dropoff', label: 'Drop off', done: status === 'completed', active: false },
     ];
     const shareToken = `trip-${publicRef}`;
-    const shareUrl = `https://movr.app/t/${shareToken}`;
+    const shareUrl = `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/t/${shareToken}`;
 
     res.status(200).json({
       status: 'success',

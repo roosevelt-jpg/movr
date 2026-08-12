@@ -366,7 +366,7 @@ deliveriesRouter.get(
           pickup: d.pickup_address,
           dropoff: d.dropoff_address,
           timeline,
-          shareUrl: `https://movr.app/track/${d.public_ref || d.id}`,
+          shareUrl: `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/track/${d.public_ref || d.id}`,
         },
       });
     } catch (error: any) {
@@ -382,7 +382,7 @@ deliveriesRouter.post(
     try {
       const deliveryId = req.params.id;
       const token = `trk_${Math.random().toString(36).slice(2, 10)}`;
-      const shareUrl = `https://movr.app/track/${token}`;
+      const shareUrl = `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/track/${token}`;
       await db
         .query(
           `INSERT INTO delivery_share_links (delivery_id, token, share_url, expires_at)

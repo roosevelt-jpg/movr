@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { DatabaseService } from '../services/database.service';
 import { CmsService } from '../services/cms.service';
+import { PLAYSTORE_CMS_PAGES } from './cms-playstore-pages';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
@@ -21,6 +22,7 @@ export const CMS_SEED: Array<{
   slug: string;
   title: string;
   status: string;
+  meta?: Record<string, any>;
   sections: Array<{ type: string; payload: Record<string, any> }>;
 }> = [
   {
@@ -91,6 +93,8 @@ export const CMS_SEED: Array<{
                 { label: 'Safety', href: '/help' },
                 { label: 'Terms of Service', href: '/terms' },
                 { label: 'Privacy Policy', href: '/privacy' },
+                { label: 'Delete account', href: '/delete-account' },
+                { label: 'Refunds', href: '/refund-policy' },
               ],
             },
           ],
@@ -102,7 +106,8 @@ export const CMS_SEED: Array<{
           legalLinks: [
             { label: 'Privacy', href: '/privacy' },
             { label: 'Terms', href: '/terms' },
-            { label: 'Cookies', href: '/privacy' },
+            { label: 'Cookies', href: '/cookies' },
+            { label: 'Delete account', href: '/delete-account' },
           ],
         },
       },
@@ -634,74 +639,8 @@ export const CMS_SEED: Array<{
       },
     ],
   },
-  {
-    slug: 'terms',
-    title: 'Terms of Service',
-    status: 'published',
-    sections: [
-      {
-        type: 'legal',
-        payload: {
-          heading: 'Terms of Service',
-          updatedLabel: 'Last updated July 2026',
-          clauses: [
-            {
-              title: '1. Introduction',
-              body: 'These terms govern your use of the Movr platform across ride, shop, deliver, and rental services.',
-            },
-            {
-              title: '2. Eligibility',
-              body: 'You must be verified to use certain features including payments and driving.',
-            },
-            {
-              title: '3. Payments',
-              body: 'Transactions are processed through our payment partners in accordance with local regulations.',
-            },
-            {
-              title: '4. Conduct',
-              body: 'You agree not to misuse the platform, harass other users, or attempt to circumvent safety or identity checks.',
-            },
-            {
-              title: '5. Liability',
-              body: 'Movr provides the marketplace and matching services; service providers remain responsible for their services.',
-            },
-          ],
-        },
-      },
-    ],
-  },
-  {
-    slug: 'privacy',
-    title: 'Privacy Policy',
-    status: 'published',
-    sections: [
-      {
-        type: 'legal',
-        payload: {
-          heading: 'Privacy Policy',
-          updatedLabel: 'Last updated July 2026',
-          clauses: [
-            {
-              title: '1. Data we collect',
-              body: 'Account details, location during trips, payment tokens, and device information needed to operate the service.',
-            },
-            {
-              title: '2. How we use data',
-              body: 'To match rides and deliveries, prevent fraud, improve the product, and meet legal obligations.',
-            },
-            {
-              title: '3. Sharing',
-              body: 'We share data with drivers, merchants, and payment partners only as needed to fulfill your request.',
-            },
-            {
-              title: '4. Your rights',
-              body: 'You may request access, correction, or deletion of personal data subject to local law.',
-            },
-          ],
-        },
-      },
-    ],
-  },
+  // Play Store + compliance pack (editable in Admin → Site content)
+  ...PLAYSTORE_CMS_PAGES,
   {
     slug: 'onboarding',
     title: 'Onboarding intro',
@@ -880,13 +819,19 @@ export async function seedCms(db?: DatabaseService, opts: { overwrite?: boolean 
   let updated = 0;
   for (const page of CMS_SEED) {
     const existing = await service.getPageBySlug(page.slug, { publishedOnly: false });
-    if (existing && !overwrite) {
+    const wantPack = page.meta?.playstorePack;
+    const havePack = existing?.meta?.playstorePack;
+    const adminLocked = Boolean(existing?.meta?.adminLocked);
+    const shouldRefreshPack =
+      Boolean(wantPack) && !adminLocked && existing && havePack !== wantPack;
+    if (existing && !overwrite && !shouldRefreshPack) {
       continue;
     }
     await service.upsertPage({
       slug: page.slug,
       title: page.title,
       status: page.status,
+      meta: page.meta || {},
       sections: page.sections.map((s, i) => ({
         type: s.type,
         sortOrder: i,
@@ -896,7 +841,7 @@ export async function seedCms(db?: DatabaseService, opts: { overwrite?: boolean 
     });
     if (existing) updated += 1;
     else created += 1;
-    console.log(`CMS seeded: ${page.slug}`);
+    console.log(`CMS seeded: ${page.slug}${shouldRefreshPack ? ' (playstore pack refresh)' : ''}`);
   }
 
   if (ownPool) await ownPool.end();

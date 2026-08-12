@@ -155,8 +155,16 @@ const DashboardPage: React.FC = () => {
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.message || 'Share pool failed');
-        toast.success('Joined shared pool');
-        const rideId = json.data?.booking?.rideId || json.data?.booking?.id || json.data?.pool?.id;
+        const rideId = json.data?.booking?.rideId || json.data?.booking?.id;
+        const waiting = json.data?.waitingForRiders;
+        const split = json.data?.fareSplit?.perRider;
+        toast.success(
+          waiting
+            ? 'Joined share pool — waiting for more riders for one vehicle'
+            : split
+              ? `Shared vehicle matched · ${split} each`
+              : 'Shared vehicle matched'
+        );
         navigate(rideId ? `/ride/active/${rideId}` : '/history');
         return;
       }
@@ -297,9 +305,9 @@ const DashboardPage: React.FC = () => {
                 type="checkbox"
                 checked={payWithCredit}
                 onChange={(e) => setPayWithCredit(e.target.checked)}
-                disabled={fareMode === 'share'}
               />
               Pay with ride credit ({mobilityCredit.toLocaleString()})
+              {fareMode === 'share' ? ' · charged when pool dispatches' : ''}
             </label>
             {catalogHint ? (
               <p className="text-[10px] text-zinc-600 px-1">Rails: {catalogHint}</p>

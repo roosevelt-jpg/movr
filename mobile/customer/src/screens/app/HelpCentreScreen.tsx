@@ -199,12 +199,12 @@ export default function HelpCentreScreen({
       </Pressable>
       <Pressable
         style={styles.contact}
-        onPress={() => Linking.openURL('mailto:support@movr.app').catch(() => undefined)}
+        onPress={() => Linking.openURL('mailto:support@mymovr.io').catch(() => undefined)}
       >
         <Text style={styles.contactIcon}>✉️</Text>
         <View style={{ flex: 1 }}>
           <Text style={styles.contactTitle}>Email Support</Text>
-          <Text style={styles.contactSub}>support@movr.app</Text>
+          <Text style={styles.contactSub}>support@mymovr.io</Text>
         </View>
       </Pressable>
       <Pressable style={styles.contact} onPress={raiseTicket}>

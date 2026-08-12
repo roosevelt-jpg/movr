@@ -15,6 +15,7 @@ import RentalHomeScreen from './RentalHomeScreen';
 import RentalConfirmScreen from './RentalConfirmScreen';
 import ActiveRentalScreen from './ActiveRentalScreen';
 import HomeScreen from './HomeScreen';
+import ActiveRideScreen from './ActiveRideScreen';
 import WalletScreen from './WalletScreen';
 import ProfileSettingsScreen from './ProfileSettingsScreen';
 import InboxScreen from './InboxScreen';
@@ -89,7 +90,8 @@ type Service =
   | 'receipt'
   | 'ai'
   | 'voice'
-  | 'whatsapp_ai';
+  | 'whatsapp_ai'
+  | 'active_ride';
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -138,8 +140,24 @@ export default function SuperAppHomeScreen({
   const [rentalMode, setRentalMode] = useState<'self_drive' | 'chauffeur'>('self_drive');
   const [parcelRef, setParcelRef] = useState('');
   const [receiptRideId, setReceiptRideId] = useState('');
+  const [activeRideId, setActiveRideId] = useState('');
   const [voiceBooking, setVoiceBooking] = useState(true);
   const [forYou, setForYou] = useState<any[]>([]);
+
+  useEffect(() => {
+    (globalThis as any).__MOVR_NAVIGATE_RIDE__ = (rideId: string) => {
+      if (!rideId) return;
+      setActiveRideId(String(rideId));
+      setService('active_ride');
+    };
+    return () => {
+      try {
+        delete (globalThis as any).__MOVR_NAVIGATE_RIDE__;
+      } catch {
+        /* */
+      }
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -402,6 +420,20 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <VoiceBookingScreen onBack={() => setService('hub')} />
+      </View>
+    );
+  }
+  if (service === 'active_ride') {
+    return (
+      <View style={styles.root}>
+        <ActiveRideScreen
+          rideId={activeRideId}
+          onComplete={() => {
+            setReceiptRideId(activeRideId);
+            setService('receipt');
+          }}
+          onCancelled={() => setService('hub')}
+        />
       </View>
     );
   }

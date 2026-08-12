@@ -136,6 +136,14 @@ export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => 
         });
         const json = await res.json().catch(() => ({}));
         if (json?.data?.confirmationMessage) confirmation = json.data.confirmationMessage;
+        const rideId = json?.data?.rideId || json?.data?.id;
+        if (rideId) {
+          try {
+            (globalThis as any).__MOVR_NAVIGATE_RIDE__?.(rideId);
+          } catch {
+            /* optional */
+          }
+        }
       }
     } catch {
       /* keep mockup confirmation */

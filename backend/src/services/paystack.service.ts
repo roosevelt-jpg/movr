@@ -45,6 +45,13 @@ export class PaystackService implements PaymentProvider {
 
   async initializePayment(input: InitializePaymentInput): Promise<InitializePaymentResult> {
     const reference = input.reference || `MOVR-PS-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (!this.secretKey) {
+      return {
+        success: false,
+        reference,
+        error: 'Paystack secret_key not configured (Integrations Hub or PAYSTACK_SECRET_KEY)',
+      };
+    }
     try {
       const response = await axios.post(
         `${this.baseUrl}/transaction/initialize`,

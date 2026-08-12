@@ -423,7 +423,7 @@ customerExtrasRouter.get(
           tickets: data,
           contact: {
             liveChat: { label: 'Live Chat', subtitle: 'Usually replies in 5 min', online: true },
-            email: { label: 'Email Support', subtitle: 'support@movr.app' },
+            email: { label: 'Email Support', subtitle: 'support@mymovr.io' },
             raiseTicket: { label: 'Raise a Ticket', subtitle: 'For complex issues' },
           },
         },

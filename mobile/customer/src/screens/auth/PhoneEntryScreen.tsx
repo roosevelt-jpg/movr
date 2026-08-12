@@ -108,7 +108,7 @@ export default function PhoneEntryScreen({
           style={styles.legalLink}
           onPress={() => {
             if (onTerms) onTerms();
-            else Linking.openURL('https://movr.app/terms').catch(() => undefined);
+            else Linking.openURL('https://mymovr.io/terms').catch(() => undefined);
           }}
         >
           Terms & Privacy Policy

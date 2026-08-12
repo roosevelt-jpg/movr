@@ -79,7 +79,7 @@ vercel deploy
 
 **Environment Variables to set in Vercel:**
 ```
-VITE_API_URL=https://api.movr.io/api/v1
+VITE_API_URL=https://api.mymovr.io/api/v1
 ```
 
 ### Railway/Heroku (Backend)
@@ -132,8 +132,8 @@ AWS_SECRET_ACCESS_KEY=...
 
 ### Frontend `.env`
 ```
-VITE_API_URL=https://api.movr.io/api/v1
-VITE_SOCKET_URL=wss://api.movr.io
+VITE_API_URL=https://api.mymovr.io/api/v1
+VITE_SOCKET_URL=wss://api.mymovr.io
 ```
 
 ## 📊 Monitoring

@@ -67,10 +67,16 @@ import MerchantCouponsPage from './pages/merchant/MerchantCouponsPage';
 import MerchantStakingPage from './pages/merchant/MerchantStakingPage';
 import MerchantLandingPage from './pages/public/MerchantLandingPage';
 import DriverLandingPage from './pages/public/DriverLandingPage';
+import DriverShell from './layouts/DriverShell';
+import DriverHomePage from './pages/driver/DriverHomePage';
+import DriverDestinationPage from './pages/driver/DriverDestinationPage';
+import DriverGuaranteePage from './pages/driver/DriverGuaranteePage';
+import VoiceBookingPage from './pages/app/VoiceBookingPage';
+import ChannelBookingPage from './pages/app/ChannelBookingPage';
 import DownloadAppPage from './pages/public/DownloadAppPage';
 import DynamicCmsPage from './pages/public/DynamicCmsPage';
 import AboutPage from './pages/public/AboutPage';
-import TermsPage from './pages/public/TermsPage';
+import LegalCmsPage from './pages/public/LegalCmsPage';
 import HelpCentrePage from './pages/public/HelpCentrePage';
 import HelpArticlePage from './pages/public/HelpArticlePage';
 import NoConnectionPage from './pages/public/NoConnectionPage';
@@ -147,10 +153,32 @@ const App: React.FC = () => {
               <Route path="/for-merchants" element={<MerchantLandingPage />} />
               <Route path="/drivers" element={<DriverLandingPage />} />
               <Route path="/for-drivers" element={<DriverLandingPage />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <DriverShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/driver" element={<DriverHomePage />} />
+                <Route path="/driver/destination" element={<DriverDestinationPage />} />
+                <Route path="/driver/guarantee" element={<DriverGuaranteePage />} />
+              </Route>
               <Route path="/download" element={<DownloadAppPage />} />
               <Route path="/get-app" element={<DownloadAppPage />} />
-              <Route path="/terms" element={<TermsPage />} />
-              <Route path="/privacy" element={<TermsPage />} />
+              <Route path="/terms" element={<LegalCmsPage slug="terms" />} />
+              <Route path="/privacy" element={<LegalCmsPage slug="privacy" />} />
+              <Route path="/cookies" element={<LegalCmsPage slug="cookies" />} />
+              <Route path="/delete-account" element={<LegalCmsPage slug="delete-account" />} />
+              <Route path="/data-safety" element={<LegalCmsPage slug="data-safety" />} />
+              <Route path="/app-permissions" element={<LegalCmsPage slug="app-permissions" />} />
+              <Route path="/play-store-listing" element={<LegalCmsPage slug="play-store-listing" />} />
+              <Route path="/refund-policy" element={<LegalCmsPage slug="refund-policy" />} />
+              <Route path="/community-guidelines" element={<LegalCmsPage slug="community-guidelines" />} />
+              <Route path="/child-safety" element={<LegalCmsPage slug="child-safety" />} />
+              <Route path="/driver-terms" element={<LegalCmsPage slug="driver-terms" />} />
+              <Route path="/support" element={<LegalCmsPage slug="support" />} />
+              <Route path="/contact" element={<LegalCmsPage slug="contact" />} />
               <Route path="/help" element={<HelpCentrePage />} />
               <Route path="/help/:topic" element={<HelpArticlePage />} />
               <Route path="/offline" element={<NoConnectionPage />} />
@@ -164,7 +192,6 @@ const App: React.FC = () => {
               <Route path="/bot" element={<MovrAiPage />} />
               <Route path="/channels/bot" element={<MovrAiPage />} />
               <Route path="/features" element={<LandingPage />} />
-              <Route path="/contact" element={<LandingPage />} />
               <Route path="/pages/:slug" element={<DynamicCmsPage />} />
 
               <Route element={<AuthLayout />}>
@@ -226,6 +253,9 @@ const App: React.FC = () => {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/notifications" element={<NotificationPrefsPage />} />
                 <Route path="/support" element={<SupportChatPage />} />
+                <Route path="/voice" element={<VoiceBookingPage />} />
+                <Route path="/voice/book" element={<VoiceBookingPage />} />
+                <Route path="/voice/whatsapp" element={<ChannelBookingPage />} />
               </Route>
 
               <Route path="/merchant/login" element={<MerchantLoginPage />} />

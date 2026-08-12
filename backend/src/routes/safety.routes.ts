@@ -200,7 +200,7 @@ safetyRouter.post('/share-trip', async (req: AuthRequest, res: Response) => {
       return res.json({
         status: 'success',
         data: {
-          shareUrl: `https://movr.io/trip/demo-share`,
+        shareUrl: `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/trip/demo-share`,
           message: 'No active trip — demo share link ready',
         },
       });
@@ -217,7 +217,7 @@ safetyRouter.post('/share-trip', async (req: AuthRequest, res: Response) => {
       status: 'success',
       data: {
         rideId,
-        shareUrl: `https://movr.io/trip/${token}`,
+        shareUrl: `${process.env.PUBLIC_WEB_URL || 'https://mymovr.io'}/trip/${token}`,
         token,
       },
     });
@@ -238,7 +238,7 @@ safetyRouter.post('/record-audio', async (req: AuthRequest, res: Response) => {
       const ended = await db.query(
         `UPDATE safety_audio_recordings
          SET status = 'stored', ended_at = NOW(),
-             cloud_url = COALESCE(cloud_url, 'https://cdn.movr.io/safety/' || id::text || '.m4a')
+             cloud_url = COALESCE(cloud_url, 'https://cdn.mymovr.io/safety/' || id::text || '.m4a')
          WHERE id = $1 RETURNING *`,
         [active.rows[0].id]
       );

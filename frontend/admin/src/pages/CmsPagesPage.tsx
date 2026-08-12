@@ -1729,6 +1729,12 @@ export default function CmsPagesPage() {
         <button type="button" style={styles.ghost} disabled={busy} onClick={bootstrap}>
           Ensure defaults
         </button>
+        <p style={{ fontSize: 12, opacity: 0.65, margin: '8px 0 0', maxWidth: 520 }}>
+          Play Store pack: privacy, terms, cookies, delete-account, data-safety, app-permissions,
+          play-store-listing, refunds, community guidelines, child-safety, driver-terms, support,
+          contact — edit any page then Save. Set meta.adminLocked to keep custom legal text from
+          seed refresh.
+        </p>
         <button type="button" style={styles.danger} disabled={busy} onClick={resetAll}>
           Reset to mockup
         </button>

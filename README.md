@@ -284,14 +284,15 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.
 
 Full API documentation available at:
 - Local: `http://localhost:3000/api/docs`
-- Production: `https://api.movr.io/docs`
+- Production: `https://api.mymovr.io/docs`
 
 ## Support
 
 For issues and questions:
 - GitHub Issues: [repository/issues](https://github.com/repository/issues)
-- Email: support@movr.io
-- Documentation: https://docs.movr.io
+- Email: support@mymovr.io
+- Documentation: https://docs.mymovr.io
+- Web: https://mymovr.io · Admin: https://admin.mymovr.io
 
 ## License
 

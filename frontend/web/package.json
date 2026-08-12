@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "MOVR Customer Web App - React + TypeScript",
   "private": true,
-  "homepage": "https://movr.io",
+  "homepage": "https://mymovr.io",
   "dependencies": {
     "@hookform/resolvers": "^3.3.0",
     "@react-google-maps/api": "^2.18.0",

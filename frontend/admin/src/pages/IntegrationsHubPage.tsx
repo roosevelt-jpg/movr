@@ -36,13 +36,13 @@ const SECTIONS: { title: string; keys: string[] }[] = [
   },
   {
     title: 'INFRASTRUCTURE',
-    keys: ['aws_s3', 'sentry'],
+    keys: ['aws_s3', 'sentry', 'firebase_fcm', 'expo_push', 'google_play'],
   },
 ];
 
 const SUBTITLE: Record<string, string> = {
-  paystack: 'Payments',
-  flutterwave: 'Payments',
+  paystack: 'Payments · MoMo / card',
+  flutterwave: 'Payments · MoMo / card',
   stripe: 'Payments',
   twilio: 'SMS / Voice',
   whatsapp: 'WhatsApp Business',
@@ -57,6 +57,9 @@ const SUBTITLE: Record<string, string> = {
   dvla_ghana: 'Identity verification',
   aws_s3: 'Asset storage',
   sentry: 'Error monitoring',
+  firebase_fcm: 'Android push (Play)',
+  expo_push: 'Expo push tokens',
+  google_play: 'Play Console API (optional)',
 };
 
 const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
@@ -109,6 +112,15 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: 'secret_access_key', label: 'secret_access_key' },
   ],
   sentry: [{ key: 'dsn', label: 'dsn' }],
+  firebase_fcm: [
+    { key: 'project_id', label: 'project_id' },
+    { key: 'server_key', label: 'server_key / service account JSON' },
+  ],
+  expo_push: [{ key: 'access_token', label: 'access_token' }],
+  google_play: [
+    { key: 'package_name', label: 'package_name (io.movr.app)' },
+    { key: 'service_account_json', label: 'service_account_json' },
+  ],
 };
 
 function statusBadge(status: string) {

@@ -1,6 +1,6 @@
 # Deployment checklist — staking webapp (Phase 9)
 
-## stake.movr.io (or equivalent subdomain)
+## stake.mymovr.io (or equivalent subdomain)
 
 Deploy `frontend/staking-webapp` as a **separate static site** (Vercel / Netlify / Cloudflare Pages).
 Do **not** fold it into the main `docker-compose.yml` app stack.
@@ -17,7 +17,7 @@ pnpm build
 
 | Variable | Purpose |
 |---|---|
-| `VITE_API_URL` | Backend API base, e.g. `https://api.movr.io/api/v1` |
+| `VITE_API_URL` | Backend API base, e.g. `https://api.mymovr.io/api/v1` |
 | `VITE_STAKING_POOL_ADDRESS` | Non-custodial StakingPool contract (when deployed) |
 | `VITE_DVT_TOKEN_ADDRESS` | DriveToken address |
 | `VITE_DVT_MERKLE_DISTRIBUTOR_ADDRESS` | MerkleDistributor for claim |
@@ -25,7 +25,7 @@ pnpm build
 
 ### DNS
 
-Point `stake.movr.io` → static host. CORS on the API must allow this origin for `GET /api/v1/public/staking/stats`.
+Point `stake.mymovr.io` → static host. CORS on the API must allow this origin for `GET /api/v1/public/staking/stats`.
 
 ### Notes
 

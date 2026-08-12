@@ -10,7 +10,7 @@ const API = process.env.REACT_APP_API_URL || '/api/v1';
 /** Admin login — stores JWT in movr_admin_token. */
 export default function AdminLoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@movr.app');
+  const [email, setEmail] = useState('admin@mymovr.io');
   const [password, setPassword] = useState('Admin123!');
   const [loading, setLoading] = useState(false);
   const [themeMode, setThemeMode] = useState(

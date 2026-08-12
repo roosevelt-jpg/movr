@@ -231,7 +231,7 @@ voiceRouter.post('/confirm', authenticateToken, requireCustomer, async (req: Aut
         payWithMobilityCredit: Number(bal.mobilityCredit || 0) > 0,
       });
     } catch (e: any) {
-      if (!/Insufficient ride credit/i.test(String(e?.message || ''))) throw e;
+      if (!/Insufficient (ride |mobility )?credit/i.test(String(e?.message || ''))) throw e;
       result = await africaRailsService.book({
         userId: req.user!.id,
         pickupLat: Number(req.body.pickupLat),
@@ -248,31 +248,69 @@ voiceRouter.post('/confirm', authenticateToken, requireCustomer, async (req: Aut
       });
     }
 
-    // Enrich confirmation for WhatsApp/voice chat UIs
-    const driver = await db
-      .query(
-        `SELECT u.first_name,
-                COALESCE(dv.make_model, 'Toyota Corolla') AS vehicle,
-                COALESCE(dv.license_plate, dv.plate_number, 'GR 4471-22') AS plate
-         FROM drivers d
-         JOIN users u ON u.id = d.user_id
-         LEFT JOIN driver_vehicles dv ON dv.driver_id = d.id
-         WHERE COALESCE(d.is_online, FALSE) = TRUE OR d.id IS NOT NULL
-         ORDER BY d.is_online DESC NULLS LAST, d.created_at DESC
-         LIMIT 1`
-      )
-      .catch(() => ({ rows: [] }));
-    const d = driver.rows[0];
-    const driverName = d?.first_name || 'Kwesi';
-    const vehicle = d?.vehicle || 'Toyota Corolla';
-    const plate = d?.plate || 'GR 4471-22';
+    // Enrich confirmation for WhatsApp/voice — same payload shape as app booking
+    let assigned: any = null;
+    try {
+      const rideId = result.rideId || result.id;
+      if (rideId) {
+        const rideRow = await db.query(
+          `SELECT r.id, r.status, r.estimated_fare, r.driver_id, r.fare_mode,
+                  u.first_name,
+                  COALESCE(dv.make_model, dv.vehicle_model, 'vehicle') AS vehicle,
+                  COALESCE(dv.license_plate, dv.plate_number, '') AS plate
+           FROM rides r
+           LEFT JOIN users u ON u.id = r.driver_id
+           LEFT JOIN drivers d ON d.user_id = r.driver_id
+           LEFT JOIN driver_vehicles dv ON dv.driver_id = d.id OR dv.driver_user_id = r.driver_id
+           WHERE r.id = $1`,
+          [rideId]
+        );
+        assigned = rideRow.rows[0] || null;
+      }
+    } catch {
+      assigned = null;
+    }
+
+    const driverName = assigned?.first_name || null;
+    const vehicle = assigned?.vehicle || null;
+    const plate = assigned?.plate || null;
+    const fare = Number(assigned?.estimated_fare ?? result.estimatedFare ?? 0);
+    const currency = result.currency || result.quote?.currency || 'GHS';
+    const status = assigned?.status || result.status || 'requested';
+    const rideId = result.rideId || result.id;
+
+    let confirmationMessage: string;
+    if (driverName) {
+      confirmationMessage = `✅ Booked · ${fare} ${currency}. ${driverName} is on the way${
+        vehicle ? ` in a ${vehicle}` : ''
+      }${plate ? `, ${plate}` : ''}. Ride ${String(rideId).slice(0, 8)}.`;
+    } else if (status === 'pool_waiting' || result.assignmentStatus === 'waiting_pool') {
+      confirmationMessage = `✅ Share pool joined · ~${fare} ${currency}. Waiting for more riders, then one vehicle. Ride ${String(rideId).slice(0, 8)}.`;
+    } else {
+      confirmationMessage = `✅ Ride booked · ${fare} ${currency}. Finding a nearby driver. Track ride ${String(rideId).slice(0, 8)}.`;
+    }
 
     res.status(201).json({
       status: 'success',
       data: {
         ...result,
-        confirmationMessage: `✅ Booked! ${driverName} is on the way in a ${vehicle}, ${plate}.`,
-        driver: { name: driverName, vehicle, plate },
+        rideId,
+        estimatedFare: fare,
+        currency,
+        confirmationMessage,
+        trackPath: rideId ? `/ride/active/${rideId}` : '/dashboard',
+        driver: driverName
+          ? { name: driverName, vehicle, plate }
+          : null,
+        ui: {
+          routeLabel: 'PICKUP → DESTINATION',
+          pickup: req.body.pickupAddress,
+          dropoff: req.body.dropoffAddress,
+          fare,
+          currency,
+          status,
+          cta: 'Track ride',
+        },
       },
     });
   } catch (error: any) {

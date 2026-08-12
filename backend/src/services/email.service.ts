@@ -204,7 +204,7 @@ export class EmailService {
       '',
       `Accept your invite: ${opts.acceptUrl}`,
       '',
-      `This link expires soon. If you weren't expecting this, contact security@movr.app.`,
+      `This link expires soon. If you weren't expecting this, contact security@mymovr.io.`,
     ].join('\n');
     const htmlBody = `
       <div style="font-family:Poppins,Arial,sans-serif;color:#111;line-height:1.55;max-width:560px">

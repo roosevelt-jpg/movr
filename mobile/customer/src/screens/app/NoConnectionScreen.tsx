@@ -94,7 +94,7 @@ export default function NoConnectionScreen({
         ? 'App-Prefs:root=WIFI'
         : 'https://support.google.com/android/answer/9089666';
     Linking.openURL(url).catch(() =>
-      Linking.openURL('https://movr.app/help').catch(() => undefined)
+      Linking.openURL('https://mymovr.io/help').catch(() => undefined)
     );
   };
 

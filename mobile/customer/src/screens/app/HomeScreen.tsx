@@ -308,13 +308,27 @@ export default function HomeScreen({
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMsg(
-          isShare
-            ? 'Joined shared pool'
-            : payWithCredit
-              ? 'Booked with ride credit'
-              : 'Ride requested'
-        );
+        const rideId = json.data?.booking?.rideId || json.data?.booking?.id || json.data?.rideId || json.data?.id;
+        if (isShare) {
+          const waiting = json.data?.waitingForRiders;
+          const split = json.data?.fareSplit?.perRider;
+          setMsg(
+            waiting
+              ? 'Joined share pool — waiting for riders (one vehicle)'
+              : split
+                ? `Shared vehicle · ${split} each`
+                : 'Shared vehicle matched'
+          );
+        } else {
+          setMsg(payWithCredit ? 'Booked with ride credit' : 'Ride requested');
+        }
+        if (rideId) {
+          try {
+            (globalThis as any).__MOVR_NAVIGATE_RIDE__?.(rideId);
+          } catch {
+            /* optional host nav */
+          }
+        }
       } else setMsg(json.message || 'Ride queued');
     } catch (e: any) {
       setMsg(e.message || 'Could not confirm');
@@ -462,13 +476,15 @@ export default function HomeScreen({
       <Pressable
         onPress={() => setPayWithCredit((v) => !v)}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}
-        disabled={fareMode === 'share' || selected === 'shared'}
       >
         <Text style={{ color: payWithCredit ? '#A855F7' : '#71717A', fontSize: 18 }}>
           {payWithCredit ? '☑' : '☐'}
         </Text>
         <Text style={{ color: '#A1A1AA', fontSize: 13, flex: 1 }}>
           Pay with ride credit ({formatCurrency(mobilityCredit, currency)})
+          {fareMode === 'share' || selected === 'shared'
+            ? ' · charged when pool dispatches'
+            : ''}
         </Text>
       </Pressable>
 

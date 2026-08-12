@@ -51,6 +51,13 @@ export class FlutterwaveService implements PaymentProvider {
 
   async initializePayment(input: InitializePaymentInput): Promise<InitializePaymentResult> {
     const reference = input.reference || `MOVR-FW-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (!this.secretKey) {
+      return {
+        success: false,
+        reference,
+        error: 'Flutterwave secret_key not configured (Integrations Hub or FLUTTERWAVE_SECRET_KEY)',
+      };
+    }
     try {
       const response = await axios.post(
         `${this.baseUrl}/payments`,
@@ -67,7 +74,7 @@ export class FlutterwaveService implements PaymentProvider {
           customizations: {
             title: 'MOVR Platform',
             description: 'MOVR payment',
-            logo: 'https://movr.io/logo.png',
+            logo: 'https://mymovr.io/logo.png',
           },
           redirect_url: input.redirectUrl || `${process.env.APP_URL}/payments/callback?tx_ref=${reference}`,
           meta: input.metadata || {},

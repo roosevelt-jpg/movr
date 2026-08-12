@@ -89,7 +89,7 @@ export default function SafetyCenterScreen({ onBack }: { onBack?: () => void }) 
   };
 
   const shareTrip = async () => {
-    let url = 'https://movr.io/trip/share';
+    let url = 'https://mymovr.io/trip/share';
     try {
       let res = await fetch(`${API}/trust/share-trip`, {
         method: 'POST',

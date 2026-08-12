@@ -103,6 +103,16 @@ export function startPlatformJobs() {
       .catch((e) => logger.warn(`guarantees failed: ${e?.message || e}`));
   }, 5 * 60_000);
 
+  // Share pool: one vehicle + fare split after wait/full
+  setInterval(() => {
+    rails
+      .processSharePools()
+      .then((r) => {
+        if (r.dispatched || r.checked) logger.info('share pools', r);
+      })
+      .catch((e) => logger.warn(`share pools failed: ${e?.message || e}`));
+  }, 20_000);
+
   setTimeout(() => {
     performance.recalculateAllActiveDrivers().catch(() => undefined);
     ranking.refreshAll().catch(() => undefined);
@@ -114,5 +124,6 @@ export function startPlatformJobs() {
     trust.processAutoCloseEverything().catch(() => undefined);
     reviews.processAutoRatings().catch(() => undefined);
     rails.settleGuarantees().catch(() => undefined);
+    rails.processSharePools().catch(() => undefined);
   }, 15_000);
 }

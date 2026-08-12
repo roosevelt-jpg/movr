@@ -35,6 +35,7 @@ const NAV_ITEMS = [
   { label: 'Staking', path: '/staking', icon: Layers, match: ['/staking'] },
   { label: 'History', path: '/history', icon: Clock, match: ['/history'] },
   { label: 'Movr AI', path: '/ai', icon: Sparkles, match: ['/ai', '/bot', '/channels/bot'] },
+  { label: 'Voice', path: '/voice', icon: Sparkles, match: ['/voice'] },
   { label: 'Support', path: '/support', icon: HelpCircle, match: ['/support'] },
   { label: 'Profile', path: '/profile', icon: User, match: ['/profile'] },
   { label: 'Settings', path: '/settings', icon: Settings, match: ['/settings'] },

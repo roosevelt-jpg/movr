@@ -27,6 +27,8 @@ export interface RideRequestInput {
   countryCode?: string;
   /** Dual pricing mode: now | wait | shoulder | walk | share */
   fareMode?: string;
+  /** Skip nearest-driver assign (share pool holds until dispatch). */
+  skipAutoAssign?: boolean;
 }
 
 /**
@@ -185,6 +187,32 @@ export class RideBookingService {
           ]
         )
         .catch(() => undefined);
+    }
+
+    if (input.skipAutoAssign || fareMode === 'share') {
+      await this.db
+        .query(
+          `UPDATE rides SET status = 'pool_waiting',
+             pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
+           WHERE id = $1`,
+          [ride.id, JSON.stringify({ poolWaiting: true })]
+        )
+        .catch(() =>
+          this.db.query(`UPDATE rides SET status = 'requested' WHERE id = $1`, [ride.id])
+        );
+      return {
+        rideId: ride.id,
+        id: ride.id,
+        estimatedFare,
+        currency: city?.currency_code || quote.currency || 'GHS',
+        status: 'pool_waiting',
+        assignmentStatus: 'waiting_pool' as const,
+        offeredDriverId: null,
+        fareMode,
+        driverPayout: quote.driverPayout,
+        platformSubsidy: quote.platformSubsidy,
+        pricingMeta,
+      };
     }
 
     const drivers = await this.matching.findBestDrivers(

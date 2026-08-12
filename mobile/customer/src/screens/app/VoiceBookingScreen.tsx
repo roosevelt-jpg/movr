@@ -135,8 +135,17 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
       });
       const json = await res.json();
       if (json.status === 'success') {
-        setMessage('Ride booked — finding a driver');
-        speak('Ride booked. Finding a driver.');
+        const rideId = json.data?.rideId || json.data?.id;
+        setMessage(json.data?.confirmationMessage || 'Ride booked — finding a driver');
+        speak(json.data?.confirmationMessage || 'Ride booked. Finding a driver.');
+        if (rideId && onBack) {
+          // Host navigates via global when available
+          try {
+            (globalThis as any).__MOVR_NAVIGATE_RIDE__?.(rideId);
+          } catch {
+            /* optional */
+          }
+        }
       } else {
         setMessage(json.message || 'Booking failed');
       }
