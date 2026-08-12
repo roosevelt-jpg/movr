@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../lib/currency';
+import { useLocaleStore } from '../../store/locale.store';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -26,6 +27,8 @@ type Msg =
  */
 const ChannelBookingPage: React.FC = () => {
   const navigate = useNavigate();
+  const countryCode = useLocaleStore((s) => s.country) || 'GH';
+  const localeCurrency = useLocaleStore((s) => s.currency) || 'GHS';
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<any>(null);
@@ -46,7 +49,7 @@ const ChannelBookingPage: React.FC = () => {
         text,
         currentLat: 5.6037,
         currentLng: -0.187,
-        countryCode: 'GH',
+        countryCode,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -65,7 +68,7 @@ const ChannelBookingPage: React.FC = () => {
       from: 'bot',
       kind: 'options',
       options: options.slice(0, 3),
-      currency: data?.currency || 'GHS',
+      currency: data?.currency || localeCurrency,
     });
     push({ from: 'bot', kind: 'text', text: 'Reply 1 / 2 / 3 to book — same rails as the ride screen.' });
     setAwaitingPick(true);
@@ -75,6 +78,7 @@ const ChannelBookingPage: React.FC = () => {
     if (booted.current) return;
     booted.current = true;
     parse("I'm going from Osu to the airport").catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const confirm = async (index: number) => {
@@ -104,7 +108,7 @@ const ChannelBookingPage: React.FC = () => {
           vehicleTypeCode: opt.code,
           spoken: String(index + 1),
           sourceChannel: 'whatsapp',
-          countryCode: 'GH',
+          countryCode,
         }),
       });
       const json = await res.json().catch(() => ({}));

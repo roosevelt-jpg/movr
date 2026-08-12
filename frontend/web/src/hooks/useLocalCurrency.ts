@@ -8,20 +8,21 @@ import {
 } from '../lib/currency';
 
 /**
- * Display currency from locale preference (synced from user country on login,
- * or chosen in the footer country picker).
+ * Display currency from locale preference (synced from auto-detect / user country /
+ * footer country picker).
  */
 export function useLocalCurrency(overrideCurrency?: string | null) {
   const country = useLocaleStore((s) => s.country);
+  const storeCurrency = useLocaleStore((s) => s.currency);
   const setCountry = useLocaleStore((s) => s.setCountry);
-  const currency = (overrideCurrency || currencyForCountry(country)).toUpperCase();
+  const currency = (overrideCurrency || storeCurrency || currencyForCountry(country)).toUpperCase();
 
   return useMemo(
     () => ({
       country: (country || 'GH').toUpperCase(),
       countryName: formatCountryLabel(country),
       currency,
-      setCountry,
+      setCountry: (code: string) => setCountry(code, { manual: true }),
       formatMoney: (amount: number) =>
         overrideCurrency
           ? formatCurrency(amount, overrideCurrency)

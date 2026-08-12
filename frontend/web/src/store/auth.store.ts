@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthStore>()(
             : { phone: trimmed.replace(/[\s\-()]/g, ''), password };
           const response = await api.post('/auth/login', body);
           const { user, token } = response.data.data;
-          if (user?.country) useLocaleStore.getState().setCountry(user.country);
+          if (user?.country) useLocaleStore.getState().setCountry(user.country, { manual: false });
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
           set({
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await api.post('/auth/register', data);
           const { user, token } = response.data.data;
-          if (user?.country) useLocaleStore.getState().setCountry(user.country);
+          if (user?.country) useLocaleStore.getState().setCountry(user.country, { manual: false });
           set({ user, token, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
           set({
@@ -85,7 +85,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setUser: (user: User) => {
-        if (user?.country) useLocaleStore.getState().setCountry(user.country);
+        if (user?.country) useLocaleStore.getState().setCountry(user.country, { manual: false });
         set({ user, isAuthenticated: true });
       },
 

@@ -19,29 +19,29 @@ const TABS = [
   { key: 'all', label: 'All' },
   { key: 'rides', label: 'Rides' },
   { key: 'orders', label: 'Orders' },
-  { key: 'tokens', label: 'Tokens' },
+  { key: 'rewards', label: 'Rewards' },
 ] as const;
 
 const ICONS: Record<string, { bg: string; glyph: string }> = {
-  dvt: { bg: '#4C1D95', glyph: '⛓' },
-  tokens: { bg: '#4C1D95', glyph: '⛓' },
   order: { bg: '#14532D', glyph: '🍔' },
   orders: { bg: '#14532D', glyph: '🍔' },
   ride: { bg: '#27272A', glyph: '🚗' },
   rides: { bg: '#27272A', glyph: '🚗' },
   promo: { bg: '#27272A', glyph: '🏷' },
   rating: { bg: '#27272A', glyph: '⭐' },
+  rewards: { bg: '#14532D', glyph: '✦' },
+  points: { bg: '#14532D', glyph: '✦' },
   system: { bg: '#27272A', glyph: '•' },
 };
 
 /** Notifications — filters, unread purple rail, mark all read (mockup). */
 export default function InboxScreen({
-  onOpenClaim,
+  onOpenWallet,
 }: {
   onOpenWhatsApp?: () => void;
   onOpenBot?: () => void;
   onOpenSupport?: () => void;
-  onOpenClaim?: () => void;
+  onOpenWallet?: () => void;
 }) {
   const [category, setCategory] = useState('all');
   const [messages, setMessages] = useState<any[]>([]);
@@ -71,7 +71,9 @@ export default function InboxScreen({
       method: 'PATCH',
       headers: authHeaders(),
     }).catch(() => undefined);
-    if (item.category === 'tokens' || item.icon === 'dvt') onOpenClaim?.();
+    if (item.category === 'tokens' || item.category === 'rewards' || item.icon === 'dvt') {
+      onOpenWallet?.();
+    }
     load();
   };
 

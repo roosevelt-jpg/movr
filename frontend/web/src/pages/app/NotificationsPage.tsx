@@ -14,16 +14,16 @@ function authHeaders() {
   };
 }
 
-const TABS = ['all', 'rides', 'orders', 'tokens'] as const;
+const TABS = ['all', 'rides', 'orders', 'rewards'] as const;
 const ICONS: Record<string, { bg: string; glyph: string }> = {
-  dvt: { bg: 'bg-purple-900', glyph: '⛓' },
-  tokens: { bg: 'bg-purple-900', glyph: '⛓' },
   order: { bg: 'bg-green-900', glyph: '🍔' },
   orders: { bg: 'bg-green-900', glyph: '🍔' },
   ride: { bg: 'bg-zinc-800', glyph: '🚗' },
   rides: { bg: 'bg-zinc-800', glyph: '🚗' },
   promo: { bg: 'bg-zinc-800', glyph: '🏷' },
   rating: { bg: 'bg-zinc-800', glyph: '⭐' },
+  rewards: { bg: 'bg-amber-900', glyph: '★' },
+  points: { bg: 'bg-amber-900', glyph: '★' },
 };
 
 function rel(iso: string) {
@@ -102,9 +102,9 @@ export default function NotificationsPage() {
                 <p className="text-sm text-zinc-400 mt-1">{n.body}</p>
                 <p className="text-xs text-zinc-500 mt-2">{n.createdAt ? rel(n.createdAt) : ''}</p>
               </div>
-              {(n.category === 'tokens' || n.icon === 'dvt') && (
-                <Link to="/claim" className="text-purple-400 text-sm font-bold self-center">
-                  Claim
+              {(n.category === 'rewards' || n.category === 'points') && (
+                <Link to="/rewards" className="text-purple-400 text-sm font-bold self-center">
+                  View
                 </Link>
               )}
             </li>

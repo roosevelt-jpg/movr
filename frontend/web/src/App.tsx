@@ -29,9 +29,6 @@ import WalletPage from './pages/app/WalletPage';
 import SettlementHubPage from './pages/app/SettlementHubPage';
 import OrderConfirmedPage from './pages/app/OrderConfirmedPage';
 import OrderTrackingPage from './pages/app/OrderTrackingPage';
-import TokenPage from './pages/app/TokenPage';
-import StakingPage from './pages/app/StakingPage';
-import ClaimPage from './pages/app/ClaimPage';
 import RentalsPage from './pages/app/RentalsPage';
 import RentalConfirmPage from './pages/app/RentalConfirmPage';
 import ActiveRentalPage from './pages/app/ActiveRentalPage';
@@ -64,7 +61,6 @@ import MerchantProductsPage from './pages/merchant/MerchantProductsPage';
 import MerchantAnalyticsPage from './pages/merchant/MerchantAnalyticsPage';
 import MerchantPayoutsPage from './pages/merchant/MerchantPayoutsPage';
 import MerchantCouponsPage from './pages/merchant/MerchantCouponsPage';
-import MerchantStakingPage from './pages/merchant/MerchantStakingPage';
 import MerchantLandingPage from './pages/public/MerchantLandingPage';
 import DriverLandingPage from './pages/public/DriverLandingPage';
 import DriverShell from './layouts/DriverShell';
@@ -231,10 +227,10 @@ const App: React.FC = () => {
                 <Route path="/deals" element={<DealsPage />} />
                 <Route path="/wallet/redeem" element={<RedeemPointsPage />} />
                 <Route path="/points/redeem" element={<RedeemPointsPage />} />
-                <Route path="/token" element={<TokenPage />} />
-                <Route path="/token/redeem" element={<TokenPage />} />
+                <Route path="/token" element={<Navigate to="/wallet" replace />} />
+                <Route path="/token/redeem" element={<Navigate to="/wallet/redeem" replace />} />
                 <Route path="/ride/:id/receipt" element={<RideReceiptPage />} />
-                <Route path="/staking" element={<StakingPage />} />
+                <Route path="/staking" element={<Navigate to="/rewards" replace />} />
                 <Route path="/rentals" element={<RentalsPage />} />
                 <Route path="/rentals/list" element={<RentalOwnerListPage />} />
                 <Route path="/rentals/confirm" element={<RentalConfirmPage />} />
@@ -245,7 +241,7 @@ const App: React.FC = () => {
                 <Route path="/rewards" element={<RewardsPage />} />
                 <Route path="/safety" element={<SafetyCenterPage />} />
                 <Route path="/refer" element={<ReferPage />} />
-                <Route path="/claim" element={<ClaimPage />} />
+                <Route path="/claim" element={<Navigate to="/wallet" replace />} />
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/ride/:id/rate" element={<RideRatingPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
@@ -270,7 +266,7 @@ const App: React.FC = () => {
               <Route path="/merchant/analytics" element={<MerchantAnalyticsPage />} />
               <Route path="/merchant/payouts" element={<MerchantPayoutsPage />} />
               <Route path="/merchant/coupons" element={<MerchantCouponsPage />} />
-              <Route path="/merchant/staking" element={<MerchantStakingPage />} />
+              <Route path="/merchant/staking" element={<Navigate to="/merchant" replace />} />
 
               <Route path="*" element={<NotFoundPage />} />
             </Route>

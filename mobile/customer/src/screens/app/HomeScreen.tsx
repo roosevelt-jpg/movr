@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
+import { getAppLocale } from '../../services/locale';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -77,7 +78,7 @@ function sortTier(list: VehicleOption[]) {
 export default function HomeScreen({
   destination: destProp,
   pickupLabel = 'Victoria Island, Lagos',
-  region = 'NG',
+  region: regionProp,
   pickupLat = 6.4281,
   pickupLng = 3.4219,
   dropoffLat = 6.4474,
@@ -94,9 +95,11 @@ export default function HomeScreen({
   dropoffLat?: number;
   dropoffLng?: number;
   onSelectType?: (code: string) => void;
-  onConfirm?: (payload: { code: string; price: number; dvt: number }) => void;
+  onConfirm?: (payload: { code: string; price: number }) => void;
   onClearPickup?: () => void;
 }) {
+  const locale = getAppLocale();
+  const region = (regionProp || locale.countryCode || 'GH').toUpperCase();
   const [loading, setLoading] = useState(true);
   const [options, setOptions] = useState<VehicleOption[]>([]);
   const [fareModes, setFareModes] = useState<FareModeOption[]>([]);
@@ -104,7 +107,7 @@ export default function HomeScreen({
   const [payWithCredit, setPayWithCredit] = useState(false);
   const [mobilityCredit, setMobilityCredit] = useState(0);
   const [selected, setSelected] = useState<string>('economy');
-  const [currency, setCurrency] = useState('NGN');
+  const [currency, setCurrency] = useState(locale.currencyCode || 'GHS');
   const [pickup, setPickup] = useState(pickupLabel);
   const [destination, setDestination] = useState(destProp || '');
   const [confirming, setConfirming] = useState(false);
@@ -244,14 +247,13 @@ export default function HomeScreen({
   const driverPayout = Number(activeMode?.driverPayout || fare);
   const base = Number(active?.base || Math.round(fare * 0.7));
   const distancePart = Number(active?.distance || Math.max(0, fare - base));
-  const dvt = useMemo(() => Math.round(Math.max(fare, driverPayout) * 0.1), [fare, driverPayout]);
 
   const confirm = async () => {
     setConfirming(true);
     setMsg('');
     try {
       onSelectType?.(selected);
-      onConfirm?.({ code: selected, price: fare, dvt });
+      onConfirm?.({ code: selected, price: fare });
       const rideType =
         selected === 'okada'
           ? 'motorcycle'
@@ -464,11 +466,10 @@ export default function HomeScreen({
           {driverPayout > fare ? ' (includes zone / mode boost)' : ' (0% take-rate)'}
         </Text>
         {driverReason ? (
-          <Text style={[styles.dvt, { color: '#94a3b8' }]} numberOfLines={2}>
+          <Text style={[styles.hint, { color: '#94a3b8' }]} numberOfLines={2}>
             {driverReason}
           </Text>
         ) : null}
-        <Text style={styles.dvt}>+{dvt} DVT tokens earned</Text>
       </View>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
@@ -582,7 +583,7 @@ const styles = StyleSheet.create({
   brV: { color: '#fff', fontWeight: '600', fontSize: 13 },
   fareValue: { color: '#fff', fontSize: 22, fontWeight: '800' },
   keep: { color: '#86efac', fontSize: 12, marginTop: 10, fontWeight: '700' },
-  dvt: { color: '#a78bfa', fontSize: 12, marginTop: 4, fontWeight: '600' },
+  hint: { color: '#a78bfa', fontSize: 12, marginTop: 4, fontWeight: '600' },
   msg: { color: '#4ade80', marginBottom: 8, textAlign: 'center' },
   cta: {
     borderRadius: 16,

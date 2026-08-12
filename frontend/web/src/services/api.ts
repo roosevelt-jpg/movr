@@ -153,15 +153,17 @@ export const usersApi = {
 };
 
 // ============================================
-// BLOCKCHAIN API
+// BLOCKCHAIN — identity / sensitive data only
+// (Crypto token claim/redeem APIs removed from store clients)
 // ============================================
 
 export const blockchainApi = {
-  getTokenBalance: () => api.get('/blockchain/token/balance'),
-  claimTokens: (walletAddress: string) =>
-    api.post('/blockchain/token/claim', { walletAddress }),
-  redeemTokens: (amount: number) =>
-    api.post('/blockchain/token/redeem', { amount }),
+  /** @deprecated Token balance is not offered in-app */
+  getTokenBalance: () => Promise.reject(new Error('Crypto tokens are not available')),
+  claimTokens: (_walletAddress: string) =>
+    Promise.reject(new Error('Crypto tokens are not available')),
+  redeemTokens: (_amount: number) =>
+    Promise.reject(new Error('Crypto tokens are not available')),
 };
 
 export default api;

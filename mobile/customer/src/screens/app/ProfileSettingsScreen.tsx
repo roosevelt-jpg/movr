@@ -22,7 +22,6 @@ export default function ProfileSettingsScreen({
   onOpenAi,
   onPrivacy,
   onNotifications,
-  onDvtDashboard,
   onLeaderboard,
   onRewards,
   onSafety,
@@ -40,7 +39,6 @@ export default function ProfileSettingsScreen({
   onOpenAi?: () => void;
   onPrivacy?: () => void;
   onNotifications?: () => void;
-  onDvtDashboard?: () => void;
   onLeaderboard?: () => void;
   onRewards?: () => void;
   onSafety?: () => void;
@@ -59,8 +57,6 @@ export default function ProfileSettingsScreen({
   const [rides, setRides] = useState(0);
   const [rating, setRating] = useState(0);
   const [points, setPoints] = useState(0);
-  const [unread, setUnread] = useState(0);
-
   const [unread, setUnread] = useState(0);
   const [trustScore, setTrustScore] = useState<any>(null);
 
@@ -184,7 +180,6 @@ export default function ProfileSettingsScreen({
 
       <Text style={styles.section}>REWARDS</Text>
       <View style={styles.group}>
-        <Row icon="◎" iconColor="#A1A1AA" label="DVT Staking" onPress={onDvtDashboard} />
         <Row
           icon="🏆"
           iconColor="#EAB308"

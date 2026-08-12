@@ -126,7 +126,6 @@ export default function SettingsPage() {
           value={!!prefs.shoppingNotifications}
           onChange={(v) => patch({ shoppingNotifications: v })}
         />
-        <Toggle icon="⛓" value={!!prefs.dvtEnabled} onChange={(v) => patch({ dvtEnabled: v })} />
         <Toggle
           icon="💳"
           value={!!prefs.walletPaymentEnabled}

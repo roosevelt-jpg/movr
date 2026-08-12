@@ -19,7 +19,6 @@ import ActiveRideScreen from './ActiveRideScreen';
 import WalletScreen from './WalletScreen';
 import ProfileSettingsScreen from './ProfileSettingsScreen';
 import InboxScreen from './InboxScreen';
-import ClaimScreen from './ClaimScreen';
 import WalletTopUpScreen from './WalletTopUpScreen';
 import RewardsScreen from './RewardsScreen';
 import SafetyCenterScreen from './SafetyCenterScreen';
@@ -29,7 +28,6 @@ import AppSettingsScreen from './AppSettingsScreen';
 import ExploreScreen from './ExploreScreen';
 import PaymentMethodsScreen from './PaymentMethodsScreen';
 import DealsScreen from './DealsScreen';
-import StakingScreen from './StakingScreen';
 import HelpCentreScreen from './HelpCentreScreen';
 import WithdrawScreen from './WithdrawScreen';
 import SettlementHubScreen from './SettlementHubScreen';
@@ -39,7 +37,7 @@ import MerchantIdentityOnboardingScreen from './MerchantIdentityOnboardingScreen
 import ProductDetailScreen from './ProductDetailScreen';
 import StoreProfileScreen from './StoreProfileScreen';
 import SupportChatScreen from './SupportChatScreen';
-import TokenScreen from './TokenScreen';
+import RedeemPointsScreen from './RedeemPointsScreen';
 import TransactionReceiptScreen from './TransactionReceiptScreen';
 import WishlistScreen from './WishlistScreen';
 import CartScreen from './CartScreen';
@@ -62,7 +60,6 @@ type Service =
   | 'rental_confirm'
   | 'rental_active'
   | 'notifications'
-  | 'claim'
   | 'topup'
   | 'withdraw'
   | 'settlement'
@@ -77,7 +74,6 @@ type Service =
   | 'explore'
   | 'payments'
   | 'deals'
-  | 'staking'
   | 'help'
   | 'support'
   | 'store'
@@ -237,7 +233,6 @@ export default function SuperAppHomeScreen({
           onWithdraw={() => setService('withdraw')}
           onSettlement={() => setService('settlement')}
           onTransfer={onSend}
-          onClaimDvt={() => setService('claim')}
           onPaymentMethods={() => setService('payments')}
           onRedeem={() => setService('redeem')}
         />
@@ -251,7 +246,6 @@ export default function SuperAppHomeScreen({
       <View style={styles.root}>
         <ProfileSettingsScreen
           onLeaderboard={() => setService('rewards')}
-          onDvtDashboard={() => setService('staking')}
           onNotifications={() => setService('notifications')}
           onRewards={() => setService('rewards')}
           onSafety={() => setService('safety')}
@@ -307,14 +301,6 @@ export default function SuperAppHomeScreen({
       </View>
     );
   }
-  if (service === 'staking') {
-    return (
-      <View style={styles.root}>
-        <StakingScreen onBack={() => setService('hub')} />
-      </View>
-    );
-  }
-
   if (service === 'rewards') {
     return (
       <View style={styles.root}>
@@ -352,7 +338,7 @@ export default function SuperAppHomeScreen({
   if (service === 'redeem') {
     return (
       <View style={styles.root}>
-        <TokenScreen onBack={() => setService('hub')} />
+        <RedeemPointsScreen onBack={() => setService('hub')} />
       </View>
     );
   }
@@ -597,14 +583,12 @@ export default function SuperAppHomeScreen({
         <Pressable onPress={() => setService('hub')} style={styles.back}>
           <Text style={styles.backText}>← Home</Text>
         </Pressable>
-        <InboxScreen onOpenClaim={() => setService('claim')} />
-      </View>
-    );
-  }
-  if (service === 'claim') {
-    return (
-      <View style={styles.root}>
-        <ClaimScreen onBack={() => setService('hub')} />
+        <InboxScreen
+          onOpenWallet={() => {
+            setTab('wallet');
+            setService('hub');
+          }}
+        />
       </View>
     );
   }
@@ -851,7 +835,7 @@ export default function SuperAppHomeScreen({
                 {formatCurrency(Number(w.balance || 0), w.currency || 'NGN')}
               </Text>
               <Text style={styles.walletMeta}>
-                {Number(w.tokens || 0).toLocaleString()} DVT Tokens · {Number(w.points || 0).toLocaleString()} pts
+                {Number(w.points || 0).toLocaleString()} pts
               </Text>
               <View style={styles.walletActions}>
                 <Pressable style={styles.ghostBtn} onPress={onTopUp || onOpenWallet}>

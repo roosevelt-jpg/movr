@@ -9,7 +9,6 @@ import {
   MessageCircle,
   LogOut,
   ChevronRight,
-  Coins,
   Gift,
   History,
   Shield,
@@ -42,8 +41,6 @@ const ProfilePage: React.FC = () => {
   const [rides, setRides] = useState(0);
   const [rating, setRating] = useState(0);
   const [points, setPoints] = useState(0);
-  const [unread, setUnread] = useState(0);
-
   const [unread, setUnread] = useState(0);
   const [trustScore, setTrustScore] = useState<any>(null);
 
@@ -162,7 +159,6 @@ const ProfilePage: React.FC = () => {
 
       <p className="text-xs tracking-wider text-zinc-500 mb-1">REWARDS</p>
       <div className="mb-6">
-        <Row icon={Coins} label="DVT Token Dashboard" onClick={() => navigate('/staking')} />
         <Row icon={Trophy} iconClass="text-amber-400" label="Rewards & Leaderboard" onClick={() => navigate('/rewards')} />
         <Row icon={Tag} iconClass="text-green-400" label="Deals & Promos" onClick={() => navigate('/deals')} />
         <Row icon={Gift} iconClass="text-purple-400" label="Refer & Earn" onClick={() => navigate('/refer')} />

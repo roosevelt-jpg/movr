@@ -95,17 +95,10 @@ walletRouter.get('/portfolio', async (req: AuthRequest, res: Response) => {
         [userId]
       );
     }
-    const tokens = await db
-      .query(
-        `SELECT COALESCE(balance_pending,0)+COALESCE(balance_onchain,0)::float AS tokens
-         FROM token_balances WHERE user_id = $1`,
-        [userId]
-      )
-      .catch(() => ({ rows: [] as any[] }));
     const fiat = Number(wallet.rows[0].balance || 0);
     const points = Number(wallet.rows[0].points_balance || 0);
-    const dvt = Number(tokens.rows[0]?.tokens ?? wallet.rows[0].balance_tokens ?? 0);
-    const portfolio = fiat + dvt * 0.02; // placeholder oracle
+    // Portfolio is fiat-only for store clients (no crypto token valuation)
+    const portfolio = fiat;
     const txs = await db.query(
       `SELECT id, type, amount, reference, created_at, currency_unit, title, icon_key
        FROM wallet_transactions_v2
@@ -133,7 +126,7 @@ walletRouter.get('/portfolio', async (req: AuthRequest, res: Response) => {
         title = t.title || t.reference || 'Ride';
         icon = 'ride';
       } else if (/claim|dvt|token/.test(type)) {
-        title = t.title || 'DVT Token Claim';
+        title = t.title || 'Rewards';
         icon = 'dvt';
       } else if (/parcel|deliver/.test(type)) {
         title = t.title || 'Parcel Delivery';
@@ -161,10 +154,11 @@ walletRouter.get('/portfolio', async (req: AuthRequest, res: Response) => {
       data: {
         portfolioValue: Math.round(portfolio * 100) / 100,
         fiatBalance: fiat,
-        dvtTokens: dvt,
+        /** Always 0 for store clients — crypto tokens are not offered in-app */
+        dvtTokens: 0,
         points,
         currency: wallet.rows[0].currency || 'NGN',
-        transactions,
+        transactions: transactions.filter((t: any) => t.unit !== 'dvt' && t.icon !== 'dvt'),
       },
     });
   } catch (error: any) {

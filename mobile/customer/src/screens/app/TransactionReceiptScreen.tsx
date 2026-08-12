@@ -11,7 +11,7 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Payment Successful receipt — txn breakdown + DVT earned (mockup). */
+/** Payment Successful receipt — txn breakdown (mockup). */
 export default function TransactionReceiptScreen({
   rideId,
   onBack,
@@ -100,12 +100,14 @@ export default function TransactionReceiptScreen({
               {formatCurrency(Number(data?.platformFee ?? 0), cur)}
             </Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.k}>DVT discount</Text>
-            <Text style={styles.green}>
-              -{formatCurrency(Number(data.dvtDiscount || 0), cur)}
-            </Text>
-          </View>
+          {Number(data?.dvtDiscount || data?.rewardsDiscount || 0) > 0 ? (
+            <View style={styles.row}>
+              <Text style={styles.k}>Rewards discount</Text>
+              <Text style={styles.green}>
+                -{formatCurrency(Number(data.dvtDiscount || data.rewardsDiscount || 0), cur)}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.divider} />
           <View style={styles.row}>
             <Text style={styles.totalLab}>Total</Text>
@@ -125,10 +127,8 @@ export default function TransactionReceiptScreen({
         <View style={styles.reward}>
           <Text style={styles.rewardIcon}>⚭</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.rewardTitle}>
-              +{Number(data.dvtEarned || 0)} DVT tokens earned
-            </Text>
-            <Text style={styles.rewardSub}>Paid with: {data.paymentMethod || 'Movr Wallet'}</Text>
+            <Text style={styles.rewardTitle}>Paid with: {data.paymentMethod || 'Movr Wallet'}</Text>
+            <Text style={styles.rewardSub}>Thanks for riding with Movr</Text>
           </View>
         </View>
 

@@ -2,11 +2,20 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../lib/currency';
+import { useLocaleStore } from '../../store/locale.store';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
   process.env.REACT_APP_API_URL ||
   'http://localhost:3000/api/v1';
+
+const STT_LANG: Record<string, string> = {
+  en: 'en-GH',
+  fr: 'fr-FR',
+  pt: 'pt-PT',
+  ar: 'ar-SA',
+  es: 'es-ES',
+};
 
 function authHeaders() {
   const token =
@@ -23,6 +32,9 @@ function authHeaders() {
  */
 const VoiceBookingPage: React.FC = () => {
   const navigate = useNavigate();
+  const countryCode = useLocaleStore((s) => s.country) || 'GH';
+  const currency = useLocaleStore((s) => s.currency) || 'GHS';
+  const language = useLocaleStore((s) => s.language) || 'en';
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState<any>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,7 +49,7 @@ const VoiceBookingPage: React.FC = () => {
         text,
         currentLat: 5.6037,
         currentLng: -0.187,
-        countryCode: 'GH',
+        countryCode,
       }),
     });
     const json = await res.json();
@@ -54,7 +66,7 @@ const VoiceBookingPage: React.FC = () => {
       if (!SR) throw new Error('no-stt');
       const heard: string = await new Promise((resolve, reject) => {
         const rec = new SR();
-        rec.lang = 'en-GH';
+        rec.lang = STT_LANG[language] || `en-${countryCode}`;
         let finalText = '';
         rec.onresult = (event: any) => {
           for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -98,7 +110,7 @@ const VoiceBookingPage: React.FC = () => {
           rideType: selected,
           vehicleTypeCode: selected,
           spoken: 'yes',
-          countryCode: 'GH',
+          countryCode,
           sourceChannel: 'voice',
         }),
       });
@@ -160,7 +172,7 @@ const VoiceBookingPage: React.FC = () => {
                     </span>
                   </span>
                   <span className="font-bold">
-                    {formatCurrency(item.price, result.currency || 'GHS')}
+                    {formatCurrency(item.price, result.currency || currency)}
                   </span>
                 </button>
               );
@@ -174,7 +186,7 @@ const VoiceBookingPage: React.FC = () => {
             style={{ background: 'linear-gradient(90deg,#7c3aed,#2563eb)' }}
           >
             Book {selectedOpt?.name || 'ride'} ·{' '}
-            {formatCurrency(selectedOpt?.price || 0, result.currency || 'GHS')}
+            {formatCurrency(selectedOpt?.price || 0, result.currency || currency)}
           </button>
         </div>
       ) : null}

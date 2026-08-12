@@ -19,6 +19,7 @@ import { StoreBadgeButton } from '../components/StoreBadges';
 import type { CmsSection } from '../services/cms';
 import {
   CmsChoiceHero,
+  CmsBusinessSplit,
   CmsTrustStrip,
   CmsHowItWorks,
   CmsProductGrid,
@@ -30,6 +31,7 @@ import {
 import { CmsMediaBackdrop } from './CmsMediaBackdrop';
 import { resolveCmsHeroMedia } from '../brand/assets';
 import ResponsiveMedia from '../components/ResponsiveMedia';
+import HomepageBookingEngine from '../components/HomepageBookingEngine';
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   car: Car,
@@ -734,6 +736,8 @@ export function CmsOnboarding({ payload }: { payload: any }) {
 const RENDERERS: Record<string, React.FC<{ payload: any; pageSlug?: string }>> = {
   hero: CmsHero,
   choice_hero: CmsChoiceHero,
+  business_split: CmsBusinessSplit,
+  booking_engine: HomepageBookingEngine,
   trust_strip: CmsTrustStrip,
   how_it_works: CmsHowItWorks,
   ai_showcase: CmsAiShowcase,

@@ -50,7 +50,7 @@ const SUBTITLE: Record<string, string> = {
   sendgrid: 'Transactional email',
   africastalking_ussd: 'USSD',
   openai: 'AI & voice',
-  google_maps: 'Maps & places · powers zone pickers',
+  google_maps: 'Maps & places · homepage booking + zone pickers',
   mapbox: 'Maps',
   openweathermap: 'Pricing weather signals',
   nia_ghana_card: 'Identity verification',
@@ -92,7 +92,9 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: 'api_key', label: 'api_key' },
     { key: 'model', label: 'model (optional)' },
   ],
-  google_maps: [{ key: 'api_key', label: 'api_key (Geocoding + Places)' }],
+  google_maps: [
+    { key: 'api_key', label: 'api_key (Geocoding + Places — required for web booking search)' },
+  ],
   mapbox: [{ key: 'access_token', label: 'access_token' }],
   openweathermap: [{ key: 'api_key', label: 'api_key' }],
   africastalking_ussd: [
@@ -246,7 +248,8 @@ export default function IntegrationsHubPage() {
       <AdminOpsNav />
       <h1 style={styles.pageTitle}>Integrations</h1>
       <p style={styles.pageSub}>
-        Google Maps & Places powers zone pickers on Pricing and Dispatcher. OpenWeatherMap feeds weather
+        Google Maps & Places powers zone pickers, homepage booking autocomplete, and
+        GPS country auto-detect (currency + language). OpenWeatherMap feeds weather
         surge — run Test connection after saving keys so badges reflect real status.
       </p>
       {message ? <p style={styles.msg}>{message}</p> : null}

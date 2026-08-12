@@ -1,219 +1,34 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { spacing } from '@movr/design-system/theme';
+import React from 'react';
+import { Pressable, Text, View, StyleSheet } from 'react-native';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
-const ICONS: Record<string, string> = { sprout: '🌱', bolt: '⚡', lock: '🔒' };
-
-function authHeaders(): Record<string, string> {
-  const token =
-    (globalThis as any).__MOVR_TOKEN__ ||
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-/** DVT Staking dashboard — summary + pools + Stake More (mockup). */
+/** Staking / crypto removed for store compliance. */
 export default function StakingScreen({ onBack }: { onBack?: () => void }) {
-  const [data, setData] = useState<any>({
-    staked: 0,
-    apy: 0,
-    rewardsEarned: 0,
-    lockPeriodDays: 0,
-    pools: [],
-  });
-  const [selected, setSelected] = useState('');
-  const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const load = () => {
-    setLoading(true);
-    fetch(`${API}/staking/dashboard`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.data) {
-          setData(j.data);
-          setSelected(j.data.yourPoolId || j.data.pools?.[1]?.id || '');
-        }
-      })
-      .catch((e) => {
-        setData({ staked: 0, apy: 0, rewardsEarned: 0, lockPeriodDays: 0, pools: [] });
-        setSelected('');
-        setMsg(e?.message || 'Could not load staking');
-      })
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const stakeMore = async () => {
-    setBusy(true);
-    try {
-      const res = await fetch(`${API}/staking/stake`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ poolId: selected || data.yourPoolId, amount: 100 }),
-      });
-      const json = await res.json();
-      setMsg(json.message || (res.ok ? 'Staked +100 DVT' : 'Stake queued'));
-      load();
-    } catch (e: any) {
-      setMsg(e.message || 'Stake queued');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        {onBack ? (
-          <Pressable onPress={onBack} style={{ marginBottom: 8 }}>
-            <Text style={styles.back}>← Back</Text>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.summary}>
-          <Text style={styles.sumLab}>YOUR STAKED TOKENS</Text>
-          <Text style={styles.sumVal}>{Number(data.staked || 0).toLocaleString()} DVT</Text>
-          <View style={styles.sumRow}>
-            <View>
-              <Text style={styles.statLab}>APY</Text>
-              <Text style={styles.apy}>{Number(data.apy || 0)}%</Text>
-            </View>
-            <View>
-              <Text style={styles.statLab}>Rewards Earned</Text>
-              <Text style={styles.statVal}>{Number(data.rewardsEarned || 0)} DVT</Text>
-            </View>
-            <View>
-              <Text style={styles.statLab}>Lock Period</Text>
-              <Text style={styles.statVal}>{Number(data.lockPeriodDays || 0)} days</Text>
-            </View>
-          </View>
-        </View>
-
-        {loading ? <Text style={styles.msg}>Loading staking…</Text> : null}
-        {!loading && !(data.pools || []).length ? <Text style={styles.msg}>No staking pools available.</Text> : null}
-        {(data.pools || []).map((p: any) => (
-          <Pressable
-            key={p.id}
-            onPress={() => setSelected(p.id)}
-            style={[
-              styles.pool,
-              (p.isYourPool || selected === p.id) && styles.poolActive,
-            ]}
-          >
-            {p.isYourPool ? (
-              <View style={styles.yourBadge}>
-                <Text style={styles.yourText}>YOUR POOL</Text>
-              </View>
-            ) : null}
-            <View style={styles.poolIcon}>
-              <Text>{ICONS[p.icon] || '🔒'}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.poolName}>{p.name}</Text>
-              <Text style={styles.poolSub}>{p.subtitle}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.poolApy}>{Number(p.apy)}%</Text>
-              <Text style={styles.poolApyLab}>APY</Text>
-            </View>
-          </Pressable>
-        ))}
-        {msg ? <Text style={styles.msg}>{msg}</Text> : null}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Pressable style={styles.stakeBtn} onPress={stakeMore} disabled={busy || loading || !selected}>
-          <Text style={styles.stakeText}>{busy ? 'Staking…' : 'Stake More'}</Text>
+      <Text style={styles.title}>Rewards</Text>
+      <Text style={styles.body}>
+        Staking is not available in the app. Earn loyalty points on trips and redeem them for ride
+        credit.
+      </Text>
+      {onBack ? (
+        <Pressable onPress={onBack} style={styles.btn}>
+          <Text style={styles.btnText}>Back</Text>
         </Pressable>
-        <Pressable
-          style={styles.unstakeBox}
-          onPress={() => setMsg('Unstake available after lock period ends')}
-          accessibilityLabel="Unstake"
-        >
-          <Text style={styles.unstakeIcon}>↪</Text>
-        </Pressable>
-      </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000', paddingHorizontal: spacing[4], paddingTop: spacing[4] },
-  back: { color: '#A78BFA', fontWeight: '700' },
-  summary: {
-    backgroundColor: '#1A1028',
-    borderRadius: 18,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-  },
-  sumLab: { color: '#C4B5FD', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  sumVal: { color: '#FFF', fontSize: 32, fontWeight: '800', marginTop: 8 },
-  sumRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing[4] },
-  statLab: { color: '#A1A1AA', fontSize: 11 },
-  apy: { color: '#4ADE80', fontWeight: '800', fontSize: 16, marginTop: 4 },
-  statVal: { color: '#FFF', fontWeight: '700', fontSize: 15, marginTop: 4 },
-  pool: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#141414',
-    borderRadius: 16,
-    padding: spacing[3],
-    marginBottom: 10,
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  poolActive: { borderColor: '#8E2DE2' },
-  yourBadge: {
-    position: 'absolute',
-    right: 10,
-    top: 8,
-    backgroundColor: '#8E2DE2',
+  root: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#0a0a0a' },
+  title: { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 12 },
+  body: { color: '#a1a1aa', fontSize: 15, lineHeight: 22, marginBottom: 24 },
+  btn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
   },
-  yourText: { color: '#FFF', fontSize: 9, fontWeight: '800' },
-  poolIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#2E1065',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  poolName: { color: '#FFF', fontWeight: '800' },
-  poolSub: { color: '#71717A', fontSize: 12, marginTop: 3 },
-  poolApy: { color: '#4ADE80', fontWeight: '800', fontSize: 16 },
-  poolApyLab: { color: '#71717A', fontSize: 11 },
-  msg: { color: '#A1A1AA', textAlign: 'center', marginTop: 8 },
-  footer: { flexDirection: 'row', gap: 10, paddingBottom: spacing[4] },
-  stakeBtn: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    backgroundColor: '#6D28D9',
-  },
-  stakeText: { color: '#FFF', fontWeight: '800', fontSize: 16 },
-  unstakeBox: {
-    width: 56,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    backgroundColor: '#09090B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unstakeIcon: { fontSize: 18 },
+  btnText: { fontWeight: '700', color: '#000' },
 });

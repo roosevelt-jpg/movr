@@ -51,7 +51,6 @@ export default function DriverEarningsScreen({
     amount: 0,
     trips: 0,
     hours: 0,
-    dvtEarned: 0,
     rating: 0,
     activity: [],
     currency: 'NGN',
@@ -71,7 +70,7 @@ export default function DriverEarningsScreen({
         }
       })
       .catch((e) => {
-        setData({ amount: 0, trips: 0, hours: 0, dvtEarned: 0, rating: 0, activity: [], currency: 'NGN' });
+        setData({ amount: 0, trips: 0, hours: 0, rating: 0, activity: [], currency: 'NGN' });
         setOnline(false);
         setError(e?.message || 'Could not load earnings');
       })
@@ -120,7 +119,6 @@ export default function DriverEarningsScreen({
             {[
               ['TRIPS', String(data.trips ?? 0)],
               ['HOURS', `${data.hours ?? 0}h`],
-              ['DVT EARNED', String(data.dvtEarned ?? 0)],
               ['RATING', `★ ${Number(data.rating || 0).toFixed(1)}`],
             ].map(([l, v]) => (
               <View key={l} style={styles.metric}>
@@ -161,7 +159,9 @@ export default function DriverEarningsScreen({
             <Text style={styles.rowTime}>
               {fmtAt(a.at)} · {a.durationMinutes} min
             </Text>
-            <Text style={styles.rowDvt}>+{Number(a.dvtEarned || 0)} DVT</Text>
+            <Text style={styles.rowAmt}>
+              {formatCurrency(Number(a.amount || a.earnings || 0), data.currency || 'NGN')}
+            </Text>
           </View>
         ))}
 
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowTime: { flex: 1, color: '#E4E4E7', fontWeight: '600' },
-  rowDvt: { color: '#A78BFA', fontWeight: '800' },
+  rowAmt: { color: '#4ADE80', fontWeight: '800' },
   withdraw: { color: '#A78BFA', fontWeight: '700', textAlign: 'center' },
   goBtn: {
     position: 'absolute',

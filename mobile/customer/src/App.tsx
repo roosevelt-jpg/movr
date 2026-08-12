@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
 import { ThemeProvider, useTheme } from './theme';
 import NoConnectionScreen from './screens/app/NoConnectionScreen';
+import { bootLocaleDetect } from './services/locale';
 
 /**
  * Customer app root — wrap every host (Expo / RN web) with ThemeProvider
@@ -13,6 +14,8 @@ function ThemedChrome({ children }: { children: React.ReactNode }) {
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
+    bootLocaleDetect();
+
     const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
     const health = API.replace(/\/api\/v1\/?$/, '') + '/health';
 

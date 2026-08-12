@@ -28,7 +28,7 @@ type CartItem = {
   onSale?: boolean;
 };
 
-/** Your Cart — qty, coupon, DVT discount, Place Order (mockup). */
+/** Your Cart — qty, coupon, rewards discount, Place Order (mockup). */
 export default function CartScreen({
   storeId,
   onCheckedOut,
@@ -44,7 +44,7 @@ export default function CartScreen({
   const [coupon, setCoupon] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [discount, setDiscount] = useState(0);
-  const [dvtDiscount, setDvtDiscount] = useState(0);
+  const [rewardsDiscount, setRewardsDiscount] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -71,7 +71,7 @@ export default function CartScreen({
       if (d) {
         setDeliveryFee(Number(d.deliveryFee ?? 0));
         setDiscount(Number(d.discount ?? 0));
-        setDvtDiscount(Number(d.dvtDiscount ?? 0));
+        setRewardsDiscount(Number(d.dvtDiscount ?? d.rewardsDiscount ?? 0));
         setCurrency(d.currency || 'NGN');
         if (d.storeName) setStoreName(d.storeName);
         if (d.eta) setEta(d.eta);
@@ -154,7 +154,7 @@ export default function CartScreen({
   };
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.price * i.qty, 0), [items]);
-  const total = Math.max(0, subtotal + deliveryFee - discount - dvtDiscount);
+  const total = Math.max(0, subtotal + deliveryFee - discount - rewardsDiscount);
 
   const applyCoupon = () => refreshQuote(items, coupon);
 
@@ -251,12 +251,14 @@ export default function CartScreen({
           <Text style={styles.sumLabel}>Delivery fee</Text>
           <Text style={styles.sumVal}>{formatCurrency(deliveryFee, currency)}</Text>
         </View>
-        <View style={styles.sumRow}>
-          <Text style={styles.sumLabel}>DVT discount</Text>
-          <Text style={[styles.sumVal, styles.green]}>
-            -{formatCurrency(dvtDiscount, currency)}
-          </Text>
-        </View>
+        {rewardsDiscount > 0 ? (
+          <View style={styles.sumRow}>
+            <Text style={styles.sumLabel}>Rewards discount</Text>
+            <Text style={[styles.sumVal, styles.green]}>
+              -{formatCurrency(rewardsDiscount, currency)}
+            </Text>
+          </View>
+        ) : null}
         {discount > 0 ? (
           <View style={styles.sumRow}>
             <Text style={styles.sumLabel}>Coupon</Text>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
+import { getAppLocale } from '../../services/locale';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -28,7 +29,7 @@ function speak(text: string) {
   }
 }
 
-function listenOnce(): Promise<string> {
+function listenOnce(lang: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const SR =
       (globalThis as any).SpeechRecognition || (globalThis as any).webkitSpeechRecognition;
@@ -37,7 +38,7 @@ function listenOnce(): Promise<string> {
       return;
     }
     const rec = new SR();
-    rec.lang = 'en-GH';
+    rec.lang = lang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     let finalText = '';
@@ -60,6 +61,8 @@ function listenOnce(): Promise<string> {
 export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
+  const locale = getAppLocale();
+  const countryCode = locale.countryCode || 'GH';
 
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -76,7 +79,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
         text,
         currentLat: 5.6037,
         currentLng: -0.187,
-        countryCode: 'GH',
+        countryCode,
       }),
     });
     const json = await res.json();
@@ -87,7 +90,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
     } else if (json.data?.options?.[0]) {
       const o = json.data.options[0];
       speak(
-        `Pickup ${json.data.pickup?.address || 'current location'} to ${json.data.destination?.address}. ${o.name}, ${formatCurrency(o.price, json.data.currency || 'GHS')}.`
+        `Pickup ${json.data.pickup?.address || 'current location'} to ${json.data.destination?.address}. ${o.name}, ${formatCurrency(o.price, json.data.currency || locale.currencyCode || 'GHS')}.`
       );
     }
   };
@@ -96,7 +99,17 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
     setListening(true);
     setMessage('');
     try {
-      const heard = await listenOnce();
+      const stt =
+        locale.languageCode === 'fr'
+          ? 'fr-FR'
+          : locale.languageCode === 'pt'
+            ? 'pt-PT'
+            : locale.languageCode === 'ar'
+              ? 'ar-SA'
+              : locale.languageCode === 'es'
+                ? 'es-ES'
+                : `en-${countryCode}`;
+      const heard = await listenOnce(stt);
       const text = heard?.trim() || '';
       if (!text) throw new Error('empty');
       setTranscript(text);
@@ -130,7 +143,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
           rideType: selected,
           vehicleTypeCode: selected,
           spoken: spoken || 'yes',
-          countryCode: 'GH',
+          countryCode,
         }),
       });
       const json = await res.json();
@@ -201,7 +214,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
                     </Text>
                   </View>
                   <Text style={[styles.price, !active && styles.priceMuted]}>
-                    {formatCurrency(item.price, result.currency || 'GHS')}
+                    {formatCurrency(item.price, result.currency || locale.currencyCode || 'GHS')}
                   </Text>
                 </Pressable>
               );
@@ -216,7 +229,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
             <View style={styles.ctaGlow} />
             <Text style={styles.ctaText}>
               Book {selectedOpt?.name || 'ride'} ·{' '}
-              {formatCurrency(selectedOpt?.price || 0, result.currency || 'GHS')}
+              {formatCurrency(selectedOpt?.price || 0, result.currency || locale.currencyCode || 'GHS')}
             </Text>
           </Pressable>
         </View>

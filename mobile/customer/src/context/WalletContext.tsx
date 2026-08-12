@@ -25,7 +25,7 @@ type WalletState = {
   transactions: WalletTx[];
   loading: boolean;
   refresh: () => Promise<void>;
-  /** Phase 5B token fields kept for TokenScreen compatibility */
+  /** Stubs kept for any leftover consumers */
   dvtBalance: number;
   dvtPending: number;
   dvtOnchain: number;
@@ -57,10 +57,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [currency, setCurrency] = useState('GHS');
   const [transactions, setTransactions] = useState<WalletTx[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dvtBalance, setDvtBalance] = useState(0);
-  const [dvtPending, setDvtPending] = useState(0);
-  const [dvtOnchain, setDvtOnchain] = useState(0);
-  const [dvtHistory, setDvtHistory] = useState<any[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -80,27 +76,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshDvt = useCallback(async () => {
-    try {
-      const [b, h] = await Promise.all([
-        fetch(`${API}/token/balance`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/token/history`, { headers: authHeaders() }).then((r) => r.json()),
-      ]);
-      if (b?.data) {
-        setDvtBalance(Number(b.data.total || 0));
-        setDvtPending(Number(b.data.pending || 0));
-        setDvtOnchain(Number(b.data.onchain || 0));
-      }
-      if (h?.data) setDvtHistory(h.data);
-    } catch {
-      /* offline */
-    }
-  }, []);
+  const refreshDvt = useCallback(async () => undefined, []);
 
   useEffect(() => {
     refresh();
-    refreshDvt();
-  }, [refresh, refreshDvt]);
+  }, [refresh]);
 
   return (
     <WalletContext.Provider
@@ -111,10 +91,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         transactions,
         loading,
         refresh,
-        dvtBalance,
-        dvtPending,
-        dvtOnchain,
-        dvtHistory,
+        dvtBalance: 0,
+        dvtPending: 0,
+        dvtOnchain: 0,
+        dvtHistory: [],
         refreshDvt,
       }}
     >

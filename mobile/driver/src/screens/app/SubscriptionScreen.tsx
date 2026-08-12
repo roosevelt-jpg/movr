@@ -236,7 +236,7 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
       <Text style={styles.foot}>Cancel anytime from your profile settings.</Text>
-      <Text style={styles.footMuted}>No hidden fees. DVT tokens cover subscription costs.</Text>
+      <Text style={styles.footMuted}>No hidden fees. Pay with MoMo or card.</Text>
     </ScrollView>
   );
 }

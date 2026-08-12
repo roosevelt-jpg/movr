@@ -78,8 +78,25 @@ function go(navigate: ReturnType<typeof useNavigate>, href?: string) {
     window.open(href, '_blank', 'noreferrer');
     return;
   }
-  if (href.startsWith('/#') || href.startsWith('#')) {
-    window.location.href = href.startsWith('#') ? `/${href}` : href;
+  if (href.startsWith('#')) {
+    const el = document.querySelector(href);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    window.location.hash = href;
+    return;
+  }
+  const hashIdx = href.indexOf('#');
+  if (hashIdx > 0) {
+    const path = href.slice(0, hashIdx);
+    const hash = href.slice(hashIdx);
+    navigate(path);
+    window.setTimeout(() => {
+      const el = document.querySelector(hash);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else window.location.hash = hash;
+    }, 80);
     return;
   }
   navigate(href);
@@ -175,6 +192,96 @@ export function CmsChoiceHero({
             ) : null}
           </div>
         ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Uber-for-Business style split band — text + CTAs left, lifestyle image right.
+ * Fully CMS-driven (copy, image, colors). Used on /merchants.
+ */
+export function CmsBusinessSplit({ payload }: { payload: any }) {
+  const navigate = useNavigate();
+  const bg = payload.backgroundColor || '#000000';
+  const fg = payload.textColor || '#ffffff';
+  const muted = payload.mutedColor || 'rgba(255,255,255,0.72)';
+  const image = mediaUrl(payload.imageUrl || payload.backgroundImage || '');
+  const imageAlt = payload.imageAlt || '';
+  const primaryStyle = payload.primaryButtonStyle || 'light';
+
+  return (
+    <section
+      className="relative overflow-hidden"
+      style={{ backgroundColor: bg, color: fg }}
+      data-force-dark={bg === '#000000' || bg === '#000' ? true : undefined}
+    >
+      <div className="mx-auto max-w-6xl grid md:grid-cols-2 gap-0 items-stretch min-h-[420px] md:min-h-[520px]">
+        <div className="flex flex-col justify-center px-6 py-14 sm:px-10 md:px-12 lg:pr-16 lg:pl-6">
+          {payload.eyebrow ? (
+            <p
+              className="text-xs tracking-[0.16em] uppercase font-semibold mb-4"
+              style={{ color: muted }}
+            >
+              {payload.eyebrow}
+            </p>
+          ) : null}
+          <h1
+            className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold tracking-tight leading-[1.08] whitespace-pre-line"
+            style={{ color: fg }}
+          >
+            {payload.headline || 'The best of Movr for your business'}
+          </h1>
+          {payload.subhead ? (
+            <p className="mt-5 text-base sm:text-lg leading-relaxed max-w-xl" style={{ color: muted }}>
+              {payload.subhead}
+            </p>
+          ) : null}
+          <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-3">
+            {payload.primaryCta?.label ? (
+              <button
+                type="button"
+                onClick={() => go(navigate, payload.primaryCta.href)}
+                className={
+                  primaryStyle === 'brand'
+                    ? 'inline-flex rounded-full px-6 py-3 text-sm font-semibold bg-movr-gradient text-white'
+                    : 'inline-flex rounded-full px-6 py-3 text-sm font-semibold bg-white text-black hover:bg-white/90'
+                }
+              >
+                {payload.primaryCta.label}
+              </button>
+            ) : null}
+            {payload.secondaryCta?.label ? (
+              <button
+                type="button"
+                onClick={() => go(navigate, payload.secondaryCta.href)}
+                className="text-sm font-medium underline underline-offset-[5px] decoration-1 hover:opacity-80"
+                style={{ color: fg }}
+              >
+                {payload.secondaryCta.label}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="relative min-h-[280px] md:min-h-full">
+          {image ? (
+            <img
+              src={image}
+              alt={imageAlt}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(circle at 70% 30%, rgba(99,69,237,0.45), transparent 55%), linear-gradient(160deg,#0f172a,#134e4a)',
+              }}
+              aria-hidden
+            />
+          )}
+        </div>
       </div>
     </section>
   );
@@ -287,7 +394,7 @@ export function CmsProductGrid({ payload }: { payload: any }) {
 
 export function CmsWhyGrid({ payload }: { payload: any }) {
   return (
-    <section className="mkt-section" id={payload.anchor || 'why'}>
+    <section className="mkt-section" id={payload.anchorId || payload.anchor || 'why'}>
       <div className="mkt-shell">
         {payload.eyebrow ? <p className="mkt-eyebrow">{payload.eyebrow}</p> : null}
         <h2 className="mkt-h2 mt-4 max-w-3xl">{payload.heading}</h2>

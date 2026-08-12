@@ -12,13 +12,12 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Pre-launch points — total, this-month breakdown, estimated DVT at TGE. */
+/** Points — total and this-month breakdown. */
 export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
 
   const [totalPoints, setTotalPoints] = useState(0);
-  const [estimatedDvt, setEstimatedDvt] = useState(0);
   const [breakdown, setBreakdown] = useState<
     { category: string; points: number; timeframe: string }[]
   >([]);
@@ -32,24 +31,30 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
       .then((j) => {
         if (j?.data) {
           setTotalPoints(Number(j.data.totalPoints || 0));
-          setEstimatedDvt(Number(j.data.estimatedDvt || 0));
-          setBreakdown(j.data.breakdown || []);
+          const rows = (j.data.breakdown || []).filter(
+            (row: any) =>
+              !String(row.category || '')
+                .toLowerCase()
+                .includes('staking') &&
+              !String(row.category || '')
+                .toLowerCase()
+                .includes('dvt')
+          );
+          setBreakdown(rows);
           return;
         }
         // Fallback if summary unavailable
         return Promise.all([
           fetch(`${API}/points/balance`, { headers: h }).then((r) => r.json()),
-          fetch(`${API}/points/estimated-dvt`, { headers: h }).then((r) => r.json()),
           fetch(`${API}/points/history`, { headers: h }).then((r) => r.json()),
-        ]).then(([b, e, hist]) => {
+        ]).then(([b, hist]) => {
           setTotalPoints(Number(b?.data?.balance || 0));
-          setEstimatedDvt(Number(e?.data?.estimatedDvt || 0));
           const month = hist?.data?.byActivityMonth || [];
           const map: Record<string, number> = {
             Rides: 0,
             Orders: 0,
             Referrals: 0,
-            'Staking pool': 0,
+            Bonuses: 0,
           };
           const labels: Record<string, string> = {
             ride_completed: 'Rides',
@@ -57,7 +62,8 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
             delivery_completed: 'Orders',
             referral_qualified: 'Referrals',
             referral_confirmed: 'Referrals',
-            staking_accrual: 'Staking pool',
+            bonus: 'Bonuses',
+            promo: 'Bonuses',
           };
           for (const r of month) {
             const lab = labels[String(r.activity_type || '').toLowerCase()];
@@ -87,10 +93,7 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
         <Text style={styles.heroValue}>
           {loading ? '…' : Number(totalPoints).toLocaleString()}
         </Text>
-        <Text style={styles.heroMeta}>
-          ≈ {Number(estimatedDvt).toLocaleString(undefined, { maximumFractionDigits: 0 })} DVT
-          estimated at TGE
-        </Text>
+        <Text style={styles.heroMeta}>Earn points on rides, orders, and referrals</Text>
       </View>
 
       <Text style={styles.section}>Breakdown</Text>
@@ -100,7 +103,7 @@ export default function PointsScreen({ onRedeem }: { onRedeem?: () => void }) {
             { category: 'Rides', points: 0, timeframe: 'This month' },
             { category: 'Orders', points: 0, timeframe: 'This month' },
             { category: 'Referrals', points: 0, timeframe: 'This month' },
-            { category: 'Staking pool', points: 0, timeframe: 'This month' },
+            { category: 'Bonuses', points: 0, timeframe: 'This month' },
           ]
       ).map((row) => (
         <View key={row.category} style={styles.row}>

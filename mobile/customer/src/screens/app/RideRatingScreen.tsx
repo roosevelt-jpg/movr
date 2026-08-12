@@ -16,7 +16,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Arrival receipt + rate + tip + DVT earned (mockup). */
+/** Arrival receipt + rate + tip (mockup). */
 export default function RideRatingScreen({
   rideId,
   driverName = '',
@@ -41,9 +41,8 @@ export default function RideRatingScreen({
     distanceKm: 0,
     baseFare: 0,
     distanceFare: 0,
-    dvtDiscount: 0,
+    rewardsDiscount: 0,
     totalPaid: 0,
-    dvtEarned: 0,
     currency: 'NGN',
   });
 
@@ -64,9 +63,8 @@ export default function RideRatingScreen({
           distanceKm: Number(d.distanceKm || 0),
           baseFare: Number(d.baseFare || 0),
           distanceFare: Number(d.distanceFare || 0),
-          dvtDiscount: Number(d.dvtDiscount || 0),
+          rewardsDiscount: Number(d.dvtDiscount || d.rewardsDiscount || 0),
           totalPaid: Number(d.totalPaid || 0),
-          dvtEarned: Number(d.dvtEarned || 0),
           currency: d.currency || 'NGN',
         });
         setReceiptLoaded(true);
@@ -163,12 +161,14 @@ export default function RideRatingScreen({
           <Text style={styles.fareLabel}>Distance ({receipt.distanceKm}km)</Text>
           <Text style={styles.fareVal}>{formatCurrency(receipt.distanceFare, c)}</Text>
         </View>
-        <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>DVT discount</Text>
-          <Text style={[styles.fareVal, styles.discount]}>
-            -{formatCurrency(receipt.dvtDiscount, c)}
-          </Text>
-        </View>
+        {receipt.rewardsDiscount > 0 ? (
+          <View style={styles.fareRow}>
+            <Text style={styles.fareLabel}>Rewards discount</Text>
+            <Text style={[styles.fareVal, styles.discount]}>
+              -{formatCurrency(receipt.rewardsDiscount, c)}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.divider} />
         <View style={styles.fareRow}>
           <Text style={styles.totalLabel}>Total paid</Text>
@@ -219,14 +219,6 @@ export default function RideRatingScreen({
           onChangeText={setCustomTip}
         />
       ) : null}
-
-      <View style={styles.dvtBanner}>
-        <Text style={styles.dvtIcon}>⛓</Text>
-        <View>
-          <Text style={styles.dvtTitle}>+{receipt.dvtEarned} DVT tokens earned</Text>
-          <Text style={styles.dvtSub}>Added to your wallet</Text>
-        </View>
-      </View>
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
@@ -288,18 +280,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  dvtBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#1E1033',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
-  },
-  dvtIcon: { fontSize: 22 },
-  dvtTitle: { color: '#fff', fontWeight: '700' },
-  dvtSub: { color: '#A1A1AA', fontSize: 12, marginTop: 2 },
   msg: { color: '#F87171', marginBottom: 8 },
   cta: {
     borderRadius: 14,

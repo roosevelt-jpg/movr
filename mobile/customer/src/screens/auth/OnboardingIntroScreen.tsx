@@ -18,7 +18,7 @@ const FALLBACK: Landing = {
   brand: 'Movr',
   tagline: 'MOVE · SHOP · DELIVER',
   headline: "Africa's Super-App Is Here",
-  body: 'One platform for rides, shopping, deliveries, and rentals — powered by blockchain rewards.',
+  body: 'One platform for rides, shopping, deliveries, and rentals — with verified identity and safer trips.',
   ctaPrimary: 'Get Started',
   ctaSecondary: 'Already have an account? Sign in',
   chips: [

@@ -22,7 +22,7 @@ function authHeaders() {
   };
 }
 
-/** Arrival receipt + rate + tip + DVT. */
+/** Arrival receipt + rate + tip + loyalty points. */
 const RideRatingPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -119,10 +119,14 @@ const RideRatingPage: React.FC = () => {
           <span className="text-zinc-400">Distance ({receipt.distanceKm}km)</span>
           <span className="font-semibold">{fmt(receipt.distanceFare)}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-zinc-400">DVT discount</span>
-          <span className="font-semibold text-green-500">-{fmt(receipt.dvtDiscount)}</span>
-        </div>
+        {Number(receipt.rewardsDiscount || receipt.dvtDiscount || 0) > 0 ? (
+          <div className="flex justify-between text-sm">
+            <span className="text-zinc-400">Rewards discount</span>
+            <span className="font-semibold text-green-500">
+              -{fmt(receipt.rewardsDiscount || receipt.dvtDiscount)}
+            </span>
+          </div>
+        ) : null}
         <div className="h-px bg-zinc-800 my-2" />
         <div className="flex justify-between">
           <span className="font-bold">Total paid</span>
@@ -183,13 +187,15 @@ const RideRatingPage: React.FC = () => {
         />
       ) : null}
 
-      <div className="flex items-center gap-3 rounded-xl bg-[#1E1033] p-4 mb-6">
-        <span className="text-xl">⛓</span>
-        <div>
-          <p className="font-bold">+{receipt.dvtEarned} DVT tokens earned</p>
-          <p className="text-xs text-zinc-400 mt-0.5">Added to your wallet</p>
+      {Number(receipt.pointsEarned || 0) > 0 ? (
+        <div className="flex items-center gap-3 rounded-xl bg-[#1E1033] p-4 mb-6">
+          <span className="text-xl">★</span>
+          <div>
+            <p className="font-bold">+{receipt.pointsEarned} points earned</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Added to your rewards</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <button
         type="button"

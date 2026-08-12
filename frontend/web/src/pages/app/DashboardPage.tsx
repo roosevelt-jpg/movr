@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Home, Briefcase, Clock, Car, Heart, Package, KeyRound } from 'lucide-react';
 import { ridesApi, walletApi } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
+import { useLocaleStore } from '../../store/locale.store';
 
 const MODULES = [
   { id: 'Ride', icon: Car },
@@ -23,6 +24,7 @@ const SHORTCUTS = [
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const countryCode = useLocaleStore((s) => s.country) || user?.country || 'GH';
   const [activeModule, setActiveModule] = useState<(typeof MODULES)[number]['id']>('Ride');
   const [pickupAddress, setPickupAddress] = useState('12 Oxford St');
   const [dropoffAddress, setDropoffAddress] = useState('');
@@ -53,7 +55,7 @@ const DashboardPage: React.FC = () => {
       .then((r) => r.json())
       .then((j) => setPromise(j?.data || null))
       .catch(() => undefined);
-    fetch(`${API}/rails/catalog?countryCode=GH`)
+    fetch(`${API}/rails/catalog?countryCode=${encodeURIComponent(countryCode)}`)
       .then((r) => r.json())
       .then((j) => {
         const rails = (j?.data?.rails || []).slice(0, 4).join(' · ');
@@ -66,7 +68,7 @@ const DashboardPage: React.FC = () => {
       .then((r) => r.json())
       .then((j) => setMobilityCredit(Number(j?.data?.mobilityCredit || 0)))
       .catch(() => undefined);
-  }, []);
+  }, [countryCode]);
 
   const { data: addressesData } = useQuery('saved-addresses', () => walletApi.getAddresses());
 
@@ -150,6 +152,7 @@ const DashboardPage: React.FC = () => {
             dropoffLng: dropoff.longitude,
             pickupAddress,
             dropoffAddress,
+            countryCode,
             payWithMobilityCredit: payWithCredit,
           }),
         });
@@ -185,6 +188,7 @@ const DashboardPage: React.FC = () => {
           fareMode: 'now',
           payWithMobilityCredit: payWithCredit,
           sourceChannel: 'app',
+          countryCode,
         }),
       });
       const json = await res.json();

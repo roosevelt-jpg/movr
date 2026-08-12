@@ -14,7 +14,7 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Payment Methods — Visa default, MC remove, MoMo, MetaMask (mockup). */
+/** Payment Methods — Visa default, MC remove, MoMo (mockup). */
 export default function PaymentMethodsScreen({
   onBack,
   onAdd,
@@ -123,29 +123,17 @@ export default function PaymentMethodsScreen({
             </View>
           );
         }
-        return (
-          <View key={m.id} style={styles.row}>
-            <View style={styles.iconBox}>
-              <Text>🦊</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>MetaMask</Text>
-              <Text style={styles.rowSub}>
-                {m.walletAddress || '0x3a4F...9d2c'} · {m.network || 'Polygon'}
-              </Text>
-            </View>
-            <View style={styles.activePill}>
-              <Text style={styles.activeText}>Active</Text>
-            </View>
-          </View>
-        );
+        if (m.type === 'crypto' || m.brand === 'metamask' || m.walletAddress) {
+          return null;
+        }
+        return null;
       })}
 
       <Pressable
         style={styles.addBtn}
         onPress={() => {
           onAdd?.();
-          Alert.alert('Add Payment Method', 'Card, MoMo, or crypto wallet can be linked from Wallet.');
+          Alert.alert('Add Payment Method', 'Link a card or MoMo from Wallet.');
         }}
       >
         <Text style={styles.addText}>＋  Add Payment Method</Text>

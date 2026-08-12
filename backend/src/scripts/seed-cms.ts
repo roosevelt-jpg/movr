@@ -132,7 +132,7 @@ export const CMS_SEED: Array<{
               title: 'I need a ride',
               body: 'Cars, bikes, and tricycles on demand — tracked live.',
               cta: 'Book a ride',
-              href: '/login',
+              href: '/#book',
               imageUrl: '/brand/ride-sedan.png',
             },
             {
@@ -144,6 +144,21 @@ export const CMS_SEED: Array<{
               imageUrl: '/brand/shop-partner.png',
             },
           ],
+        },
+      },
+      {
+        type: 'booking_engine',
+        payload: {
+          headline: 'Go anywhere with Movr',
+          subhead: 'Cars, okada, and shared rides — priced in your local currency.',
+          cityLabel: 'Accra, GH',
+          countryCode: 'GH',
+          ctaLabel: 'See prices',
+          sideTitle: 'Ready to travel?',
+          sideCtaLabel: 'Create account',
+          sideCtaHref: '/register',
+          defaultLat: 5.6037,
+          defaultLng: -0.187,
         },
       },
       {
@@ -351,31 +366,20 @@ export const CMS_SEED: Array<{
     status: 'published',
     sections: [
       {
-        type: 'choice_hero',
+        type: 'business_split',
         payload: {
-          eyebrow: 'Movr for merchants',
-          headline: 'Sell faster with an\nin-app storefront.',
+          eyebrow: 'Movr for Business',
+          headline: 'The best of Movr\nfor your business',
           subhead:
-            'Order management, live delivery tracking, and instant payouts — all from one dashboard.',
-          backgroundImage: '/brand/shop-partner.png',
-          choices: [
-            {
-              emoji: '🛍️',
-              title: 'Create your storefront',
-              body: 'List products, set hours, and go live in minutes.',
-              cta: 'Start onboarding',
-              href: '/merchant/onboarding',
-              imageUrl: '/brand/shop-partner.png',
-            },
-            {
-              emoji: '📦',
-              title: 'I already sell',
-              body: 'Connect delivery and get paid to bank or mobile money.',
-              cta: 'Merchant login',
-              href: '/merchant/login',
-              imageUrl: '/brand/courier-moto.png',
-            },
-          ],
+            'Give your shop more control, clearer sales insights, and tools built for African merchants. Manage orders, deliveries, and payouts from one dashboard.',
+          imageUrl: '/brand/shop-partner.png',
+          imageAlt: 'Merchant using Movr on a phone',
+          backgroundColor: '#000000',
+          textColor: '#ffffff',
+          mutedColor: 'rgba(255,255,255,0.72)',
+          primaryButtonStyle: 'light',
+          primaryCta: { label: 'How to get started', href: '/merchant/onboarding' },
+          secondaryCta: { label: 'Check out our solutions', href: '/merchants#solutions' },
         },
       },
       {
@@ -407,6 +411,7 @@ export const CMS_SEED: Array<{
         payload: {
           eyebrow: 'Built for local commerce',
           heading: 'Everything a growing shop needs.',
+          anchorId: 'solutions',
           items: [
             {
               iconKey: 'package',
@@ -662,7 +667,7 @@ export const CMS_SEED: Array<{
             },
             {
               title: 'Earn points on every trip',
-              body: 'Redeem rewards or convert points when DVT launches.',
+              body: 'Redeem loyalty points for ride credit and discounts.',
               iconKey: 'points',
             },
           ],
@@ -850,7 +855,92 @@ export async function seedCms(db?: DatabaseService, opts: { overwrite?: boolean 
 
 /** Insert any missing default pages without overwriting admin edits. */
 export async function ensureCmsDefaults(db?: DatabaseService) {
-  return seedCms(db, { overwrite: false });
+  const result = await seedCms(db, { overwrite: false });
+  const service = new CmsService(db || new DatabaseService());
+
+  // Ensure homepage booking engine exists even if home was seeded earlier
+  try {
+    const home = await service.getPageBySlug('home', { publishedOnly: false });
+    if (home?.sections && !home.sections.some((s: any) => s.type === 'booking_engine')) {
+      const seedHome = CMS_SEED.find((p) => p.slug === 'home');
+      const booking = seedHome?.sections?.find((s) => s.type === 'booking_engine');
+      if (booking) {
+        const sections = [...home.sections];
+        const heroIdx = sections.findIndex(
+          (s: any) => s.type === 'choice_hero' || s.type === 'hero'
+        );
+        const insertAt = heroIdx >= 0 ? heroIdx + 1 : 0;
+        sections.splice(insertAt, 0, {
+          type: 'booking_engine',
+          sortOrder: insertAt,
+          enabled: true,
+          payload: booking.payload,
+        } as any);
+        await service.upsertPage({
+          slug: 'home',
+          title: home.title || 'Homepage',
+          status: home.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log('CMS: injected booking_engine into home');
+      }
+    }
+  } catch (e: any) {
+    console.warn(`CMS booking_engine inject: ${e?.message || e}`);
+  }
+
+  // Ensure merchants page has Uber-style business_split hero
+  try {
+    const merchants = await service.getPageBySlug('merchants', { publishedOnly: false });
+    const seedMerchants = CMS_SEED.find((p) => p.slug === 'merchants');
+    const splitSeed = seedMerchants?.sections?.find((s) => s.type === 'business_split');
+    if (merchants?.sections && splitSeed && !merchants.sections.some((s: any) => s.type === 'business_split')) {
+      const sections = [...merchants.sections];
+      // Replace leading choice_hero with business_split, else prepend
+      const choiceIdx = sections.findIndex((s: any) => s.type === 'choice_hero');
+      if (choiceIdx === 0) {
+        sections[0] = {
+          type: 'business_split',
+          sortOrder: 0,
+          enabled: true,
+          payload: splitSeed.payload,
+        } as any;
+      } else {
+        sections.unshift({
+          type: 'business_split',
+          sortOrder: 0,
+          enabled: true,
+          payload: splitSeed.payload,
+        } as any);
+      }
+      // Ensure solutions anchor on why_grid
+      const why = sections.find((s: any) => s.type === 'why_grid');
+      if (why?.payload && !why.payload.anchorId) {
+        why.payload = { ...why.payload, anchorId: 'solutions' };
+      }
+      await service.upsertPage({
+        slug: 'merchants',
+        title: merchants.title || 'For merchants',
+        status: merchants.status || 'published',
+        sections: sections.map((s: any, i: number) => ({
+          type: s.type,
+          sortOrder: i,
+          enabled: s.enabled !== false,
+          payload: s.payload || {},
+        })),
+      });
+      console.log('CMS: injected business_split into merchants');
+    }
+  } catch (e: any) {
+    console.warn(`CMS business_split inject: ${e?.message || e}`);
+  }
+
+  return result;
 }
 
 if (require.main === module) {

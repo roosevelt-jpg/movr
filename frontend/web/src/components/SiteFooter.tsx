@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Globe } from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { getStoredCountry, setStoredCountry } from '../hooks/useLocalCurrency';
+import { useLocaleStore } from '../store/locale.store';
 import { useCmsPage } from '../services/cms';
 import { StoreBadgeButton } from './StoreBadges';
 import { useTheme } from '../theme/ThemeProvider';
@@ -79,7 +80,8 @@ export default function SiteFooter() {
   };
 
   const [locales, setLocales] = React.useState<LocaleRow[]>([]);
-  const [country, setCountry] = React.useState(user?.country || getStoredCountry() || 'GH');
+  const localeCountry = useLocaleStore((s) => s.country);
+  const country = (user?.country || localeCountry || getStoredCountry() || 'GH').toUpperCase();
   const [appLinks, setAppLinks] = React.useState<{ ios_url: string; android_url: string }>({
     ios_url: 'https://apps.apple.com/app/movr',
     android_url: 'https://play.google.com/store/apps/details?id=io.movr.app',
@@ -108,7 +110,9 @@ export default function SiteFooter() {
   }, []);
 
   React.useEffect(() => {
-    if (user?.country) setCountry(user.country.toUpperCase());
+    if (user?.country) {
+      useLocaleStore.getState().setCountry(user.country, { manual: false });
+    }
   }, [user?.country]);
 
   const openApp = (btn: { store?: string; href?: string; label?: string }) => {
@@ -242,8 +246,8 @@ export default function SiteFooter() {
                 value={country}
                 onChange={(e) => {
                   const next = e.target.value.toUpperCase();
-                  setCountry(next);
                   setStoredCountry(next);
+                  useLocaleStore.getState().setCountry(next, { manual: true });
                 }}
                 aria-label="Region and language"
               >

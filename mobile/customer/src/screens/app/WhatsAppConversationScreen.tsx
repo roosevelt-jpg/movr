@@ -12,6 +12,7 @@ import {
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
+import { getAppLocale } from '../../services/locale';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -37,6 +38,8 @@ type Msg =
 export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => void }) {
   const colors = useThemeColors();
   const styles = makeStyles(colors);
+  const locale = getAppLocale();
+  const countryCode = locale.countryCode || 'GH';
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -59,7 +62,7 @@ export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => 
         text,
         currentLat: 5.6037,
         currentLng: -0.187,
-        countryCode: 'GH',
+        countryCode,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -81,7 +84,7 @@ export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => 
       from: 'bot',
       kind: 'options',
       options: options.slice(0, 2),
-      currency: data?.currency || 'GHS',
+      currency: data?.currency || locale.currencyCode || 'GHS',
     });
     push({
       from: 'bot',
@@ -101,6 +104,7 @@ export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => 
     booted.current = true;
     // Auto-play mockup conversation start
     sendVoice().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const confirm = async (index: number) => {
@@ -131,7 +135,7 @@ export default function WhatsAppConversationScreen({ onBack }: { onBack?: () => 
             rideType: opt.code,
             spoken: String(index + 1),
             sourceChannel: 'whatsapp',
-            countryCode: 'GH',
+            countryCode,
           }),
         });
         const json = await res.json().catch(() => ({}));

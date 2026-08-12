@@ -141,7 +141,11 @@ const HistoryPage: React.FC = () => {
                   <p className="flex-1 text-sm text-zinc-400">
                     {relWhen(item.occurredAt, item.metadata)}
                   </p>
-                  <p className="text-green-400 font-extrabold">+{Number(item.dvtEarned || 0)} DVT</p>
+                  {Number(item.pointsEarned || 0) > 0 ? (
+                    <p className="text-green-400 font-extrabold">
+                      +{Number(item.pointsEarned)} pts
+                    </p>
+                  ) : null}
                 </div>
 
                 {(item.pickup || item.dropoff) && (

@@ -12,7 +12,10 @@ const ERC20_ABI = [
 
 /**
  * Phase 5B — DVT custodial wallet + off-chain ledger mirror.
+ * Optional DVT ledger / on-chain mint — OFF by default.
  * Gated by TOKEN_SYSTEM_ENABLED=true.
+ * Store apps (customer/driver/web) must not expose token UI; keep for internal ops only.
+ * Blockchain for identity: see kyc-attestation.service + KYCRegistry.
  */
 export class TokenService {
   private logger = getLogger('token');

@@ -20,7 +20,7 @@ export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
     location: '',
     sinceYear: null,
     loyaltyBadge: '',
-    stats: { trips: 0, rating: 0, dvt: 0, dvtLabel: '', acceptance: 0 },
+    stats: { trips: 0, rating: 0, acceptance: 0 },
     ratingBreakdown: [],
     recentReviews: [],
   });
@@ -71,7 +71,6 @@ export default function PerformanceScreen({ onBack }: { onBack?: () => void }) {
         {[
           { label: 'Trips', value: String(s.trips ?? 0), color: '#FFFFFF' },
           { label: 'Rating', value: Number(s.rating ?? 0).toFixed(1), color: '#F5C542' },
-          { label: 'DVT', value: s.dvtLabel || String(s.dvt ?? 0), color: '#A78BFA' },
           { label: 'Accept', value: `${Math.round(Number(s.acceptance ?? 0))}%`, color: '#FFFFFF' },
         ].map((m) => (
           <View key={m.label} style={styles.stat}>

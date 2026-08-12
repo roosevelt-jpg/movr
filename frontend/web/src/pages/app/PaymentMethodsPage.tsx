@@ -118,15 +118,23 @@ export default function PaymentMethodsPage() {
               </div>
             );
           }
+          // Skip crypto / MetaMask instruments — store apps are fiat-only
+          if (
+            m.type === 'crypto' ||
+            m.brand === 'metamask' ||
+            /metamask|crypto|dvt|web3/i.test(String(m.provider || m.label || ''))
+          ) {
+            return null;
+          }
           return (
             <div key={m.id} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3">
               <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
-                🦊
+                💳
               </div>
               <div className="flex-1">
-                <p className="font-bold">MetaMask</p>
+                <p className="font-bold">{m.label || m.brand || 'Card'}</p>
                 <p className="text-xs text-zinc-500">
-                  {m.walletAddress || '0x3a4F...9d2c'} · {m.network || 'Polygon'}
+                  {m.lastFour ? `**** ${m.lastFour}` : m.phone || 'Saved method'}
                 </p>
               </div>
               <span className="rounded-full bg-green-950 text-green-400 text-xs font-bold px-2.5 py-1">
@@ -139,7 +147,7 @@ export default function PaymentMethodsPage() {
 
       <button
         type="button"
-        onClick={() => toast('Add card, MoMo, or crypto wallet')}
+        onClick={() => toast('Add a card or mobile money')}
         className="w-full rounded-xl border-2 border-dashed border-purple-500 bg-white py-4 font-extrabold text-purple-600"
       >
         ＋ Add Payment Method

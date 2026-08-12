@@ -19,7 +19,6 @@ type Pkg = {
   name: string;
   weight_label: string;
   base_fee: number;
-  dvt_reward: number;
   icon_key?: string;
 };
 
@@ -57,7 +56,6 @@ export default function ParcelHomeScreen({
               name: p.name,
               weight_label: p.weight_label,
               base_fee: Number(p.base_fee),
-              dvt_reward: Number(p.dvt_reward),
               icon_key: p.icon_key,
             }))
           );
@@ -73,7 +71,6 @@ export default function ParcelHomeScreen({
 
   const active = pkgs.find((p) => p.code === selected) || pkgs[1] || pkgs[0];
   const fee = Number(active?.base_fee || 0);
-  const dvt = Number(active?.dvt_reward || 0);
 
   const schedule = async () => {
     if (!pickup || !dropoff) {
@@ -149,7 +146,6 @@ export default function ParcelHomeScreen({
       <View style={styles.costCard}>
         <View>
           <Text style={styles.costLabel}>Estimated Cost</Text>
-          <Text style={styles.dvt}>+{dvt} DVT tokens earned</Text>
         </View>
         <Text style={styles.costValue}>{formatCurrency(fee, currency)}</Text>
       </View>
@@ -218,7 +214,6 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   costLabel: { color: '#888', fontSize: 13 },
-  dvt: { color: '#a78bfa', fontSize: 12, marginTop: 4, fontWeight: '600' },
   costValue: { color: '#fff', fontSize: 28, fontWeight: '800' },
   msg: { color: '#4ade80', textAlign: 'center', marginBottom: 8 },
   cta: {

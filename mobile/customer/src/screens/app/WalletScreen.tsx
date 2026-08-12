@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { spacing, radius } from '@movr/design-system/theme';
+import { spacing } from '@movr/design-system/theme';
 import { formatCurrency, formatRelativeTime } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -15,7 +15,7 @@ function authHeaders(): Record<string, string> {
 const ICONS: Record<string, string> = {
   topup: '↓',
   ride: '🚗',
-  dvt: '⛓',
+  points: '✦',
   parcel: '📦',
   withdraw: '↑',
   transfer: '↔',
@@ -38,7 +38,6 @@ export default function WalletScreen({
   onWithdraw,
   onSettlement,
   onTransfer,
-  onClaimDvt,
   onPaymentMethods,
   onRedeem,
 }: {
@@ -48,12 +47,10 @@ export default function WalletScreen({
   onWithdraw?: () => void;
   onSettlement?: () => void;
   onTransfer?: () => void;
-  onClaimDvt?: () => void;
   onPaymentMethods?: () => void;
 }) {
   const [portfolio, setPortfolio] = useState(0);
   const [fiat, setFiat] = useState(0);
-  const [dvt, setDvt] = useState(0);
   const [points, setPoints] = useState(0);
   const [currency, setCurrency] = useState('NGN');
   const [txs, setTxs] = useState<Tx[]>([]);
@@ -73,16 +70,16 @@ export default function WalletScreen({
       if (!d) throw new Error('Wallet data is unavailable');
       setPortfolio(Number(d.portfolioValue ?? 0));
       setFiat(Number(d.fiatBalance ?? 0));
-      setDvt(Number(d.dvtTokens ?? 0));
       setPoints(Number(d.points ?? 0));
       setCurrency(d.currency || 'NGN');
-      if (Array.isArray(d.transactions)) setTxs(d.transactions);
+      if (Array.isArray(d.transactions)) {
+        setTxs(d.transactions.filter((t: Tx) => t.unit !== 'dvt'));
+      }
       const cr = await fetch(`${API}/rails/credit`, { headers: authHeaders() }).then((r) => r.json());
       setMobilityCredit(Number(cr?.data?.mobilityCredit || 0));
     } catch (e: any) {
       setPortfolio(0);
       setFiat(0);
-      setDvt(0);
       setPoints(0);
       setTxs([]);
       setError(e?.message || 'Could not load wallet');
@@ -100,7 +97,9 @@ export default function WalletScreen({
   }, [load]);
 
   const fmtAmt = (t: Tx) => {
-    if (t.unit === 'dvt') return `${t.credit || t.amount > 0 ? '+' : ''}${Math.abs(t.amount)} DVT`;
+    if (t.unit === 'points' || t.unit === 'pts') {
+      return `${t.credit || t.amount > 0 ? '+' : ''}${Math.abs(t.amount)} pts`;
+    }
     const sign = t.amount >= 0 || t.credit ? '+' : '-';
     return `${sign}${formatCurrency(Math.abs(t.amount), currency)}`;
   };
@@ -112,7 +111,6 @@ export default function WalletScreen({
     { key: 'methods', label: 'Cards', icon: '💳', onPress: onPaymentMethods },
     { key: 'withdraw', label: 'Withdraw', icon: '↓', onPress: onWithdraw || onTopUp },
     { key: 'transfer', label: 'Transfer', icon: '↔', onPress: onTransfer },
-    { key: 'claim', label: 'Claim DVT', icon: '⛓', onPress: onClaimDvt },
     { key: 'redeem', label: 'Redeem', icon: '✨', onPress: onRedeem },
   ].filter((a) => a.onPress);
 
@@ -141,10 +139,8 @@ export default function WalletScreen({
             <Text style={styles.metricVal}>{formatCurrency(mobilityCredit, currency)}</Text>
           </View>
           <View style={styles.metric}>
-            <Text style={styles.metricLabel}>DVT / Points</Text>
-            <Text style={styles.metricVal}>
-              {Number(dvt).toLocaleString()} · {Number(points).toLocaleString()}
-            </Text>
+            <Text style={styles.metricLabel}>Points</Text>
+            <Text style={styles.metricVal}>{Number(points).toLocaleString()}</Text>
           </View>
         </View>
       </View>

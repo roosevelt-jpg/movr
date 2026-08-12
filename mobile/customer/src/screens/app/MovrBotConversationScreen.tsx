@@ -14,6 +14,7 @@ import {
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { aiApi } from '../../services/api';
+import { getAppLocale } from '../../services/locale';
 
 type AiCard = {
   kind?: string;
@@ -42,10 +43,7 @@ type Msg = {
 
 function authCountry(): string {
   try {
-    const stored =
-      (globalThis as any).__MOVR_COUNTRY__ ||
-      (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_country') : null);
-    return String(stored || 'GH').toUpperCase();
+    return getAppLocale().countryCode || 'GH';
   } catch {
     return 'GH';
   }

@@ -129,8 +129,8 @@ export default function ActiveRideScreen({
           <Text style={styles.metricLab}>Earnings</Text>
         </View>
         <View style={styles.metric}>
-          <Text style={[styles.metricVal, { color: '#A78BFA' }]}>+{nav.dvtReward || 0}</Text>
-          <Text style={[styles.metricLab, { color: '#A78BFA' }]}>DVT</Text>
+          <Text style={styles.metricVal}>{Number(nav.distanceLeftKm || 0)} km</Text>
+          <Text style={styles.metricLab}>Left</Text>
         </View>
       </View>
 

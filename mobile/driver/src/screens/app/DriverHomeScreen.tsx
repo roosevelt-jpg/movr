@@ -35,7 +35,6 @@ export default function DriverHomeScreen({
     trips: 0,
     onlineHours: 0,
     rating: 0,
-    dvt: 0,
     surge: null,
     currency: 'NGN',
   });
@@ -118,11 +117,10 @@ export default function DriverHomeScreen({
           { v: String(data.trips ?? 14), l: 'Trips', c: '#FFF' },
           { v: `${data.onlineHours ?? 6.5}h`, l: 'Online', c: '#FFF' },
           { v: `★ ${Number(data.rating || 4.9).toFixed(1)}`, l: 'Rating', c: '#4ADE80' },
-          { v: String(data.dvt ?? 840), l: 'DVT', c: '#A78BFA', border: true },
         ].map((s) => (
-          <View key={s.l} style={[styles.stat, s.border && styles.statDvt]}>
+          <View key={s.l} style={styles.stat}>
             <Text style={[styles.statVal, { color: s.c }]}>{s.v}</Text>
-            <Text style={[styles.statLab, s.border && { color: '#A78BFA' }]}>{s.l}</Text>
+            <Text style={styles.statLab}>{s.l}</Text>
           </View>
         ))}
       </View>
@@ -212,7 +210,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  statDvt: { borderWidth: 1, borderColor: '#8E2DE2' },
   statVal: { fontWeight: '800', fontSize: 16 },
   statLab: { color: '#71717A', fontSize: 11, marginTop: 4 },
   withdraw: { color: '#A78BFA', textAlign: 'center', fontWeight: '700', marginBottom: 8 },

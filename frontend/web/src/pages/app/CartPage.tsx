@@ -186,10 +186,12 @@ const CartPage: React.FC = () => {
           <span className="text-zinc-400">Delivery fee</span>
           <span className="font-semibold">{formatCurrency(deliveryFee, currency)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-zinc-400">DVT discount</span>
-          <span className="font-semibold text-green-500">-{formatCurrency(dvtDiscount, currency)}</span>
-        </div>
+        {dvtDiscount > 0 ? (
+          <div className="flex justify-between">
+            <span className="text-zinc-400">Rewards discount</span>
+            <span className="font-semibold text-green-500">-{formatCurrency(dvtDiscount, currency)}</span>
+          </div>
+        ) : null}
         <div className="flex justify-between pt-2">
           <span className="font-extrabold">Total</span>
           <span className="font-extrabold">{formatCurrency(total, currency)}</span>

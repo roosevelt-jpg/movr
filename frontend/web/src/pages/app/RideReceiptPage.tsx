@@ -82,10 +82,14 @@ export default function RideReceiptPage() {
           <span className="text-white/45">Platform fee</span>
           <span className="font-bold text-green-400">{naira(data.platformFee ?? 0)}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-white/45">DVT discount</span>
-          <span className="font-bold text-green-400">-{naira(data.dvtDiscount)}</span>
-        </div>
+        {Number(data.rewardsDiscount || data.dvtDiscount || 0) > 0 ? (
+          <div className="flex justify-between text-sm">
+            <span className="text-white/45">Rewards discount</span>
+            <span className="font-bold text-green-400">
+              -{naira(data.rewardsDiscount || data.dvtDiscount)}
+            </span>
+          </div>
+        ) : null}
         <div className="border-t border-zinc-800 pt-3 flex justify-between">
           <span className="font-extrabold">Total</span>
           <span className="text-lg font-extrabold">{naira(data.totalPaid)}</span>
@@ -103,9 +107,13 @@ export default function RideReceiptPage() {
       </div>
 
       <div className="mt-4 flex items-center gap-3 rounded-xl bg-zinc-950 p-4">
-        <span className="text-2xl text-violet-400">⚭</span>
+        <span className="text-2xl text-violet-400">★</span>
         <div>
-          <p className="font-bold">+{Number(data.dvtEarned || 0)} DVT tokens earned</p>
+          {Number(data.pointsEarned || 0) > 0 ? (
+            <p className="font-bold">+{Number(data.pointsEarned)} points earned</p>
+          ) : (
+            <p className="font-bold">Payment complete</p>
+          )}
           <p className="text-sm text-white/45">Paid with: {data.paymentMethod}</p>
         </div>
       </div>

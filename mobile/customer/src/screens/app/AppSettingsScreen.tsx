@@ -21,7 +21,6 @@ type Prefs = {
   locationEnabled: boolean;
   rideNotifications: boolean;
   shoppingNotifications: boolean;
-  dvtEnabled: boolean;
   walletPaymentEnabled: boolean;
 };
 
@@ -40,7 +39,6 @@ export default function AppSettingsScreen({
     locationEnabled: true,
     rideNotifications: true,
     shoppingNotifications: true,
-    dvtEnabled: true,
     walletPaymentEnabled: false,
   });
 
@@ -168,7 +166,6 @@ export default function AppSettingsScreen({
           value={prefs.shoppingNotifications}
           onChange={(v) => patch({ shoppingNotifications: v })}
         />
-        <RowToggle icon="⛓" value={prefs.dvtEnabled} onChange={(v) => patch({ dvtEnabled: v })} />
         <RowToggle
           icon="💳"
           value={prefs.walletPaymentEnabled}

@@ -1025,6 +1025,170 @@ function SectionEditor({
         </>
       );
 
+    case 'business_split':
+      return (
+        <>
+          <p style={styles.hint}>
+            Uber-for-Business style band: headline + CTAs on the left, lifestyle photo on the right.
+            Live on /merchants after Save &amp; publish.
+          </p>
+          <Field
+            label="Eyebrow"
+            value={p.eyebrow || ''}
+            disabled={disabled}
+            onChange={(v) => set({ eyebrow: v })}
+          />
+          <Field
+            label="Headline (line breaks allowed)"
+            value={p.headline || ''}
+            multiline
+            disabled={disabled}
+            onChange={(v) => set({ headline: v })}
+          />
+          <Field
+            label="Supporting text"
+            value={p.subhead || ''}
+            multiline
+            disabled={disabled}
+            onChange={(v) => set({ subhead: v })}
+          />
+          <MediaField
+            label="Right-side lifestyle image"
+            value={p.imageUrl || p.backgroundImage || ''}
+            purpose="hero"
+            disabled={disabled}
+            accept="image/*"
+            hint="Fills the right column edge-to-edge. Upload from admin — no manual crop needed."
+            onChange={(url) => set({ imageUrl: url, backgroundImage: url })}
+          />
+          <Field
+            label="Image alt text"
+            value={p.imageAlt || ''}
+            disabled={disabled}
+            onChange={(v) => set({ imageAlt: v })}
+          />
+          <div style={styles.row2}>
+            <Field
+              label="Background color"
+              value={p.backgroundColor || '#000000'}
+              disabled={disabled}
+              onChange={(v) => set({ backgroundColor: v })}
+            />
+            <Field
+              label="Text color"
+              value={p.textColor || '#ffffff'}
+              disabled={disabled}
+              onChange={(v) => set({ textColor: v })}
+            />
+          </div>
+          <Field
+            label="Muted text color (body)"
+            value={p.mutedColor || 'rgba(255,255,255,0.72)'}
+            disabled={disabled}
+            onChange={(v) => set({ mutedColor: v })}
+          />
+          <label style={styles.field}>
+            <span style={styles.label}>Primary button style</span>
+            <select
+              style={styles.input}
+              value={p.primaryButtonStyle || 'light'}
+              disabled={disabled}
+              onChange={(e) => set({ primaryButtonStyle: e.target.value })}
+            >
+              <option value="light">White pill (Uber-style)</option>
+              <option value="brand">Movr gradient</option>
+            </select>
+          </label>
+          <div style={styles.row2}>
+            <Field
+              label="Primary button label"
+              value={p.primaryCta?.label || ''}
+              disabled={disabled}
+              onChange={(v) => set({ primaryCta: { ...(p.primaryCta || {}), label: v } })}
+            />
+            <Field
+              label="Primary button link"
+              value={p.primaryCta?.href || ''}
+              disabled={disabled}
+              onChange={(v) => set({ primaryCta: { ...(p.primaryCta || {}), href: v } })}
+            />
+          </div>
+          <div style={styles.row2}>
+            <Field
+              label="Secondary link label"
+              value={p.secondaryCta?.label || ''}
+              disabled={disabled}
+              onChange={(v) => set({ secondaryCta: { ...(p.secondaryCta || {}), label: v } })}
+            />
+            <Field
+              label="Secondary link"
+              value={p.secondaryCta?.href || ''}
+              disabled={disabled}
+              onChange={(v) => set({ secondaryCta: { ...(p.secondaryCta || {}), href: v } })}
+            />
+          </div>
+        </>
+      );
+
+    case 'booking_engine':
+      return (
+        <>
+          <p style={styles.hint}>
+            Uber-style ride booking on the homepage. Uses /rails/quote + /rails/book. Place search
+            needs Google Maps in Integrations Hub.
+          </p>
+          <Field
+            label="Headline"
+            value={p.headline || ''}
+            disabled={disabled}
+            onChange={(v) => set({ headline: v })}
+          />
+          <Field
+            label="Supporting text"
+            value={p.subhead || ''}
+            multiline
+            disabled={disabled}
+            onChange={(v) => set({ subhead: v })}
+          />
+          <Field
+            label="City label"
+            value={p.cityLabel || ''}
+            disabled={disabled}
+            onChange={(v) => set({ cityLabel: v })}
+          />
+          <Field
+            label="Country code"
+            value={p.countryCode || 'GH'}
+            disabled={disabled}
+            onChange={(v) => set({ countryCode: v })}
+          />
+          <Field
+            label="Primary CTA"
+            value={p.ctaLabel || ''}
+            disabled={disabled}
+            onChange={(v) => set({ ctaLabel: v })}
+          />
+          <Field
+            label="Side panel title"
+            value={p.sideTitle || ''}
+            disabled={disabled}
+            onChange={(v) => set({ sideTitle: v })}
+          />
+          <Field
+            label="Side CTA label"
+            value={p.sideCtaLabel || ''}
+            disabled={disabled}
+            onChange={(v) => set({ sideCtaLabel: v })}
+          />
+          <Field
+            label="Side CTA link"
+            value={p.sideCtaHref || ''}
+            disabled={disabled}
+            onChange={(v) => set({ sideCtaHref: v })}
+          />
+        </>
+      );
+
     case 'trust_strip':
       return (
         <>
@@ -1473,6 +1637,8 @@ const TYPE_LABELS: Record<string, string> = {
   nav: 'Navigation',
   hero: 'Hero',
   choice_hero: 'Choice hero',
+  business_split: 'Business split (merchants)',
+  booking_engine: 'Homepage booking engine',
   trust_strip: 'Trust strip',
   how_it_works: 'How it works',
   ai_showcase: 'Movr AI showcase',
@@ -1682,6 +1848,43 @@ export default function CmsPagesPage() {
         },
       ]);
     }
+    if (type === 'ai_showcase') {
+      setSections((prev) => [
+        ...prev,
+        {
+          type: 'ai_showcase',
+          sortOrder: prev.length,
+          enabled: true,
+          payload: {
+            eyebrow: 'Movr AI',
+            heading: 'Ask Movr anything',
+            body: 'Get ride quotes, product picks, and delivery help in one chat.',
+          },
+        },
+      ]);
+    }
+    if (type === 'business_split') {
+      setSections((prev) => [
+        ...prev,
+        {
+          type: 'business_split',
+          sortOrder: prev.length,
+          enabled: true,
+          payload: {
+            eyebrow: 'Movr for Business',
+            headline: 'The best of Movr\nfor your business',
+            subhead:
+              'More control, clearer insights, and tools built for merchants — manage orders and payouts on one dashboard.',
+            imageUrl: '/brand/shop-partner.png',
+            backgroundColor: '#000000',
+            textColor: '#ffffff',
+            primaryButtonStyle: 'light',
+            primaryCta: { label: 'How to get started', href: '/merchant/onboarding' },
+            secondaryCta: { label: 'Check out our solutions', href: '/merchants#solutions' },
+          },
+        },
+      ]);
+    }
   };
 
   const resetAll = async () => {
@@ -1851,6 +2054,14 @@ export default function CmsPagesPage() {
         </button>
         <button type="button" style={styles.smallGhost} disabled={busy} onClick={() => addSection('ai_showcase')}>
           + Movr AI showcase
+        </button>
+        <button
+          type="button"
+          style={styles.smallGhost}
+          disabled={busy}
+          onClick={() => addSection('business_split')}
+        >
+          + Business split (merchants)
         </button>
       </div>
 

@@ -161,7 +161,6 @@ export default function TripHistoryScreen({
                   <View style={{ flex: 1 }}>
                     <Text style={styles.when}>{relWhen(item.occurredAt, item.metadata)}</Text>
                   </View>
-                  <Text style={styles.dvt}>+{Number(item.dvtEarned || 0)} DVT</Text>
                 </View>
 
                 {showLoc ? (
@@ -313,7 +312,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   when: { color: '#A1A1AA', fontSize: 13 },
-  dvt: { color: '#22C55E', fontWeight: '800' },
   locBox: {
     backgroundColor: '#0A0A0A',
     borderRadius: 12,

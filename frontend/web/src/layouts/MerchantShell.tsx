@@ -68,13 +68,6 @@ export default function MerchantShell({
             </Link>
           );
         })}
-        <Link
-          to="/merchant/staking"
-          onClick={onNavigate}
-          className="block text-white/45 text-sm px-3 pt-6 hover:text-white"
-        >
-          Staking
-        </Link>
       </div>
       <button
         type="button"

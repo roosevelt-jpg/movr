@@ -203,6 +203,8 @@ app.use('/api/v1/admin/payment-providers', adminPaymentProvidersRouter);
 app.use('/api/v1/admin/integrations', adminIntegrationsRouter);
 const { adminMapsRouter } = require('./routes/admin-maps.routes');
 app.use('/api/v1/admin/maps', adminMapsRouter);
+const { publicMapsRouter } = require('./routes/public-maps.routes');
+app.use('/api/v1/public/maps', publicMapsRouter);
 // Transfer routes (incl. public claim-preview) before walletRouter auth wall
 app.use('/api/v1/wallet', walletTransferRouter);
 app.use('/api/v1/wallet', walletRouter);
@@ -2743,7 +2745,7 @@ app.get('/api/v1/public/onboarding', async (_req: ExpressRequest, res: ExpressRe
     {
       sort_order: 3,
       title: 'Earn points on every trip',
-      body: 'Redeem rewards or convert points when DVT launches.',
+      body: 'Redeem loyalty points for ride credit and discounts.',
       icon_key: 'points',
     },
   ];
@@ -2751,7 +2753,7 @@ app.get('/api/v1/public/onboarding', async (_req: ExpressRequest, res: ExpressRe
     brand: 'Movr',
     tagline: 'MOVE · SHOP · DELIVER',
     headline: "Africa's Super-App Is Here",
-    body: 'One platform for rides, shopping, deliveries, and rentals — powered by blockchain rewards.',
+    body: 'One platform for rides, shopping, deliveries, and rentals — with secure identity verification.',
     ctaPrimary: 'Get Started',
     ctaSecondary: 'Already have an account? Sign in',
     chips: [
@@ -2951,16 +2953,6 @@ app.get(
             last_four: '',
             is_default: false,
           },
-          {
-            id: 'crypto',
-            provider: 'Crypto / DVT',
-            method_type: 'crypto',
-            label: 'Crypto / DVT',
-            subtitle: 'Polygon, BSC',
-            icon_key: 'chain',
-            last_four: '',
-            is_default: false,
-          },
         ],
       });
     } catch {
@@ -2981,14 +2973,6 @@ app.get(
             method_type: 'momo',
             label: 'Mobile Money',
             subtitle: 'MTN MoMo, Airtel',
-            is_default: false,
-          },
-          {
-            id: 'crypto',
-            provider: 'Crypto / DVT',
-            method_type: 'crypto',
-            label: 'Crypto / DVT',
-            subtitle: 'Polygon, BSC',
             is_default: false,
           },
         ],
