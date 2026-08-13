@@ -16,11 +16,13 @@ import { mediaUrl } from '../../lib/media';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-const CATEGORIES = [
+const FALLBACK_CATEGORIES = [
   { id: 'All', label: 'All', icon: '' },
   { id: 'Food', label: 'Food', icon: '🍔' },
   { id: 'Grocery', label: 'Grocery', icon: '🛒' },
   { id: 'Pharmacy', label: 'Pharmacy', icon: '💊' },
+  { id: 'Fashion', label: 'Fashion', icon: '👗' },
+  { id: 'Electronics', label: 'Electronics', icon: '📱' },
 ];
 
 function catIcon(category: string) {
@@ -28,6 +30,10 @@ function catIcon(category: string) {
   if (/food|restaurant|burger|fast/.test(c)) return '🍔';
   if (/groc|mart|market/.test(c)) return '🛒';
   if (/pharm|drug|chemist/.test(c)) return '💊';
+  if (/fashion|cloth|apparel|wear/.test(c)) return '👗';
+  if (/electr|phone|gadget|tech/.test(c)) return '📱';
+  if (/beaut|cosmetic|care/.test(c)) return '💄';
+  if (/home|kitchen|furn/.test(c)) return '🏠';
   return '🏪';
 }
 
@@ -36,12 +42,14 @@ export default function ShopHomeScreen({
   onOpenStore,
   onOpenProduct,
   onOpenWishlist,
+  onOpenOrders,
   userLat = 6.4281,
   userLng = 3.4219,
 }: {
   onOpenStore?: (storeId: string) => void;
   onOpenProduct?: (storeId: string, productId: string, name?: string, price?: number) => void;
   onOpenWishlist?: () => void;
+  onOpenOrders?: () => void;
   userLat?: number;
   userLng?: number;
 }) {
@@ -51,6 +59,7 @@ export default function ShopHomeScreen({
   const pad = 16;
   const cardWidth = (width - pad * 2 - gap * (cols - 1)) / cols;
   const [category, setCategory] = useState('All');
+  const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('newest');
   const [minPrice, setMinPrice] = useState('');
@@ -61,6 +70,23 @@ export default function ShopHomeScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    fetch(`${API}/categories`)
+      .then((r) => r.json())
+      .then((j) => {
+        const rows = j?.data || [];
+        if (!Array.isArray(rows) || !rows.length) return;
+        setCategories([
+          { id: 'All', label: 'All', icon: '' },
+          ...rows.map((c: any) => ({
+            id: c.name || c.slug,
+            label: c.name || c.slug,
+            icon: catIcon(String(c.name || c.slug || '')),
+          })),
+        ]);
+      })
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     setLoading(true);
     setError('');
@@ -139,9 +165,14 @@ export default function ShopHomeScreen({
           <Text style={styles.title}>Shop</Text>
           <Text style={styles.sub}>Search products or browse stores.</Text>
         </View>
-        <Pressable onPress={onOpenWishlist} style={styles.wishBtn}>
-          <Text style={styles.wishTxt}>♡ Wishlist</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable onPress={onOpenOrders} style={styles.wishBtn}>
+            <Text style={styles.wishTxt}>Orders</Text>
+          </Pressable>
+          <Pressable onPress={onOpenWishlist} style={styles.wishBtn}>
+            <Text style={styles.wishTxt}>♡ Wishlist</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.modeRow}>
@@ -172,7 +203,7 @@ export default function ShopHomeScreen({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.chips}
       >
-        {CATEGORIES.map((c) => {
+        {categories.map((c) => {
           const on = category === c.id;
           return (
             <Pressable

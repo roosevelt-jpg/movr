@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,42 @@ import { ordersApi } from '../../services/api';
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const SOCKET_URL = (process.env.EXPO_PUBLIC_SOCKET_URL || API.replace(/\/api\/v1\/?$/, '')) as string;
 
+const RETURN_REASONS = [
+  'Damaged or defective',
+  'Wrong item received',
+  'Not as described',
+  'Changed my mind',
+  'Other',
+];
+
 function authHeaders(): Record<string, string> {
   const token =
     (globalThis as any).__MOVR_TOKEN__ ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+type LatLng = { lat: number; lng: number };
+
+function projectPins(map: { store: LatLng; courier: LatLng; dropoff: LatLng }) {
+  const pts = [map.store, map.courier, map.dropoff];
+  const lats = pts.map((p) => p.lat);
+  const lngs = pts.map((p) => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const padLat = Math.max((maxLat - minLat) * 0.2, 0.004);
+  const padLng = Math.max((maxLng - minLng) * 0.2, 0.004);
+  const toPct = (p: LatLng) => ({
+    left: `${((p.lng - (minLng - padLng)) / (maxLng - minLng + padLng * 2)) * 100}%`,
+    top: `${(1 - (p.lat - (minLat - padLat)) / (maxLat - minLat + padLat * 2)) * 100}%`,
+  });
+  return {
+    store: toPct(map.store),
+    courier: toPct(map.courier),
+    dropoff: toPct(map.dropoff),
+  };
 }
 
 /** Live order tracking — map, courier, timeline, returns/rate CTAs. */
@@ -31,11 +62,13 @@ export default function OrderTrackingScreen({
   storeName = '',
   onDetails,
   onRate,
+  onBack,
 }: {
   orderId?: string;
   storeName?: string;
   onDetails?: () => void;
   onRate?: () => void;
+  onBack?: () => void;
 }) {
   const { width } = useWindowDimensions();
   const [orderRef, setOrderRef] = useState(orderId ? String(orderId) : '');
@@ -52,6 +85,16 @@ export default function OrderTrackingScreen({
   const [returnMsg, setReturnMsg] = useState('');
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [returnNote, setReturnNote] = useState('');
+  const [mapPts, setMapPts] = useState({
+    store: { lat: 6.4281, lng: 3.4219 },
+    courier: { lat: 6.431, lng: 3.425 },
+    dropoff: { lat: 6.435, lng: 3.43 },
+  });
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+
+  const pins = useMemo(() => projectPins(mapPts), [mapPts]);
 
   useEffect(() => {
     let socket: any = null;
@@ -73,6 +116,8 @@ export default function OrderTrackingScreen({
         if (o.eta_text) setEta(o.eta_text);
         else if (o.eta_minutes != null) setEta(`Courier is ${o.eta_minutes} min away`);
         if (o.store_name) setFromStore(o.store_name);
+        if (o.payment_method) setPaymentMethod(String(o.payment_method).replace(/_/g, ' '));
+        if (o.delivery_address) setDeliveryAddress(String(o.delivery_address));
         if (o.courier) {
           setCourier({
             name: o.courier.name,
@@ -85,6 +130,22 @@ export default function OrderTrackingScreen({
         setItemCount(Number(o.item_count || o.items?.length || 0));
         setTotal(Number(o.total || 0));
         setCurrency(o.currency || 'NGN');
+        if (o.map?.store && o.map?.dropoff) {
+          setMapPts({
+            store: {
+              lat: Number(o.map.store.lat),
+              lng: Number(o.map.store.lng),
+            },
+            courier: {
+              lat: Number(o.map.courier?.lat ?? o.map.store.lat),
+              lng: Number(o.map.courier?.lng ?? o.map.store.lng),
+            },
+            dropoff: {
+              lat: Number(o.map.dropoff.lat),
+              lng: Number(o.map.dropoff.lng),
+            },
+          });
+        }
 
         if (o.delivery_mode === 'movr_courier' || !o.delivery_mode) {
           try {
@@ -95,6 +156,12 @@ export default function OrderTrackingScreen({
             socket.on('delivery:location', (data: any) => {
               if (data?.eta_text) setEta(data.eta_text);
               if (data?.eta_minutes != null) setEta(`Courier is ${data.eta_minutes} min away`);
+              if (data?.lat != null && data?.lng != null) {
+                setMapPts((prev) => ({
+                  ...prev,
+                  courier: { lat: Number(data.lat), lng: Number(data.lng) },
+                }));
+              }
             });
           } catch {
             /* optional */
@@ -115,31 +182,55 @@ export default function OrderTrackingScreen({
 
   const submitReturn = async () => {
     if (!orderId || !returnReason.trim()) {
-      Alert.alert('Return', 'Please enter a reason');
+      Alert.alert('Return', 'Please select a reason');
       return;
     }
+    const reason = returnNote.trim() ? `${returnReason}: ${returnNote.trim()}` : returnReason;
     try {
-      await ordersApi.requestReturn(orderId, { reason: returnReason.trim() });
-      setReturnMsg('Return requested');
+      await ordersApi.requestReturn(orderId, { reason });
+      setReturnMsg('Return requested — we will confirm within 24 hours');
       setReturnOpen(false);
       setReturnReason('');
+      setReturnNote('');
     } catch (e: any) {
       setReturnMsg(e?.response?.data?.message || e?.message || 'Could not request return');
     }
   };
 
   const stackActions = width < 380;
+  const openMaps = () => {
+    const { lat, lng } = mapPts.dropoff;
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+  };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 28 }}>
+      {onBack ? (
+        <Pressable onPress={onBack} style={{ marginBottom: 8 }}>
+          <Text style={{ color: '#A1A1AA', fontSize: 22 }}>←</Text>
+        </Pressable>
+      ) : null}
       <View style={[styles.map, { height: Math.min(220, Math.max(160, width * 0.48)) }]}>
         <View style={styles.grid} />
-        <View style={styles.route} />
-        <Text style={styles.storePin}>🍔</Text>
-        <Text style={styles.bike}>🛵</Text>
-        <Text style={styles.dropPin}>📍</Text>
+        <View style={[styles.routeDot, { left: pins.store.left as any, top: pins.store.top as any }]} />
+        <View
+          style={[
+            styles.routeDot,
+            styles.routeDotDrop,
+            { left: pins.dropoff.left as any, top: pins.dropoff.top as any },
+          ]}
+        />
+        <Text style={[styles.storePin, { left: pins.store.left as any, top: pins.store.top as any }]}>
+          🏪
+        </Text>
+        <Text style={[styles.bike, { left: pins.courier.left as any, top: pins.courier.top as any }]}>
+          🛵
+        </Text>
+        <Text style={[styles.dropPin, { left: pins.dropoff.left as any, top: pins.dropoff.top as any }]}>
+          📍
+        </Text>
         <View style={styles.etaPill}>
-          <Text style={styles.etaText}>{eta}</Text>
+          <Text style={styles.etaText}>{eta || 'Tracking…'}</Text>
         </View>
       </View>
       {loading ? <Text style={styles.empty}>Loading order…</Text> : null}
@@ -148,9 +239,19 @@ export default function OrderTrackingScreen({
       <View style={styles.headerRow}>
         <Text style={styles.orderNum}>Order #{orderRef}</Text>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{statusLabel}</Text>
+          <Text style={styles.badgeText}>{statusLabel || '…'}</Text>
         </View>
       </View>
+
+      {deliveryAddress ? (
+        <Pressable onPress={openMaps} style={styles.addrRow}>
+          <Text style={styles.addrLabel}>Delivering to</Text>
+          <Text style={styles.addrText} numberOfLines={2}>
+            {deliveryAddress}
+          </Text>
+        </Pressable>
+      ) : null}
+      {paymentMethod ? <Text style={styles.payMeta}>Paid via {paymentMethod}</Text> : null}
 
       {courier ? (
         <View style={styles.courierCard}>
@@ -181,11 +282,7 @@ export default function OrderTrackingScreen({
           <View key={step.key} style={styles.stepRow}>
             <View style={styles.rail}>
               <View
-                style={[
-                  styles.dot,
-                  step.done && styles.dotDone,
-                  step.active && styles.dotActive,
-                ]}
+                style={[styles.dot, step.done && styles.dotDone, step.active && styles.dotActive]}
               />
               {i < timeline.length - 1 ? <View style={styles.line} /> : null}
             </View>
@@ -204,7 +301,7 @@ export default function OrderTrackingScreen({
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerIcons}>🍔 🍗</Text>
+        <Text style={styles.footerIcons}>🛍️</Text>
         <Text style={styles.footerMeta} numberOfLines={1}>
           {itemCount} items · {formatCurrency(total, currency)}
         </Text>
@@ -231,12 +328,24 @@ export default function OrderTrackingScreen({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Request return</Text>
+            <Text style={styles.modalHint}>Select a reason</Text>
+            <View style={styles.reasonWrap}>
+              {RETURN_REASONS.map((r) => (
+                <Pressable
+                  key={r}
+                  style={[styles.reasonChip, returnReason === r && styles.reasonChipOn]}
+                  onPress={() => setReturnReason(r)}
+                >
+                  <Text style={[styles.reasonTxt, returnReason === r && styles.reasonTxtOn]}>{r}</Text>
+                </Pressable>
+              ))}
+            </View>
             <TextInput
               style={styles.modalInput}
-              placeholder="Why are you returning?"
+              placeholder="Add details (optional)"
               placeholderTextColor="#666"
-              value={returnReason}
-              onChangeText={setReturnReason}
+              value={returnNote}
+              onChangeText={setReturnNote}
               multiline
             />
             <View style={styles.modalRow}>
@@ -265,18 +374,19 @@ const styles = StyleSheet.create({
     borderColor: '#1f1f28',
   },
   grid: { ...StyleSheet.absoluteFillObject, opacity: 0.3, borderWidth: 1, borderColor: '#2a2a35' },
-  route: {
+  routeDot: {
     position: 'absolute',
-    left: '18%',
-    top: '48%',
-    width: '58%',
-    height: 3,
+    width: 8,
+    height: 8,
+    marginLeft: -4,
+    marginTop: -4,
+    borderRadius: 4,
     backgroundColor: '#3B82F6',
-    transform: [{ rotate: '-12deg' }],
   },
-  storePin: { position: 'absolute', left: '16%', top: '36%', fontSize: 22 },
-  bike: { position: 'absolute', left: '46%', top: '42%', fontSize: 20 },
-  dropPin: { position: 'absolute', right: '18%', bottom: '28%', fontSize: 22 },
+  routeDotDrop: { backgroundColor: '#22C55E' },
+  storePin: { position: 'absolute', marginLeft: -12, marginTop: -22, fontSize: 22 },
+  bike: { position: 'absolute', marginLeft: -10, marginTop: -18, fontSize: 20 },
+  dropPin: { position: 'absolute', marginLeft: -11, marginTop: -22, fontSize: 22 },
   etaPill: {
     position: 'absolute',
     alignSelf: 'center',
@@ -305,6 +415,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: { color: '#F97316', fontWeight: '700', fontSize: 12 },
+  addrRow: {
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  addrLabel: { color: '#71717A', fontSize: 11, marginBottom: 4 },
+  addrText: { color: '#E4E4E7', fontWeight: '600', fontSize: 13 },
+  payMeta: { color: '#71717A', fontSize: 12, marginBottom: 12, textTransform: 'capitalize' },
   courierCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -374,9 +493,21 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalCard: { backgroundColor: '#1A1A1A', borderRadius: 16, padding: 16 },
-  modalTitle: { color: '#fff', fontWeight: '800', fontSize: 18, marginBottom: 12 },
+  modalTitle: { color: '#fff', fontWeight: '800', fontSize: 18, marginBottom: 4 },
+  modalHint: { color: '#71717A', fontSize: 12, marginBottom: 10 },
+  reasonWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  reasonChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#333',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  reasonChipOn: { borderColor: '#A855F7', backgroundColor: '#2A163A' },
+  reasonTxt: { color: '#A1A1AA', fontSize: 12 },
+  reasonTxtOn: { color: '#fff', fontWeight: '700' },
   modalInput: {
-    minHeight: 90,
+    minHeight: 70,
     borderRadius: 12,
     backgroundColor: '#000',
     borderWidth: 1,

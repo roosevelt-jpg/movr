@@ -633,7 +633,22 @@ merchantRouter.get('/categories', authenticateToken, requireMerchant, async (_re
 merchantRouter.post('/products', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
-    const { storeId, name, description, price, currency, imageUrl, categoryId, salePrice, compareAtPrice } = req.body;
+    const {
+      storeId,
+      name,
+      description,
+      price,
+      currency,
+      imageUrl,
+      categoryId,
+      salePrice,
+      compareAtPrice,
+      stockQty,
+      inStock,
+      isAvailable,
+      isFeatured,
+      isActive,
+    } = req.body;
     assertDirectUploadUrl(imageUrl, 'imageUrl');
     const store = await db.query(
       `SELECT id FROM stores WHERE id = $1 AND merchant_id = $2`,
@@ -642,9 +657,19 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
     if (!store.rows[0]) {
       return res.status(404).json({ status: 'error', message: 'Store not found' });
     }
+    const qty = stockQty != null ? Math.max(0, Number(stockQty)) : 50;
+    const available =
+      typeof isAvailable === 'boolean'
+        ? isAvailable
+        : typeof inStock === 'boolean'
+          ? inStock
+          : true;
     const product = await db.query(
-      `INSERT INTO products (store_id, name, description, price, currency, image_url, category_id, sale_price, compare_at_price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO products (
+         store_id, name, description, price, currency, image_url, category_id,
+         sale_price, compare_at_price, stock_qty, in_stock, is_available, is_featured, is_active
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         storeId,
         name,
@@ -655,6 +680,11 @@ merchantRouter.post('/products', authenticateToken, requireMerchant, async (req:
         categoryId || null,
         salePrice != null ? Number(salePrice) : null,
         compareAtPrice != null ? Number(compareAtPrice) : null,
+        qty,
+        available && qty > 0,
+        available,
+        Boolean(isFeatured),
+        typeof isActive === 'boolean' ? isActive : true,
       ]
     );
     if (imageUrl) {

@@ -181,8 +181,12 @@ cartRouter.post('/checkout', async (req: AuthRequest, res: Response) => {
       fullName: req.body.fullName || 'MOVR Customer',
       countryCode: req.body.countryCode || 'GH',
       deliveryAddress: req.body.deliveryAddress,
-      deliveryLat: req.body.deliveryLat,
-      deliveryLng: req.body.deliveryLng,
+      deliveryLat: req.body.deliveryLat != null ? Number(req.body.deliveryLat) : undefined,
+      deliveryLng: req.body.deliveryLng != null ? Number(req.body.deliveryLng) : undefined,
+      addressId: req.body.addressId,
+      paymentMethod: req.body.paymentMethod || req.body.payment_method || 'card',
+      tipAmount: req.body.tipAmount != null ? Number(req.body.tipAmount) : 0,
+      notes: req.body.notes,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (error: any) {
@@ -210,8 +214,11 @@ cartRouter.post('/quote', async (req: AuthRequest, res: Response) => {
         },
       });
     }
+    const fulfillmentType =
+      req.body.fulfillmentType === 'pickup' ? 'pickup' : 'delivery';
     const subtotal = Number(cart.subtotal || 0);
-    const deliveryFee = 500;
+    const deliveryFee =
+      fulfillmentType === 'pickup' ? 0 : await marketplace.deliveryFee().catch(() => 15);
     let discount = 0;
     if (couponCode) {
       try {
@@ -221,8 +228,9 @@ cartRouter.post('/quote', async (req: AuthRequest, res: Response) => {
         discount = 0;
       }
     }
+    const tipAmount = Math.max(0, Number(req.body.tipAmount || 0));
     const dvtDiscount = Math.min(100, Math.round(subtotal * 0.015) || (subtotal > 0 ? 100 : 0));
-    const total = Math.max(0, subtotal + deliveryFee - discount - dvtDiscount);
+    const total = Math.max(0, subtotal + deliveryFee + tipAmount - discount - dvtDiscount);
     const store = await marketplace.getStore(storeId).catch(() => ({ rows: [] as any[] }));
     const s = store.rows?.[0];
     res.json({
@@ -232,10 +240,12 @@ cartRouter.post('/quote', async (req: AuthRequest, res: Response) => {
         deliveryFee,
         discount,
         dvtDiscount,
+        tipAmount,
         total,
         currency: s?.currency_code || 'NGN',
         storeName: s?.name || 'Store',
         eta: s?.eta_text || `${s?.eta_min_minutes || 20}-${s?.eta_max_minutes || 35} min`,
+        fulfillmentType,
         items: cart.items || [],
       },
     });

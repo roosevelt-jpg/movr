@@ -43,6 +43,7 @@ import WishlistScreen from './WishlistScreen';
 import CartScreen from './CartScreen';
 import OrderConfirmedScreen from './OrderConfirmedScreen';
 import OrderTrackingScreen from './OrderTrackingScreen';
+import OrdersHistoryScreen from './OrdersHistoryScreen';
 import MovrBotConversationScreen from './MovrBotConversationScreen';
 import VoiceBookingScreen from './VoiceBookingScreen';
 import WhatsAppConversationScreen from './WhatsAppConversationScreen';
@@ -546,10 +547,24 @@ export default function SuperAppHomeScreen({
       <View style={styles.root}>
         <OrderTrackingScreen
           orderId={orderId}
+          onBack={() => setService('orders')}
           onDetails={() => setService('order_confirmed')}
           onRate={() => {
             setTab('shop');
             setService('shop');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'orders') {
+    return (
+      <View style={styles.root}>
+        <OrdersHistoryScreen
+          onBack={() => setService('shop')}
+          onOpenOrder={(id) => {
+            setOrderId(id);
+            setService('order_tracking');
           }}
         />
       </View>
@@ -631,6 +646,7 @@ export default function SuperAppHomeScreen({
             setService('product');
           }}
           onOpenWishlist={() => setService('wishlist')}
+          onOpenOrders={() => setService('orders')}
           userLat={data?.location?.lat}
           userLng={data?.location?.lng}
         />

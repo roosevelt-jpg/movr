@@ -204,10 +204,20 @@ walletRouter.get('/balance', async (req: AuthRequest, res: Response) => {
 
 walletRouter.get('/addresses', async (req: AuthRequest, res: Response) => {
   try {
-    const result = await db.query(
-      `SELECT id, label, address, lat, lng FROM saved_addresses WHERE user_id = $1 ORDER BY label`,
-      [req.user!.id]
-    );
+    const result = await db
+      .query(
+        `SELECT id, label, address, lat, lng, COALESCE(is_default, FALSE) AS is_default
+         FROM saved_addresses WHERE user_id = $1
+         ORDER BY COALESCE(is_default, FALSE) DESC, label`,
+        [req.user!.id]
+      )
+      .catch(async () =>
+        db.query(
+          `SELECT id, label, address, lat, lng, FALSE AS is_default
+           FROM saved_addresses WHERE user_id = $1 ORDER BY label`,
+          [req.user!.id]
+        )
+      );
     res.json({ status: 'success', data: result.rows });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
@@ -216,16 +226,62 @@ walletRouter.get('/addresses', async (req: AuthRequest, res: Response) => {
 
 walletRouter.post('/addresses', async (req: AuthRequest, res: Response) => {
   try {
-    const { label, address, lat, lng } = req.body;
-    const result = await db.query(
-      `INSERT INTO saved_addresses (user_id, label, address, lat, lng)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (user_id, label) DO UPDATE SET
-         address = EXCLUDED.address, lat = EXCLUDED.lat, lng = EXCLUDED.lng
-       RETURNING *`,
-      [req.user!.id, label, address, lat, lng]
-    );
+    const { label, address, lat, lng, isDefault } = req.body;
+    if (isDefault) {
+      await db
+        .query(`UPDATE saved_addresses SET is_default = FALSE WHERE user_id = $1`, [req.user!.id])
+        .catch(() => undefined);
+    }
+    const result = await db
+      .query(
+        `INSERT INTO saved_addresses (user_id, label, address, lat, lng, is_default)
+         VALUES ($1, $2, $3, $4, $5, COALESCE($6, FALSE))
+         ON CONFLICT (user_id, label) DO UPDATE SET
+           address = EXCLUDED.address, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
+           is_default = COALESCE(EXCLUDED.is_default, saved_addresses.is_default)
+         RETURNING *`,
+        [req.user!.id, label, address, lat, lng, Boolean(isDefault)]
+      )
+      .catch(async () =>
+        db.query(
+          `INSERT INTO saved_addresses (user_id, label, address, lat, lng)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id, label) DO UPDATE SET
+             address = EXCLUDED.address, lat = EXCLUDED.lat, lng = EXCLUDED.lng
+           RETURNING *`,
+          [req.user!.id, label, address, lat, lng]
+        )
+      );
     res.status(201).json({ status: 'success', data: result.rows[0] });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+walletRouter.patch('/addresses/:id/default', async (req: AuthRequest, res: Response) => {
+  try {
+    await db
+      .query(`UPDATE saved_addresses SET is_default = FALSE WHERE user_id = $1`, [req.user!.id])
+      .catch(() => undefined);
+    const result = await db.query(
+      `UPDATE saved_addresses SET is_default = TRUE
+       WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [req.params.id, req.user!.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ status: 'error', message: 'Address not found' });
+    res.json({ status: 'success', data: result.rows[0] });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+walletRouter.delete('/addresses/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    await db.query(`DELETE FROM saved_addresses WHERE id = $1 AND user_id = $2`, [
+      req.params.id,
+      req.user!.id,
+    ]);
+    res.json({ status: 'success', data: { ok: true } });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }

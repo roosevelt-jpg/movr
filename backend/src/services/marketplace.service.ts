@@ -507,20 +507,49 @@ export class MarketplaceService {
       deliveryAddress?: string;
       deliveryLat?: number;
       deliveryLng?: number;
+      addressId?: string;
+      paymentMethod?: string;
+      tipAmount?: number;
+      notes?: string;
     }
   ) {
     const cart = await this.getOpenCart(userId, data.storeId);
     if (!cart || !cart.items?.length) throw new Error('Cart is empty');
 
+    let deliveryAddress = data.deliveryAddress || null;
+    let deliveryLat = data.deliveryLat ?? null;
+    let deliveryLng = data.deliveryLng ?? null;
+    if (data.addressId) {
+      const addr = await this.db
+        .query(
+          `SELECT id, label, address, lat, lng FROM saved_addresses WHERE id = $1 AND user_id = $2`,
+          [data.addressId, userId]
+        )
+        .catch(() => ({ rows: [] as any[] }));
+      if (!addr.rows[0]) throw new Error('Delivery address not found');
+      deliveryAddress = addr.rows[0].address || addr.rows[0].label;
+      deliveryLat = addr.rows[0].lat != null ? Number(addr.rows[0].lat) : deliveryLat;
+      deliveryLng = addr.rows[0].lng != null ? Number(addr.rows[0].lng) : deliveryLng;
+    }
+    if (data.fulfillmentType === 'delivery' && !deliveryAddress) {
+      throw new Error('Add a delivery address to continue');
+    }
+
+    const paymentMethod = String(data.paymentMethod || 'card')
+      .toLowerCase()
+      .replace(/[^a-z_]/g, '');
+    const allowed = new Set(['card', 'mobile_money', 'wallet', 'cod', 'bnpl']);
+    if (!allowed.has(paymentMethod)) throw new Error('Unsupported payment method');
+
+    const tipAmount = Math.max(0, Number(data.tipAmount || 0));
     const deliveryFee = data.fulfillmentType === 'delivery' ? await this.deliveryFee() : 0;
     const { discount, code } = await this.applyCoupon(
       data.storeId,
       data.couponCode || '',
       cart.subtotal
     );
-    // Platform DVT loyalty discount (mock oracle: 100 NGN / ~1.5% of subtotal, min 0)
     const dvtDiscount = Math.min(100, Math.round(cart.subtotal * 0.015));
-    const total = Math.max(0, cart.subtotal + deliveryFee - discount - dvtDiscount);
+    const total = Math.max(0, cart.subtotal + deliveryFee + tipAmount - discount - dvtDiscount);
     const itemCount = cart.items.reduce((n: number, i: any) => n + Number(i.quantity || 0), 0);
     const etaMax = 35;
     const estimatedDeliveryAt = new Date(Date.now() + etaMax * 60 * 1000);
@@ -532,13 +561,16 @@ export class MarketplaceService {
     const storeLng = storeMeta.rows[0]?.lng ?? storeMeta.rows[0]?.longitude ?? null;
 
     const publicRef = `MVR-${String(Math.floor(10000 + Math.random() * 90000))}`;
+    const initialStatus =
+      paymentMethod === 'cod' || paymentMethod === 'bnpl' ? 'preparing' : 'pending_payment';
 
     const order = await this.db.query(
       `INSERT INTO marketplace_orders (
          user_id, store_id, cart_id, subtotal, delivery_fee, discount, dvt_discount, total,
          fulfillment_type, status, coupon_code, delivery_address, delivery_lat, delivery_lng,
-         public_ref, estimated_delivery_at, store_lat, store_lng, item_count, courier_id
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'preparing',$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         public_ref, estimated_delivery_at, store_lat, store_lng, item_count, courier_id,
+         payment_method, tip_amount, notes
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
        RETURNING *`,
       [
         userId,
@@ -550,23 +582,27 @@ export class MarketplaceService {
         dvtDiscount,
         total,
         data.fulfillmentType,
+        initialStatus,
         code,
-        data.deliveryAddress || null,
-        data.deliveryLat || null,
-        data.deliveryLng || null,
+        deliveryAddress,
+        deliveryLat,
+        deliveryLng,
         publicRef,
         estimatedDeliveryAt.toISOString(),
         storeLat,
         storeLng,
         itemCount,
         'a0000000-0000-4000-8000-0000000000c0',
+        paymentMethod,
+        tipAmount,
+        data.notes || null,
       ]
     ).catch(async () =>
       this.db.query(
         `INSERT INTO marketplace_orders (
            user_id, store_id, cart_id, subtotal, delivery_fee, discount, total,
            fulfillment_type, status, coupon_code, delivery_address, delivery_lat, delivery_lng
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_payment',$9,$10,$11,$12)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING *`,
         [
           userId,
@@ -577,10 +613,11 @@ export class MarketplaceService {
           discount + dvtDiscount,
           total,
           data.fulfillmentType,
+          initialStatus,
           code,
-          data.deliveryAddress || null,
-          data.deliveryLat || null,
-          data.deliveryLng || null,
+          deliveryAddress,
+          deliveryLat,
+          deliveryLng,
         ]
       )
     );
@@ -619,29 +656,109 @@ export class MarketplaceService {
         .catch(() => undefined);
     }
 
-    const payment = await this.payments.initializePayment({
-      userId,
-      amount: total,
-      currency: cart.items[0]?.currency || 'GHS',
-      paymentType: 'marketplace',
-      email: data.email,
-      fullName: data.fullName,
-      countryCode: data.countryCode || 'GH',
-      metadata: { orderId: order.rows[0].id, storeId: data.storeId },
-    });
+    let payment: any = {
+      success: true,
+      paymentLink: null,
+      reference: null,
+      provider: paymentMethod,
+      message: null,
+    };
 
-    if (payment.success && payment.reference) {
-      await this.db.query(
-        `UPDATE marketplace_orders SET payment_reference = $1, updated_at = NOW() WHERE id = $2`,
-        [payment.reference, order.rows[0].id]
+    if (paymentMethod === 'wallet') {
+      const wallet = await this.db.query(
+        `SELECT id, COALESCE(balance_fiat, 0)::float AS balance, COALESCE(currency, 'GHS') AS currency
+         FROM wallets WHERE user_id = $1`,
+        [userId]
       );
+      if (!wallet.rows[0]) throw new Error('Wallet not found — top up first');
+      if (Number(wallet.rows[0].balance) < total) {
+        throw new Error('Insufficient wallet balance');
+      }
+      await this.db.query(
+        `UPDATE wallets SET balance_fiat = balance_fiat - $1, last_updated = NOW() WHERE id = $2`,
+        [total, wallet.rows[0].id]
+      );
+      const reference = `WALLET-${order.rows[0].id.slice(0, 8)}`;
+      await this.db.query(
+        `UPDATE marketplace_orders
+         SET payment_reference = $1, status = 'preparing', payment_method = 'wallet', updated_at = NOW()
+         WHERE id = $2`,
+        [reference, order.rows[0].id]
+      );
+      payment = {
+        success: true,
+        paymentLink: null,
+        reference,
+        provider: 'wallet',
+        message: 'Paid with Movr Wallet',
+      };
+    } else if (paymentMethod === 'cod') {
+      const reference = `COD-${order.rows[0].id.slice(0, 8)}`;
+      await this.db.query(
+        `UPDATE marketplace_orders
+         SET payment_reference = $1, payment_method = 'cod', status = 'preparing', updated_at = NOW()
+         WHERE id = $2`,
+        [reference, order.rows[0].id]
+      );
+      payment = {
+        success: true,
+        paymentLink: null,
+        reference,
+        provider: 'cod',
+        message: 'Pay cash on delivery',
+      };
+    } else if (paymentMethod === 'bnpl') {
+      const reference = `BNPL-${order.rows[0].id.slice(0, 8)}`;
+      await this.db.query(
+        `UPDATE marketplace_orders
+         SET payment_reference = $1, payment_method = 'bnpl', status = 'preparing', updated_at = NOW()
+         WHERE id = $2`,
+        [reference, order.rows[0].id]
+      );
+      payment = {
+        success: true,
+        paymentLink: null,
+        reference,
+        provider: 'bnpl',
+        message: 'Pay later — installment plan will be confirmed after delivery',
+      };
+    } else {
+      // card / mobile_money → payment gateway
+      payment = await this.payments.initializePayment({
+        userId,
+        amount: total,
+        currency: cart.items[0]?.currency || 'GHS',
+        paymentType: 'marketplace',
+        email: data.email,
+        fullName: data.fullName,
+        countryCode: data.countryCode || 'GH',
+        metadata: {
+          orderId: order.rows[0].id,
+          storeId: data.storeId,
+          paymentMethod,
+        },
+      });
+      if (payment.success && payment.reference) {
+        await this.db.query(
+          `UPDATE marketplace_orders
+           SET payment_reference = $1, payment_method = $2, updated_at = NOW()
+           WHERE id = $3`,
+          [payment.reference, paymentMethod, order.rows[0].id]
+        );
+      }
+    }
+
+    if (payment.success) {
       await this.db.query(
         `UPDATE carts SET status = 'checked_out', updated_at = NOW() WHERE id = $1`,
         [cart.id]
       );
     }
 
-    return { order: order.rows[0], payment };
+    const refreshed = await this.db.query(`SELECT * FROM marketplace_orders WHERE id = $1`, [
+      order.rows[0].id,
+    ]);
+    return { order: refreshed.rows[0] || order.rows[0], payment };
   }
 
   async listOrders(userId: string) {

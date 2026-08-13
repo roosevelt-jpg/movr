@@ -21,7 +21,9 @@ api.interceptors.request.use((config) => {
 export const storesApi = {
   list: (params?: Record<string, unknown>) => api.get('/stores', { params }),
   get: (id: string) => api.get(`/stores/${id}`),
-  products: (id: string) => api.get(`/stores/${id}/products`),
+  products: (id: string, params?: Record<string, unknown>) =>
+    api.get(`/stores/${id}/products`, { params }),
+  categories: () => api.get('/categories'),
 };
 
 export const cartApi = {
@@ -50,6 +52,24 @@ export const ordersApi = {
   get: (id: string) => api.get(`/orders/${id}`),
   requestReturn: (id: string, data: { reason: string; itemId?: string; refundAmount?: number }) =>
     api.post(`/orders/${id}/returns`, data),
+  myReturns: () => api.get('/orders/returns/mine'),
+};
+
+export const addressesApi = {
+  list: () => api.get('/wallet/addresses'),
+  create: (data: {
+    label: string;
+    address: string;
+    lat?: number;
+    lng?: number;
+    isDefault?: boolean;
+  }) => api.post('/wallet/addresses', data),
+  setDefault: (id: string) => api.patch(`/wallet/addresses/${id}/default`),
+  remove: (id: string) => api.delete(`/wallet/addresses/${id}`),
+};
+
+export const walletApi = {
+  balance: () => api.get('/wallet'),
 };
 
 /** Movr AI — multi-domain chat, channels, rankings, live-agent escalate */
