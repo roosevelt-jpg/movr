@@ -79,6 +79,7 @@ import NoConnectionPage from './pages/public/NoConnectionPage';
 import ClaimTransferPage from './pages/public/ClaimTransferPage';
 import OnboardingIntroPage from './pages/public/OnboardingIntroPage';
 import TripSharePage from './pages/public/TripSharePage';
+import ServiceLandingPage from './pages/public/ServiceLandingPage';
 import MerchantOrderDetailPage from './pages/merchant/MerchantOrderDetailPage';
 import MerchantSettingsPage from './pages/merchant/MerchantSettingsPage';
 import WalletTopUpPage from './pages/app/WalletTopUpPage';
@@ -149,6 +150,10 @@ const App: React.FC = () => {
               <Route path="/for-merchants" element={<MerchantLandingPage />} />
               <Route path="/drivers" element={<DriverLandingPage />} />
               <Route path="/for-drivers" element={<DriverLandingPage />} />
+              <Route path="/ride" element={<ServiceLandingPage slug="ride" fallbackTitle="Ride" />} />
+              <Route path="/shop" element={<ServiceLandingPage slug="shop" fallbackTitle="Shop" />} />
+              <Route path="/deliver" element={<ServiceLandingPage slug="deliver" fallbackTitle="Deliver" />} />
+              <Route path="/rent" element={<ServiceLandingPage slug="rentals" fallbackTitle="Rentals" />} />
               <Route
                 element={
                   <ProtectedRoute>

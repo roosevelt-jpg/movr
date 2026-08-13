@@ -37,9 +37,9 @@ export const CMS_SEED: Array<{
           logoUrl: '/brand/movr-logo.png',
           faviconUrl: '/favicon.png',
           links: [
-            { label: 'Ride', href: '/#ride' },
-            { label: 'Shop', href: '/#shop' },
-            { label: 'Deliver', href: '/#deliver' },
+            { label: 'Ride', href: '/ride' },
+            { label: 'Shop', href: '/shop' },
+            { label: 'Deliver', href: '/deliver' },
             { label: 'AI', href: '/ai' },
             { label: 'Drivers', href: '/drivers' },
             { label: 'Merchants', href: '/merchants' },
@@ -60,10 +60,10 @@ export const CMS_SEED: Array<{
             {
               title: 'SERVICES',
               links: [
-                { label: 'Ride', href: '/#ride' },
-                { label: 'Shop', href: '/#shop' },
-                { label: 'Deliver', href: '/#deliver' },
-                { label: 'Rentals', href: '/#rentals' },
+                { label: 'Ride', href: '/ride' },
+                { label: 'Shop', href: '/shop' },
+                { label: 'Deliver', href: '/deliver' },
+                { label: 'Rentals', href: '/rent' },
               ],
             },
             {
@@ -234,7 +234,7 @@ export const CMS_SEED: Array<{
               title: 'Ride',
               body: 'On-demand cars, bikes, and tricycles across the city.',
               cta: 'Book a ride',
-              href: '/login',
+              href: '/ride',
               imageUrl: '/brand/ride-sedan.png',
             },
             {
@@ -243,7 +243,7 @@ export const CMS_SEED: Array<{
               title: 'Shop',
               body: 'Buy from local stores with delivery to your door.',
               cta: 'Browse stores',
-              href: '/marketplace',
+              href: '/shop',
               imageUrl: '/brand/shop-partner.png',
             },
             {
@@ -252,7 +252,7 @@ export const CMS_SEED: Array<{
               title: 'Deliver',
               body: 'Parcels and orders tracked from pickup to drop-off.',
               cta: 'Send a parcel',
-              href: '/login',
+              href: '/deliver',
               imageUrl: '/brand/courier-moto.png',
             },
             {
@@ -261,7 +261,7 @@ export const CMS_SEED: Array<{
               title: 'Rentals',
               body: 'Self-drive or chauffeured vehicles when you need them.',
               cta: 'Explore rentals',
-              href: '/#rentals',
+              href: '/rent',
               imageUrl: '/brand/ride-sedan.png',
             },
           ],
@@ -532,6 +532,358 @@ export const CMS_SEED: Array<{
           heading: 'Ready to drive with Movr?',
           body: 'Join drivers keeping 100% of every fare.',
           primaryCta: { label: 'Become a driver', href: '/register?role=driver' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
+        },
+      },
+    ],
+  },
+  {
+    slug: 'ride',
+    title: 'Ride',
+    status: 'published',
+    meta: { path: '/ride', menuLabel: 'Ride' },
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          eyebrow: 'Movr Ride',
+          headline: 'Go anywhere,\nanytime.',
+          subhead:
+            'Cars, okada, tricycles, and shared rides — priced in your local currency with live ETAs.',
+          layout: 'split',
+          backgroundImage: '/brand/ride-sedan.png',
+          primaryCta: { label: 'Book a ride', href: '/login' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
+          showPhoneMock: true,
+        },
+      },
+      {
+        type: 'how_it_works',
+        payload: {
+          eyebrow: 'How Ride works',
+          heading: 'Request. Match. Arrive.',
+          steps: [
+            {
+              number: '01',
+              title: 'Set your trip',
+              body: 'Enter pickup and drop-off. See options and fares before you confirm.',
+            },
+            {
+              number: '02',
+              title: 'Match with a driver',
+              body: 'Verified drivers nearby accept your trip. Track them live on the map.',
+            },
+            {
+              number: '03',
+              title: 'Pay your way',
+              body: 'Wallet, mobile money, or card — receipt and rating when you arrive.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why Ride with Movr',
+          heading: 'Built for African cities.',
+          items: [
+            {
+              iconKey: 'car',
+              title: 'Every vehicle type',
+              body: 'Sedan, SUV, motorcycle, tricycle, and van — pick what fits the trip.',
+            },
+            {
+              iconKey: 'sparkles',
+              title: 'Share & save',
+              body: 'Pool with riders going your way when you want a lower fare.',
+            },
+            {
+              iconKey: 'shield',
+              title: 'Safety first',
+              body: 'Verified drivers, trip sharing, and in-app support when you need it.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'rich_text',
+        payload: {
+          heading: 'Edit this page in Admin → CMS',
+          paragraphs: [
+            'Replace this copy, swap hero and section images, and add banners from the CMS editor. Sections here are fully editable.',
+          ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Ready to ride?',
+          body: 'Book in the app or on the web in seconds.',
+          primaryCta: { label: 'Book a ride', href: '/login' },
+          secondaryCta: { label: 'Download Movr', href: '/download' },
+        },
+      },
+    ],
+  },
+  {
+    slug: 'shop',
+    title: 'Shop',
+    status: 'published',
+    meta: { path: '/shop', menuLabel: 'Shop' },
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          eyebrow: 'Movr Shop',
+          headline: 'Local stores,\ndelivered.',
+          subhead:
+            'Browse neighbourhood merchants, order what you need, and get it to your door — same platform as your rides.',
+          layout: 'split',
+          backgroundImage: '/brand/shop-partner.png',
+          primaryCta: { label: 'Browse stores', href: '/marketplace' },
+          secondaryCta: { label: 'Become a merchant', href: '/merchants' },
+          showPhoneMock: false,
+        },
+      },
+      {
+        type: 'how_it_works',
+        payload: {
+          eyebrow: 'How Shop works',
+          heading: 'Discover. Order. Receive.',
+          steps: [
+            {
+              number: '01',
+              title: 'Find local stores',
+              body: 'Explore categories and merchants near you with live availability.',
+            },
+            {
+              number: '02',
+              title: 'Checkout in one wallet',
+              body: 'Pay with Movr wallet, mobile money, or card — no juggling apps.',
+            },
+            {
+              number: '03',
+              title: 'Track delivery',
+              body: 'Follow your order from the store to your doorstep.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why Shop on Movr',
+          heading: 'Commerce that moves with you.',
+          items: [
+            {
+              iconKey: 'heart',
+              title: 'Neighbourhood first',
+              body: 'Support local merchants who know your area.',
+            },
+            {
+              iconKey: 'package',
+              title: 'Delivery built in',
+              body: 'Couriers on the same network as rides — fewer handoffs.',
+            },
+            {
+              iconKey: 'wallet',
+              title: 'One account',
+              body: 'Rides, shopping, and payouts in a single Movr wallet.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'rich_text',
+        payload: {
+          heading: 'Edit this page in Admin → CMS',
+          paragraphs: [
+            'Add banners, product stories, and merchant features here. Swap images and CTAs anytime from the CMS.',
+          ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Start shopping',
+          body: 'Open the marketplace or partner with Movr as a merchant.',
+          primaryCta: { label: 'Browse stores', href: '/marketplace' },
+          secondaryCta: { label: 'For merchants', href: '/merchants' },
+        },
+      },
+    ],
+  },
+  {
+    slug: 'deliver',
+    title: 'Deliver',
+    status: 'published',
+    meta: { path: '/deliver', menuLabel: 'Deliver' },
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          eyebrow: 'Movr Deliver',
+          headline: 'Send anything\nacross the city.',
+          subhead:
+            'Parcels, documents, and store orders — tracked from pickup to drop-off with verified couriers.',
+          layout: 'split',
+          backgroundImage: '/brand/courier-moto.png',
+          primaryCta: { label: 'Send a parcel', href: '/login' },
+          secondaryCta: { label: 'Get the app', href: '/download' },
+          showPhoneMock: false,
+        },
+      },
+      {
+        type: 'how_it_works',
+        payload: {
+          eyebrow: 'How Deliver works',
+          heading: 'Pickup. Route. Confirm.',
+          steps: [
+            {
+              number: '01',
+              title: 'Create a delivery',
+              body: 'Add pickup and drop-off, package size, and any special notes.',
+            },
+            {
+              number: '02',
+              title: 'Courier assigned',
+              body: 'A nearby courier accepts and heads to pickup with live tracking.',
+            },
+            {
+              number: '03',
+              title: 'Proof of delivery',
+              body: 'Recipient confirms; you get a receipt and status history.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why Deliver with Movr',
+          heading: 'Logistics on the same rails.',
+          items: [
+            {
+              iconKey: 'package',
+              title: 'Same-day city moves',
+              body: 'Built for dense African cities — motos and vans when you need them.',
+            },
+            {
+              iconKey: 'sparkles',
+              title: 'Live tracking',
+              body: 'Share status with senders and recipients in real time.',
+            },
+            {
+              iconKey: 'shield',
+              title: 'Trusted couriers',
+              body: 'Identity-verified riders on the Movr network.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'rich_text',
+        payload: {
+          heading: 'Edit this page in Admin → CMS',
+          paragraphs: [
+            'Use this page for delivery use cases, pricing notes, and courier stories. All sections and media are CMS-editable.',
+          ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Send your next parcel',
+          body: 'Log in to create a delivery or download the app.',
+          primaryCta: { label: 'Send a parcel', href: '/login' },
+          secondaryCta: { label: 'Download Movr', href: '/download' },
+        },
+      },
+    ],
+  },
+  {
+    slug: 'rentals',
+    title: 'Rentals',
+    status: 'published',
+    meta: { path: '/rent', menuLabel: 'Rentals' },
+    sections: [
+      {
+        type: 'hero',
+        payload: {
+          eyebrow: 'Movr Rentals',
+          headline: 'A vehicle when\nyou need one.',
+          subhead:
+            'Self-drive or chauffeured rentals for days, weekends, or longer — booked in the same Movr account.',
+          layout: 'split',
+          backgroundImage: '/brand/ride-sedan.png',
+          primaryCta: { label: 'Explore rentals', href: '/login' },
+          secondaryCta: { label: 'List your vehicle', href: '/login' },
+          showPhoneMock: false,
+        },
+      },
+      {
+        type: 'how_it_works',
+        payload: {
+          eyebrow: 'How Rentals works',
+          heading: 'Choose. Book. Drive.',
+          steps: [
+            {
+              number: '01',
+              title: 'Browse vehicles',
+              body: 'Filter by type, price, and whether you want a chauffeur.',
+            },
+            {
+              number: '02',
+              title: 'Confirm your dates',
+              body: 'See the total upfront — no surprise add-ons at pickup.',
+            },
+            {
+              number: '03',
+              title: 'Pick up & go',
+              body: 'Meet the owner or chauffeur, start the trip, return when done.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'why_grid',
+        payload: {
+          eyebrow: 'Why Rent with Movr',
+          heading: 'Flexibility beyond a single trip.',
+          items: [
+            {
+              iconKey: 'key',
+              title: 'Self-drive or chauffeur',
+              body: 'Pick the mode that matches your plans.',
+            },
+            {
+              iconKey: 'car',
+              title: 'City-ready fleet',
+              body: 'Sedans, SUVs, and more from owners on Movr.',
+            },
+            {
+              iconKey: 'wallet',
+              title: 'Pay in-app',
+              body: 'Same wallet and receipts as rides and shopping.',
+            },
+          ],
+        },
+      },
+      {
+        type: 'rich_text',
+        payload: {
+          heading: 'Edit this page in Admin → CMS',
+          paragraphs: [
+            'Add fleet photos, owner stories, and rental policies here. Public URL is /rent so it does not conflict with the in-app /rentals product.',
+          ],
+        },
+      },
+      {
+        type: 'final_cta',
+        payload: {
+          heading: 'Need a vehicle?',
+          body: 'Log in to browse rentals or list yours on Movr.',
+          primaryCta: { label: 'Explore rentals', href: '/login' },
           secondaryCta: { label: 'Get the app', href: '/download' },
         },
       },
@@ -1020,6 +1372,113 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
     }
   } catch (e: any) {
     console.warn(`CMS footer legalLinks cleanup: ${e?.message || e}`);
+  }
+
+  // Point Services footer/nav links at dedicated marketing pages (not homepage hashes)
+  try {
+    const hrefMap: Record<string, string> = {
+      '/#ride': '/ride',
+      '#ride': '/ride',
+      '/#shop': '/shop',
+      '#shop': '/shop',
+      '/#deliver': '/deliver',
+      '#deliver': '/deliver',
+      '/#rentals': '/rent',
+      '#rentals': '/rent',
+    };
+    const remapHref = (href?: string) => {
+      const h = String(href || '').trim();
+      return hrefMap[h] || h;
+    };
+    const remapLinks = (links: any[]) =>
+      (links || []).map((l) => ({ ...l, href: remapHref(l?.href) }));
+
+    const global = await service.getPageBySlug('global', { publishedOnly: false });
+    if (global?.sections?.length) {
+      let changed = false;
+      const sections = global.sections.map((s: any) => {
+        if (s.type === 'nav' && Array.isArray(s.payload?.links)) {
+          const next = remapLinks(s.payload.links);
+          if (JSON.stringify(next) !== JSON.stringify(s.payload.links)) {
+            changed = true;
+            return { ...s, payload: { ...s.payload, links: next } };
+          }
+        }
+        if (s.type === 'footer' && Array.isArray(s.payload?.columns)) {
+          const columns = s.payload.columns.map((col: any) => ({
+            ...col,
+            links: remapLinks(col.links || []),
+          }));
+          if (JSON.stringify(columns) !== JSON.stringify(s.payload.columns)) {
+            changed = true;
+            return { ...s, payload: { ...s.payload, columns } };
+          }
+        }
+        return s;
+      });
+      if (changed) {
+        await service.upsertPage({
+          slug: 'global',
+          title: global.title || 'Site chrome (nav + footer)',
+          status: global.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log('CMS: remapped service links to /ride /shop /deliver /rent');
+      }
+    }
+
+    const home = await service.getPageBySlug('home', { publishedOnly: false });
+    if (home?.sections?.length) {
+      let changed = false;
+      const sections = home.sections.map((s: any) => {
+        if (s.type === 'product_grid' && Array.isArray(s.payload?.items)) {
+          const items = s.payload.items.map((it: any) => ({
+            ...it,
+            href: remapHref(it?.href) || it?.href,
+          }));
+          // Also upgrade legacy login/marketplace CTAs for the four service cards
+          const byTitle: Record<string, string> = {
+            ride: '/ride',
+            shop: '/shop',
+            deliver: '/deliver',
+            rentals: '/rent',
+          };
+          const upgraded = items.map((it: any) => {
+            const key = String(it.title || '').toLowerCase();
+            if (byTitle[key] && (it.href === '/login' || it.href === '/marketplace' || !it.href)) {
+              return { ...it, href: byTitle[key] };
+            }
+            return it;
+          });
+          if (JSON.stringify(upgraded) !== JSON.stringify(s.payload.items)) {
+            changed = true;
+            return { ...s, payload: { ...s.payload, items: upgraded } };
+          }
+        }
+        return s;
+      });
+      if (changed) {
+        await service.upsertPage({
+          slug: 'home',
+          title: home.title || 'Homepage',
+          status: home.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log('CMS: remapped home product_grid service card links');
+      }
+    }
+  } catch (e: any) {
+    console.warn(`CMS service link remap: ${e?.message || e}`);
   }
 
   return result;
