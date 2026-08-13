@@ -5,21 +5,29 @@
  */
 export const BRAND = {
   wordmark: '/brand/movr-wordmark.png',
+  /** Stock stills — cards, grids, non-hero media */
   rideSedan: '/brand/ride-sedan.png',
   courierMoto: '/brand/courier-moto.png',
   shopPartner: '/brand/shop-partner.png',
+  /** Hero-only motion brand art */
+  heroCarMotion: '/brand/movr-car-in-motion.jpg',
+  heroBikeMotion: '/brand/movr-bike-in-motion.jpg',
 } as const;
 
 /** Default full-bleed hero photo by CMS page slug (fallback only). */
 export const BRAND_HERO_BY_SLUG: Record<string, string> = {
-  home: BRAND.rideSedan,
-  features: BRAND.rideSedan,
-  contact: BRAND.rideSedan,
-  drivers: BRAND.courierMoto,
+  home: BRAND.heroCarMotion,
+  features: BRAND.heroCarMotion,
+  contact: BRAND.heroCarMotion,
+  ride: BRAND.heroCarMotion,
+  rentals: BRAND.heroCarMotion,
+  about: BRAND.heroCarMotion,
+  ai: BRAND.heroCarMotion,
+  drivers: BRAND.heroBikeMotion,
+  deliver: BRAND.heroBikeMotion,
   merchants: BRAND.shopPartner,
-  about: BRAND.rideSedan,
+  shop: BRAND.shopPartner,
   download: BRAND.wordmark,
-  ai: BRAND.rideSedan,
 };
 
 export function brandHeroForSlug(slug?: string): string | undefined {

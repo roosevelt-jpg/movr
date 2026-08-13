@@ -247,7 +247,7 @@ export default function MovrAiPage() {
   const { page: aiCms } = useCmsPage('ai');
   const bannerSection = aiCms?.sections?.find((s) => s.type === 'hero' || s.type === 'choice_hero');
   const bannerMedia = resolveCmsHeroMedia(bannerSection?.payload || {}, 'ai');
-  const bannerUrl = bannerMedia.imageUrl || '/brand/ride-sedan.png';
+  const bannerUrl = bannerMedia.imageUrl || '/brand/movr-car-in-motion.jpg';
 
   return (
     <div className="bg-surface text-text-primary flex-1 flex flex-col">

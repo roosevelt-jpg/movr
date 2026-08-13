@@ -3,8 +3,10 @@ import { MediaField } from './CmsMediaField';
 
 /** Stock Movr brand photos (also in frontend/web/public/brand). */
 export const BRAND_BG_PRESETS: Array<{ id: string; label: string; url: string }> = [
-  { id: 'sedan', label: 'Ride sedan', url: '/brand/ride-sedan.png' },
-  { id: 'courier', label: 'Courier moto', url: '/brand/courier-moto.png' },
+  { id: 'hero-car', label: 'Hero · car in motion', url: '/brand/movr-car-in-motion.jpg' },
+  { id: 'hero-bike', label: 'Hero · bike in motion', url: '/brand/movr-bike-in-motion.jpg' },
+  { id: 'sedan', label: 'Ride sedan (still)', url: '/brand/ride-sedan.png' },
+  { id: 'courier', label: 'Courier moto (still)', url: '/brand/courier-moto.png' },
   { id: 'shop', label: 'Shop partner', url: '/brand/shop-partner.png' },
   { id: 'wordmark', label: 'Movr wordmark', url: '/brand/movr-wordmark.png' },
 ];

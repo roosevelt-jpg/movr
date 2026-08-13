@@ -37,9 +37,6 @@ export const CMS_SEED: Array<{
           logoUrl: '/brand/movr-logo.png',
           faviconUrl: '/favicon.png',
           links: [
-            { label: 'Ride', href: '/ride' },
-            { label: 'Shop', href: '/shop' },
-            { label: 'Deliver', href: '/deliver' },
             { label: 'AI', href: '/ai' },
             { label: 'Drivers', href: '/drivers' },
             { label: 'Merchants', href: '/merchants' },
@@ -124,7 +121,7 @@ export const CMS_SEED: Array<{
           headline: 'Move. Shop. Deliver.\nOne app for Africa.',
           subhead:
             'Book rides, shop local stores, send parcels, and rent vehicles — built for Ghana and expanding across Africa.',
-          backgroundImage: '/brand/ride-sedan.png',
+          backgroundImage: '/brand/movr-car-in-motion.jpg',
           choices: [
             {
               emoji: '🚗',
@@ -457,7 +454,7 @@ export const CMS_SEED: Array<{
           headline: 'Keep 100% of\nevery fare.',
           subhead:
             'No commission. One flexible subscription, cancel any time. Drive Sedan, SUV, Motorcycle, Tricycle, or Van.',
-          backgroundImage: '/brand/courier-moto.png',
+          backgroundImage: '/brand/movr-bike-in-motion.jpg',
           choices: [
             {
               emoji: '🔑',
@@ -551,7 +548,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Cars, okada, tricycles, and shared rides — priced in your local currency with live ETAs.',
           layout: 'split',
-          backgroundImage: '/brand/ride-sedan.png',
+          backgroundImage: '/brand/movr-car-in-motion.jpg',
           primaryCta: { label: 'Book a ride', href: '/login' },
           secondaryCta: { label: 'Get the app', href: '/download' },
           showPhoneMock: true,
@@ -727,7 +724,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Parcels, documents, and store orders — tracked from pickup to drop-off with verified couriers.',
           layout: 'split',
-          backgroundImage: '/brand/courier-moto.png',
+          backgroundImage: '/brand/movr-bike-in-motion.jpg',
           primaryCta: { label: 'Send a parcel', href: '/login' },
           secondaryCta: { label: 'Get the app', href: '/download' },
           showPhoneMock: false,
@@ -815,7 +812,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Self-drive or chauffeured rentals for days, weekends, or longer — booked in the same Movr account.',
           layout: 'split',
-          backgroundImage: '/brand/ride-sedan.png',
+          backgroundImage: '/brand/movr-car-in-motion.jpg',
           primaryCta: { label: 'Explore rentals', href: '/login' },
           secondaryCta: { label: 'List your vehicle', href: '/login' },
           showPhoneMock: false,
@@ -1042,7 +1039,7 @@ export const CMS_SEED: Array<{
           headline: 'Movr AI',
           subhead: 'Talk. Don’t tap. Book rides, find stores, and escalate to live agents.',
           layout: 'centered',
-          backgroundImage: '/brand/ride-sedan.png',
+          backgroundImage: '/brand/movr-car-in-motion.jpg',
           showPhoneMock: false,
         },
       },
@@ -1060,7 +1057,7 @@ export const CMS_SEED: Array<{
           subhead:
             'Movr is the super-app for rides, local shopping, and delivery — priced in your local currency.',
           layout: 'centered',
-          backgroundImage: '/brand/ride-sedan.png',
+          backgroundImage: '/brand/movr-car-in-motion.jpg',
           primaryCta: { label: 'Get the app', href: '/download' },
           showPhoneMock: false,
         },
@@ -1396,9 +1393,16 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
     const global = await service.getPageBySlug('global', { publishedOnly: false });
     if (global?.sections?.length) {
       let changed = false;
+      const dropFromNav = /^(ride|shop|deliver)$/i;
       const sections = global.sections.map((s: any) => {
         if (s.type === 'nav' && Array.isArray(s.payload?.links)) {
-          const next = remapLinks(s.payload.links);
+          const remapped = remapLinks(s.payload.links);
+          // Services live in the footer — keep header to AI / Drivers / Merchants / About
+          const next = remapped.filter(
+            (l: any) =>
+              !dropFromNav.test(String(l?.label || '').trim()) &&
+              !['/ride', '/shop', '/deliver'].includes(String(l?.href || '').trim())
+          );
           if (JSON.stringify(next) !== JSON.stringify(s.payload.links)) {
             changed = true;
             return { ...s, payload: { ...s.payload, links: next } };
@@ -1428,7 +1432,7 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
             payload: s.payload || {},
           })),
         });
-        console.log('CMS: remapped service links to /ride /shop /deliver /rent');
+        console.log('CMS: updated nav/footer service links (services in footer only)');
       }
     }
 
@@ -1479,6 +1483,114 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
     }
   } catch (e: any) {
     console.warn(`CMS service link remap: ${e?.message || e}`);
+  }
+
+  // Heroes use motion brand art; cards/grids keep stock stills
+  try {
+    const heroCar = '/brand/movr-car-in-motion.jpg';
+    const heroBike = '/brand/movr-bike-in-motion.jpg';
+    const carStills = new Set([
+      '/brand/ride-sedan.png',
+      '/brand/ride-sedan.png',
+      '/brand/movr-car-in-motion.jpg',
+    ]);
+    const bikeStills = new Set([
+      '/brand/courier-moto.png',
+      '/brand/courier-moto.png',
+      '/brand/movr-bike-in-motion.jpg',
+    ]);
+    const carHeroSlugs = new Set(['home', 'ride', 'rentals', 'about', 'ai', 'features', 'contact']);
+    const bikeHeroSlugs = new Set(['drivers', 'deliver']);
+    const slugs = [
+      'home',
+      'ride',
+      'shop',
+      'deliver',
+      'rentals',
+      'about',
+      'ai',
+      'drivers',
+      'features',
+      'contact',
+    ];
+    for (const slug of slugs) {
+      const page = await service.getPageBySlug(slug, { publishedOnly: false });
+      if (!page?.sections?.length) continue;
+      let changed = false;
+      const sections = page.sections.map((s: any) => {
+        const payload = { ...(s.payload || {}) };
+        const isHero = s.type === 'hero' || s.type === 'choice_hero' || s.type === 'business_split';
+        if (isHero && payload.backgroundImage) {
+          const bg = String(payload.backgroundImage);
+          if (carHeroSlugs.has(slug) && (carStills.has(bg) || bg.includes('ride-sedan'))) {
+            if (payload.backgroundImage !== heroCar) {
+              payload.backgroundImage = heroCar;
+              changed = true;
+            }
+          }
+          if (bikeHeroSlugs.has(slug) && (bikeStills.has(bg) || bg.includes('courier-moto'))) {
+            if (payload.backgroundImage !== heroBike) {
+              payload.backgroundImage = heroBike;
+              changed = true;
+            }
+          }
+        }
+        // Card/choice images: always stock stills (not motion heroes)
+        const fixUrl = (url?: string) => {
+          const u = String(url || '');
+          if (u === '/brand/ride-sedan.png' || u === heroCar) return '/brand/ride-sedan.png';
+          if (u === '/brand/courier-moto.png' || u === heroBike) return '/brand/courier-moto.png';
+          return url;
+        };
+        if (payload.imageUrl && !isHero) {
+          const next = fixUrl(payload.imageUrl);
+          if (next !== payload.imageUrl) {
+            payload.imageUrl = next;
+            changed = true;
+          }
+        }
+        if (Array.isArray(payload.items)) {
+          const items = payload.items.map((it: any) => {
+            const hrefImg = fixUrl(it.imageUrl);
+            if (hrefImg !== it.imageUrl) {
+              changed = true;
+              return { ...it, imageUrl: hrefImg };
+            }
+            return it;
+          });
+          payload.items = items;
+        }
+        if (Array.isArray(payload.choices)) {
+          const choices = payload.choices.map((it: any) => {
+            const hrefImg = fixUrl(it.imageUrl);
+            if (hrefImg !== it.imageUrl) {
+              changed = true;
+              return { ...it, imageUrl: hrefImg };
+            }
+            return it;
+          });
+          payload.choices = choices;
+        }
+        return changed ? { ...s, payload } : s;
+      });
+      // Recompute changed flag properly — map above mutates `changed`
+      if (changed) {
+        await service.upsertPage({
+          slug,
+          title: page.title || slug,
+          status: page.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log(`CMS: hero motion + still cards for ${slug}`);
+      }
+    }
+  } catch (e: any) {
+    console.warn(`CMS hero motion asset update: ${e?.message || e}`);
   }
 
   return result;
