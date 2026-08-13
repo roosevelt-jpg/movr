@@ -3,6 +3,7 @@ export type BookingCopy = {
   changeCity: string;
   headline: string;
   subhead: string;
+  tripDetails: string;
   pickupNow: string;
   share: string;
   pickupPlaceholder: string;
@@ -30,16 +31,19 @@ export type BookingCopy = {
   mapsHint: string;
   detecting: string;
   chargedIn: string;
+  useLocation: string;
 };
 
 const EN: BookingCopy = {
   changeCity: 'Change city',
-  headline: 'Go anywhere with Movr',
-  subhead: 'Cars, okada, and shared rides — priced in your local currency.',
-  pickupNow: 'Pickup now',
-  share: 'Share · lower fare',
-  pickupPlaceholder: 'Pickup location',
-  dropoffPlaceholder: 'Dropoff location',
+  headline: 'Compare your travel options',
+  subhead:
+    'Enter your pickup and destination to review estimated travel times and pricing across every way to move.',
+  tripDetails: 'Trip details',
+  pickupNow: 'Go now',
+  share: 'Share',
+  pickupPlaceholder: 'Enter pickup',
+  dropoffPlaceholder: 'Enter destination',
   seePrices: 'See prices',
   gettingPrices: 'Getting prices…',
   loginRecent: 'Log in to see your recent activity',
@@ -63,16 +67,19 @@ const EN: BookingCopy = {
   mapsHint: 'Add Google Maps in Admin → Integrations to enable address search.',
   detecting: 'Detecting your city…',
   chargedIn: 'Prices in',
+  useLocation: 'Use current location',
 };
 
 const FR: BookingCopy = {
   ...EN,
   changeCity: 'Changer de ville',
-  headline: 'Allez partout avec Movr',
-  subhead: 'Voitures, okada et trajets partagés — en devise locale.',
-  pickupNow: 'Départ maintenant',
-  share: 'Partage · tarif réduit',
-  pickupPlaceholder: 'Lieu de prise en charge',
+  headline: 'Comparez vos options de trajet',
+  subhead:
+    'Indiquez départ et destination pour voir les temps et tarifs estimés pour chaque façon de bouger.',
+  tripDetails: 'Détails du trajet',
+  pickupNow: 'Maintenant',
+  share: 'Partage',
+  pickupPlaceholder: 'Lieu de départ',
   dropoffPlaceholder: 'Destination',
   seePrices: 'Voir les prix',
   gettingPrices: 'Calcul des prix…',
@@ -97,17 +104,21 @@ const FR: BookingCopy = {
   mapsHint: 'Ajoutez Google Maps dans Intégrations pour la recherche d’adresses.',
   detecting: 'Détection de votre ville…',
   chargedIn: 'Tarifs en',
+  useLocation: 'Utiliser ma position',
 };
 
 const PT: BookingCopy = {
   ...EN,
   changeCity: 'Mudar cidade',
-  headline: 'Vá a qualquer lugar com a Movr',
-  subhead: 'Carros, okada e partilha — cobrados na sua moeda local.',
-  pickupNow: 'Partida agora',
-  share: 'Partilha · tarifa menor',
+  headline: 'Compare as suas opções de viagem',
+  subhead:
+    'Indique recolha e destino para ver tempos e preços estimados em todas as formas de se deslocar.',
+  tripDetails: 'Detalhes da viagem',
+  pickupNow: 'Agora',
+  share: 'Partilha',
   pickupPlaceholder: 'Local de recolha',
   dropoffPlaceholder: 'Destino',
+  useLocation: 'Usar localização atual',
   seePrices: 'Ver preços',
   gettingPrices: 'A obter preços…',
   loginRecent: 'Inicie sessão para ver a atividade recente',
@@ -136,12 +147,14 @@ const PT: BookingCopy = {
 const AR: BookingCopy = {
   ...EN,
   changeCity: 'تغيير المدينة',
-  headline: 'اذهب إلى أي مكان مع موفر',
-  subhead: 'سيارات وأوكادا ورحلات مشتركة — بأسعار عملتك المحلية.',
-  pickupNow: 'انطلاق الآن',
-  share: 'مشاركة · أجرة أقل',
+  headline: 'قارن خيارات سفرك',
+  subhead: 'أدخل موقع الانطلاق والوجهة لمراجعة الأوقات والأسعار التقديرية لكل وسيلة تنقل.',
+  tripDetails: 'تفاصيل الرحلة',
+  pickupNow: 'الآن',
+  share: 'مشاركة',
   pickupPlaceholder: 'موقع الانطلاق',
   dropoffPlaceholder: 'الوجهة',
+  useLocation: 'استخدم موقعي الحالي',
   seePrices: 'عرض الأسعار',
   gettingPrices: 'جاري جلب الأسعار…',
   loginRecent: 'سجّل الدخول لرؤية نشاطك',
@@ -170,10 +183,12 @@ const AR: BookingCopy = {
 const ES: BookingCopy = {
   ...EN,
   changeCity: 'Cambiar ciudad',
-  headline: 'Ve a cualquier lugar con Movr',
-  subhead: 'Coches, okada y viajes compartidos — en tu moneda local.',
-  pickupNow: 'Recogida ahora',
-  share: 'Compartir · tarifa más baja',
+  headline: 'Compara tus opciones de viaje',
+  subhead:
+    'Introduce origen y destino para ver tiempos y precios estimados en cada forma de moverte.',
+  tripDetails: 'Detalles del viaje',
+  pickupNow: 'Ahora',
+  share: 'Compartir',
   pickupPlaceholder: 'Punto de recogida',
   dropoffPlaceholder: 'Destino',
   seePrices: 'Ver precios',
@@ -193,6 +208,7 @@ const ES: BookingCopy = {
   noVehicles: 'No hay vehículos en esta ruta',
   quoteFailed: 'No se pudieron obtener precios',
   pickVehicle: 'Elige un vehículo',
+  useLocation: 'Usar ubicación actual',
   booked: 'Viaje solicitado — buscando conductor',
   shareJoined: 'Vehículo compartido en matching',
   shareWaiting: 'Unido al pool — esperando pasajeros',

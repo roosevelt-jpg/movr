@@ -1134,8 +1134,8 @@ function SectionEditor({
       return (
         <>
           <p style={styles.hint}>
-            Uber-style ride booking on the homepage. Uses /rails/quote + /rails/book. Place search
-            needs Google Maps in Integrations Hub.
+            “Compare your travel options” — Trip details card + map. Quotes via /rails/quote and books
+            via /rails/book (Go now / Share). Place search needs Google Maps in Integrations Hub.
           </p>
           <Field
             label="Headline"
@@ -1149,6 +1149,12 @@ function SectionEditor({
             multiline
             disabled={disabled}
             onChange={(v) => set({ subhead: v })}
+          />
+          <Field
+            label="Form card title"
+            value={p.formTitle || ''}
+            disabled={disabled}
+            onChange={(v) => set({ formTitle: v })}
           />
           <Field
             label="City label"
@@ -1168,24 +1174,41 @@ function SectionEditor({
             disabled={disabled}
             onChange={(v) => set({ ctaLabel: v })}
           />
+          <MediaField
+            label="Map / illustration image (right column)"
+            value={p.mapImageUrl || ''}
+            purpose="banner"
+            disabled={disabled}
+            accept="image/*"
+            hint="Upload a map preview or city illustration. Replaces the default compare-map graphic."
+            onChange={(url) => set({ mapImageUrl: url })}
+          />
           <Field
-            label="Side panel title"
+            label="Map image alt text"
+            value={p.mapImageAlt || ''}
+            disabled={disabled}
+            onChange={(v) => set({ mapImageAlt: v })}
+          />
+          <Field
+            label="Map overlay title (optional)"
             value={p.sideTitle || ''}
             disabled={disabled}
             onChange={(v) => set({ sideTitle: v })}
           />
-          <Field
-            label="Side CTA label"
-            value={p.sideCtaLabel || ''}
-            disabled={disabled}
-            onChange={(v) => set({ sideCtaLabel: v })}
-          />
-          <Field
-            label="Side CTA link"
-            value={p.sideCtaHref || ''}
-            disabled={disabled}
-            onChange={(v) => set({ sideCtaHref: v })}
-          />
+          <div style={styles.row2}>
+            <Field
+              label="Map overlay CTA label"
+              value={p.sideCtaLabel || ''}
+              disabled={disabled}
+              onChange={(v) => set({ sideCtaLabel: v })}
+            />
+            <Field
+              label="Map overlay CTA link"
+              value={p.sideCtaHref || ''}
+              disabled={disabled}
+              onChange={(v) => set({ sideCtaHref: v })}
+            />
+          </div>
         </>
       );
 
@@ -1638,7 +1661,7 @@ const TYPE_LABELS: Record<string, string> = {
   hero: 'Hero',
   choice_hero: 'Choice hero',
   business_split: 'Business split (merchants)',
-  booking_engine: 'Homepage booking engine',
+  booking_engine: 'Compare travel options',
   trust_strip: 'Trust strip',
   how_it_works: 'How it works',
   ai_showcase: 'Movr AI showcase',

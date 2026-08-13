@@ -72,10 +72,16 @@ export default function SiteFooter() {
       Array.isArray(cms.appButtons) && cms.appButtons.length
         ? cms.appButtons
         : FALLBACK_FOOTER.appButtons,
-    legalLinks:
+    legalLinks: (
       Array.isArray(cms.legalLinks) && cms.legalLinks.length
         ? cms.legalLinks
-        : FALLBACK_FOOTER.legalLinks,
+        : FALLBACK_FOOTER.legalLinks
+    ).filter(
+      // Kept under SUPPORT column — avoid duplicate in the bottom legal row
+      (l: { label?: string; href?: string }) =>
+        !/delete.?account/i.test(String(l.label || '')) &&
+        !/delete-account/i.test(String(l.href || ''))
+    ),
     social: socialLinks,
   };
 

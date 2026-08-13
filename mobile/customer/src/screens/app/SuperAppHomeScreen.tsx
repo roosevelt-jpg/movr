@@ -14,7 +14,7 @@ import ParcelTrackingScreen from './ParcelTrackingScreen';
 import RentalHomeScreen from './RentalHomeScreen';
 import RentalConfirmScreen from './RentalConfirmScreen';
 import ActiveRentalScreen from './ActiveRentalScreen';
-import HomeScreen from './HomeScreen';
+import CompareTravelScreen from './CompareTravelScreen';
 import ActiveRideScreen from './ActiveRideScreen';
 import WalletScreen from './WalletScreen';
 import ProfileSettingsScreen from './ProfileSettingsScreen';
@@ -603,13 +603,12 @@ export default function SuperAppHomeScreen({
   if (service === 'ride') {
     return (
       <View style={styles.root}>
-        <Pressable onPress={() => setService('hub')} style={styles.back}>
-          <Text style={styles.backText}>← Home</Text>
-        </Pressable>
-        <HomeScreen
-          pickupLabel={data?.location?.label}
-          pickupLat={data?.location?.lat}
-          pickupLng={data?.location?.lng}
+        <CompareTravelScreen
+          onBack={() => setService('hub')}
+          onBooked={(rideId) => {
+            setActiveRideId(rideId);
+            setService('active_ride');
+          }}
         />
       </View>
     );

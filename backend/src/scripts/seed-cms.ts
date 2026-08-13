@@ -107,7 +107,6 @@ export const CMS_SEED: Array<{
             { label: 'Privacy', href: '/privacy' },
             { label: 'Terms', href: '/terms' },
             { label: 'Cookies', href: '/cookies' },
-            { label: 'Delete account', href: '/delete-account' },
           ],
         },
       },
@@ -149,13 +148,17 @@ export const CMS_SEED: Array<{
       {
         type: 'booking_engine',
         payload: {
-          headline: 'Go anywhere with Movr',
-          subhead: 'Cars, okada, and shared rides — priced in your local currency.',
+          headline: 'Compare your travel options',
+          subhead:
+            'Enter your pickup and destination to review estimated travel times and pricing across every way to move.',
+          formTitle: 'Trip details',
           cityLabel: 'Accra, GH',
           countryCode: 'GH',
           ctaLabel: 'See prices',
-          sideTitle: 'Ready to travel?',
-          sideCtaLabel: 'Create account',
+          mapImageUrl: '/brand/compare-map.svg',
+          mapImageAlt: 'Trip map preview',
+          sideTitle: '',
+          sideCtaLabel: '',
           sideCtaHref: '/register',
           defaultLat: 5.6037,
           defaultLng: -0.187,
@@ -861,11 +864,12 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
   // Ensure homepage booking engine exists even if home was seeded earlier
   try {
     const home = await service.getPageBySlug('home', { publishedOnly: false });
-    if (home?.sections && !home.sections.some((s: any) => s.type === 'booking_engine')) {
-      const seedHome = CMS_SEED.find((p) => p.slug === 'home');
-      const booking = seedHome?.sections?.find((s) => s.type === 'booking_engine');
-      if (booking) {
-        const sections = [...home.sections];
+    const seedHome = CMS_SEED.find((p) => p.slug === 'home');
+    const bookingSeed = seedHome?.sections?.find((s) => s.type === 'booking_engine');
+    if (home?.sections && bookingSeed) {
+      const sections = [...home.sections];
+      const idx = sections.findIndex((s: any) => s.type === 'booking_engine');
+      if (idx < 0) {
         const heroIdx = sections.findIndex(
           (s: any) => s.type === 'choice_hero' || s.type === 'hero'
         );
@@ -874,7 +878,7 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
           type: 'booking_engine',
           sortOrder: insertAt,
           enabled: true,
-          payload: booking.payload,
+          payload: bookingSeed.payload,
         } as any);
         await service.upsertPage({
           slug: 'home',
@@ -888,6 +892,40 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
           })),
         });
         console.log('CMS: injected booking_engine into home');
+      } else if (!sections[idx].payload?.mapImageUrl) {
+        // Upgrade legacy booking_engine to compare-travel layout defaults (keep admin text if set)
+        sections[idx] = {
+          ...sections[idx],
+          payload: {
+            ...bookingSeed.payload,
+            ...sections[idx].payload,
+            mapImageUrl:
+              sections[idx].payload?.mapImageUrl || bookingSeed.payload.mapImageUrl,
+            formTitle: sections[idx].payload?.formTitle || bookingSeed.payload.formTitle,
+            headline:
+              sections[idx].payload?.headline === 'Go anywhere with Movr' ||
+              !sections[idx].payload?.headline
+                ? bookingSeed.payload.headline
+                : sections[idx].payload.headline,
+            subhead:
+              sections[idx].payload?.subhead?.includes('local currency') ||
+              !sections[idx].payload?.subhead
+                ? bookingSeed.payload.subhead
+                : sections[idx].payload.subhead,
+          },
+        };
+        await service.upsertPage({
+          slug: 'home',
+          title: home.title || 'Homepage',
+          status: home.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log('CMS: upgraded booking_engine compare-travel payload');
       }
     }
   } catch (e: any) {
@@ -938,6 +976,50 @@ export async function ensureCmsDefaults(db?: DatabaseService) {
     }
   } catch (e: any) {
     console.warn(`CMS business_split inject: ${e?.message || e}`);
+  }
+
+  // Drop duplicate "Delete account" from footer legalLinks (kept under SUPPORT)
+  try {
+    const global = await service.getPageBySlug('global', { publishedOnly: false });
+    const footerIdx = global?.sections?.findIndex((s: any) => s.type === 'footer') ?? -1;
+    if (global?.sections && footerIdx >= 0) {
+      const legalLinks = global.sections[footerIdx].payload?.legalLinks;
+      if (
+        Array.isArray(legalLinks) &&
+        legalLinks.some(
+          (l: any) =>
+            /delete.?account/i.test(String(l?.label || '')) ||
+            /delete-account/i.test(String(l?.href || ''))
+        )
+      ) {
+        const sections = [...global.sections];
+        sections[footerIdx] = {
+          ...sections[footerIdx],
+          payload: {
+            ...sections[footerIdx].payload,
+            legalLinks: legalLinks.filter(
+              (l: any) =>
+                !/delete.?account/i.test(String(l?.label || '')) &&
+                !/delete-account/i.test(String(l?.href || ''))
+            ),
+          },
+        };
+        await service.upsertPage({
+          slug: 'global',
+          title: global.title || 'Site chrome (nav + footer)',
+          status: global.status || 'published',
+          sections: sections.map((s: any, i: number) => ({
+            type: s.type,
+            sortOrder: i,
+            enabled: s.enabled !== false,
+            payload: s.payload || {},
+          })),
+        });
+        console.log('CMS: removed duplicate Delete account from footer legalLinks');
+      }
+    }
+  } catch (e: any) {
+    console.warn(`CMS footer legalLinks cleanup: ${e?.message || e}`);
   }
 
   return result;

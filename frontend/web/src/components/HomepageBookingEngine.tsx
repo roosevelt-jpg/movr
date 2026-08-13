@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Clock, MapPin } from 'lucide-react';
+import { LocateFixed, MapPin } from 'lucide-react';
 import { formatCurrency, formatCountryLabel } from '../lib/currency';
 import { useAuthStore } from '../store/auth.store';
 import { useLocaleStore } from '../store/locale.store';
 import { bookingCopy } from '../lib/bookingCopy';
 import { AFRICA_LOCALES } from '../lib/africaLocales';
+import { mediaUrl } from '../lib/media';
 import PlacesAutocompleteField, { PickedPlace } from './PlacesAutocompleteField';
 
 const API =
@@ -27,9 +28,12 @@ type Props = {
   payload?: {
     headline?: string;
     subhead?: string;
+    formTitle?: string;
     cityLabel?: string;
     countryCode?: string;
     ctaLabel?: string;
+    mapImageUrl?: string;
+    mapImageAlt?: string;
     sideTitle?: string;
     sideCtaLabel?: string;
     sideCtaHref?: string;
@@ -39,8 +43,8 @@ type Props = {
 };
 
 /**
- * Uber-style homepage booking — auto country → local currency + language.
- * Quote/book via Africa rails with detected countryCode.
+ * Uber-style “Compare your travel options” — Trip details + map.
+ * Quote/book via Africa rails with detected countryCode. CMS-editable copy + map image.
  */
 export default function HomepageBookingEngine({ payload = {} }: Props) {
   const navigate = useNavigate();
@@ -56,6 +60,7 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
   const countryCode = (country || payload.countryCode || 'GH').toUpperCase();
   const defaultLat = Number(payload.defaultLat ?? 5.6037);
   const defaultLng = Number(payload.defaultLng ?? -0.187);
+  const mapSrc = mediaUrl(payload.mapImageUrl || '/brand/compare-map.svg');
 
   const [pickup, setPickup] = useState<PickedPlace | null>(null);
   const [dropoff, setDropoff] = useState<PickedPlace | null>(null);
@@ -70,6 +75,23 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
     setQuoteCurrency(currency);
   }, [currency]);
 
+  const applyGps = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPickup({
+          name: t.useLocation,
+          formattedAddress: t.useLocation,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          countryCode,
+        });
+      },
+      () => toast.error(t.quoteFailed),
+      { maximumAge: 60_000, timeout: 8_000 }
+    );
+  };
+
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -78,8 +100,8 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
           prev
             ? prev
             : {
-                name: t.pickupPlaceholder,
-                formattedAddress: t.pickupPlaceholder,
+                name: t.useLocation,
+                formattedAddress: t.useLocation,
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude,
                 countryCode,
@@ -89,7 +111,7 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
       () => undefined,
       { maximumAge: 60_000, timeout: 8_000 }
     );
-  }, [countryCode, t.pickupPlaceholder]);
+  }, [countryCode, t.useLocation]);
 
   const authHeaders = () => {
     const token =
@@ -247,63 +269,86 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
   return (
     <section
       id="book"
-      className="relative bg-[#f6f6f6] text-black border-y border-black/5"
+      className="relative bg-[#f3f3f3] text-black border-y border-black/5"
       data-force-light
       lang={language}
       dir={language === 'ar' ? 'rtl' : 'ltr'}
     >
-      <div className="mx-auto max-w-6xl px-4 py-12 md:py-16 md:px-6 grid md:grid-cols-2 gap-10 items-start">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-black/60 mb-4">
-            <MapPin size={16} />
-            <span className="font-medium text-black">{cityLabel}</span>
-            <button
-              type="button"
-              className="underline underline-offset-2 hover:text-black"
-              onClick={changeCity}
-            >
-              {t.changeCity}
-            </button>
-            <span className="text-xs rounded-full bg-black/5 px-2 py-0.5 text-black/70">
-              {t.chargedIn} {quoteCurrency || currency}
-              {!detected ? ` · ${t.detecting}` : ''}
-            </span>
-          </div>
+      <div className="mx-auto max-w-6xl px-4 py-12 md:py-16 md:px-6">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-black/60 mb-4">
+          <MapPin size={16} />
+          <span className="font-medium text-black">{cityLabel}</span>
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-black"
+            onClick={changeCity}
+          >
+            {t.changeCity}
+          </button>
+          <span className="text-xs rounded-full bg-black/5 px-2 py-0.5 text-black/70">
+            {t.chargedIn} {quoteCurrency || currency}
+            {!detected ? ` · ${t.detecting}` : ''}
+          </span>
+        </div>
 
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.05] mb-6">
-            {payload.headline || t.headline}
-          </h2>
-          <p className="text-black/60 mb-6 max-w-md">{payload.subhead || t.subhead}</p>
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.08] max-w-3xl">
+          {payload.headline || t.headline}
+        </h2>
+        <p className="mt-4 text-black/60 max-w-2xl text-base md:text-lg leading-relaxed">
+          {payload.subhead || t.subhead}
+        </p>
 
-          <div className="rounded-2xl border border-black/10 bg-white p-4 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03]">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#f4f4f5] border border-black/10 px-4 py-2.5 text-sm mb-4 shadow-sm">
-              <Clock size={16} className="text-black/70" />
-              <select
-                className="bg-transparent outline-none font-medium text-black"
-                value={when}
-                onChange={(e) => setWhen(e.target.value as 'now' | 'share')}
-              >
-                <option value="now">{t.pickupNow}</option>
-                <option value="share">{t.share}</option>
-              </select>
+        <div className="mt-10 grid lg:grid-cols-2 gap-6 lg:gap-8 items-stretch">
+          <div className="rounded-2xl bg-white border border-black/10 shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-5 sm:p-6 flex flex-col">
+            <h3 className="text-xl font-bold mb-4">{payload.formTitle || t.tripDetails}</h3>
+
+            <div className="inline-flex self-start rounded-full bg-[#ececec] p-1 mb-5">
+              {(
+                [
+                  { id: 'now' as const, label: t.pickupNow },
+                  { id: 'share' as const, label: t.share },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setWhen(tab.id)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    when === tab.id ? 'bg-black text-white' : 'text-black/70 hover:text-black'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
-            <div className="relative space-y-3 mb-5">
+            <div className="relative space-y-3 flex-1">
               <div
                 className="absolute left-[27px] top-11 bottom-11 w-0.5 bg-black/15"
                 aria-hidden
               />
-              <PlacesAutocompleteField
-                placeholder={t.pickupPlaceholder}
-                countryBias={countryCode}
-                icon="pickup"
-                valueLabel={pickup?.formattedAddress || pickup?.name}
-                onPick={(place) => {
-                  setPickup(place);
-                  if (place.countryCode) setCountry(place.countryCode, { manual: true });
-                }}
-                onClear={() => setPickup(null)}
-              />
+              <div className="relative">
+                <PlacesAutocompleteField
+                  placeholder={t.pickupPlaceholder}
+                  countryBias={countryCode}
+                  icon="pickup"
+                  valueLabel={pickup?.formattedAddress || pickup?.name}
+                  onPick={(place) => {
+                    setPickup(place);
+                    if (place.countryCode) setCountry(place.countryCode, { manual: true });
+                  }}
+                  onClear={() => setPickup(null)}
+                />
+                <button
+                  type="button"
+                  onClick={applyGps}
+                  className="absolute right-10 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-lg text-black/50 hover:text-black hover:bg-black/5"
+                  title={t.useLocation}
+                  aria-label={t.useLocation}
+                >
+                  <LocateFixed size={18} />
+                </button>
+              </div>
               <PlacesAutocompleteField
                 placeholder={t.dropoffPlaceholder}
                 countryBias={countryCode}
@@ -314,94 +359,109 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <button
-                type="button"
-                disabled={quoting}
-                onClick={seePrices}
-                className="rounded-full bg-black text-white px-7 py-3.5 text-sm font-semibold hover:bg-black/90 disabled:opacity-60 shadow-sm"
-              >
-                {quoting ? t.gettingPrices : payload.ctaLabel || t.seePrices}
-              </button>
+            <button
+              type="button"
+              disabled={quoting}
+              onClick={seePrices}
+              className="mt-6 w-full rounded-xl bg-black text-white py-3.5 text-sm font-semibold hover:bg-black/90 disabled:opacity-60"
+            >
+              {quoting ? t.gettingPrices : payload.ctaLabel || t.seePrices}
+            </button>
+
+            <div className="mt-3">
               {!isAuthenticated ? (
-                <Link to="/login" className="text-sm text-black/65 underline underline-offset-2 hover:text-black">
+                <Link
+                  to="/login"
+                  className="text-sm text-black/65 underline underline-offset-2 hover:text-black"
+                >
                   {t.loginRecent}
                 </Link>
               ) : (
-                <Link to="/dashboard" className="text-sm text-black/65 underline underline-offset-2 hover:text-black">
+                <Link
+                  to="/dashboard"
+                  className="text-sm text-black/65 underline underline-offset-2 hover:text-black"
+                >
                   {t.openDashboard}
                 </Link>
               )}
             </div>
           </div>
 
-          {options.length > 0 ? (
-            <div className="mt-4 rounded-2xl bg-white border border-black/10 p-4 space-y-2 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
-              <p className="text-xs font-semibold tracking-wide text-black/50 uppercase">
-                {t.chooseRide}
-              </p>
-              {options.map((o) => {
-                const active = selected === o.code;
-                return (
-                  <button
-                    key={o.code}
-                    type="button"
-                    onClick={() => setSelected(o.code)}
-                    className={`w-full flex items-center justify-between rounded-xl px-3 py-3 text-left border ${
-                      active ? 'border-black bg-black/[0.03]' : 'border-transparent hover:bg-black/[0.02]'
-                    }`}
+          <div className="relative min-h-[300px] lg:min-h-full rounded-2xl overflow-hidden bg-[#e8eef2] border border-black/5">
+            <img
+              src={mapSrc}
+              alt={payload.mapImageAlt || 'Map preview'}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            {(payload.sideTitle || payload.sideCtaLabel) && (
+              <div className="absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-black/70 to-transparent text-white">
+                {payload.sideTitle ? (
+                  <p className="font-bold text-lg">{payload.sideTitle}</p>
+                ) : null}
+                {payload.sideCtaLabel ? (
+                  <Link
+                    to={payload.sideCtaHref || '/register'}
+                    className="inline-flex mt-2 rounded-full bg-white text-black px-4 py-2 text-sm font-semibold"
                   >
-                    <span>
-                      <span className="font-semibold block">{o.name}</span>
-                      <span className="text-xs text-black/50">
-                        {o.etaMinutes != null ? `${o.etaMinutes} min` : t.nearby}
-                        {o.isRecommended ? ` · ${t.bestValue}` : ''}
-                      </span>
-                    </span>
-                    <span className="font-bold">
-                      {formatCurrency(o.price, quoteCurrency || currency)}
-                    </span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                disabled={booking || !selectedOpt}
-                onClick={confirmBook}
-                className="mt-2 w-full rounded-full bg-gradient-to-r from-[#6345ED] to-[#3B5CFF] text-white py-3.5 font-semibold disabled:opacity-60"
-              >
-                {booking
-                  ? t.confirming
-                  : !isAuthenticated
-                    ? `${t.loginToBook} · ${formatCurrency(selectedOpt?.price || 0, quoteCurrency || currency)}`
-                    : `${t.request} ${selectedOpt?.name || ''} · ${formatCurrency(
-                        selectedOpt?.price || 0,
-                        quoteCurrency || currency
-                      )}`}
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="relative min-h-[320px] rounded-3xl overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#134e4a] to-[#042f2e] text-white p-8 flex flex-col justify-end">
-          <div
-            className="absolute inset-0 opacity-40"
-            style={{
-              backgroundImage:
-                'radial-gradient(circle at 70% 30%, rgba(99,69,237,0.5), transparent 50%), radial-gradient(circle at 20% 80%, rgba(14,165,233,0.35), transparent 45%)',
-            }}
-          />
-          <div className="relative">
-            <p className="text-2xl font-bold mb-2">{payload.sideTitle || t.sideTitle}</p>
-            <p className="text-white/70 text-sm mb-4 max-w-sm">{t.sideBody}</p>
-            <Link
-              to={payload.sideCtaHref || '/register'}
-              className="inline-flex rounded-full bg-white text-black px-5 py-2.5 text-sm font-semibold"
-            >
-              {payload.sideCtaLabel || t.sideCta}
-            </Link>
+                    {payload.sideCtaLabel}
+                  </Link>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
+
+        {options.length > 0 ? (
+          <div className="mt-6 rounded-2xl bg-white border border-black/10 p-4 sm:p-5 space-y-2 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+            <p className="text-xs font-semibold tracking-wide text-black/50 uppercase">
+              {t.chooseRide}
+            </p>
+            {options.map((o) => {
+              const active = selected === o.code;
+              return (
+                <button
+                  key={o.code}
+                  type="button"
+                  onClick={() => setSelected(o.code)}
+                  className={`w-full flex items-center justify-between rounded-xl px-3 py-3 text-left border ${
+                    active
+                      ? 'border-black bg-black/[0.03]'
+                      : 'border-transparent hover:bg-black/[0.02]'
+                  }`}
+                >
+                  <span>
+                    <span className="font-semibold block">{o.name}</span>
+                    <span className="text-xs text-black/50">
+                      {o.etaMinutes != null ? `${o.etaMinutes} min` : t.nearby}
+                      {o.isRecommended ? ` · ${t.bestValue}` : ''}
+                    </span>
+                  </span>
+                  <span className="font-bold">
+                    {formatCurrency(o.price, quoteCurrency || currency)}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              disabled={booking || !selectedOpt}
+              onClick={confirmBook}
+              className="mt-2 w-full rounded-full bg-gradient-to-r from-[#6345ED] to-[#3B5CFF] text-white py-3.5 font-semibold disabled:opacity-60"
+            >
+              {booking
+                ? t.confirming
+                : !isAuthenticated
+                  ? `${t.loginToBook} · ${formatCurrency(
+                      selectedOpt?.price || 0,
+                      quoteCurrency || currency
+                    )}`
+                  : `${t.request} ${selectedOpt?.name || ''} · ${formatCurrency(
+                      selectedOpt?.price || 0,
+                      quoteCurrency || currency
+                    )}`}
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   );

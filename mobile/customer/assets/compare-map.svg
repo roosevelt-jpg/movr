@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" fill="none">
+  <rect width="960" height="720" fill="#E8EEF2"/>
+  <path d="M0 420 Q180 380 320 460 T640 440 T960 500" stroke="#B8C9D4" stroke-width="28" fill="none"/>
+  <path d="M0 280 Q240 320 400 260 T760 300 T960 240" stroke="#C5D5DE" stroke-width="18" fill="none"/>
+  <path d="M120 0 V720" stroke="#D5E0E8" stroke-width="14"/>
+  <path d="M340 0 V720" stroke="#D5E0E8" stroke-width="10"/>
+  <path d="M560 0 V720" stroke="#D5E0E8" stroke-width="16"/>
+  <path d="M780 0 V720" stroke="#D5E0E8" stroke-width="10"/>
+  <path d="M0 160 H960" stroke="#D5E0E8" stroke-width="12"/>
+  <path d="M0 560 H960" stroke="#D5E0E8" stroke-width="12"/>
+  <ellipse cx="720" cy="180" rx="160" ry="90" fill="#9EC5E8"/>
+  <ellipse cx="200" cy="600" rx="120" ry="70" fill="#A8D0EC"/>
+  <rect x="410" y="300" width="54" height="28" rx="8" fill="#16A34A"/>
+  <text x="437" y="319" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="14" font-weight="700">42</text>
+  <rect x="250" y="210" width="54" height="28" rx="8" fill="#16A34A"/>
+  <text x="277" y="229" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="14" font-weight="700">38</text>
+  <rect x="620" y="380" width="54" height="28" rx="8" fill="#16A34A"/>
+  <text x="647" y="399" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="14" font-weight="700">55</text>
+  <circle cx="300" cy="360" r="10" fill="#111"/>
+  <rect x="480" y="480" width="16" height="16" fill="#111"/>
+  <path d="M300 370 V480 H488" stroke="#111" stroke-width="3" stroke-dasharray="6 6" fill="none"/>
+</svg>
