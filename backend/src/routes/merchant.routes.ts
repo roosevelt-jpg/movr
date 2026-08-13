@@ -438,8 +438,9 @@ merchantRouter.post('/stores', authenticateToken, requireMerchant, async (req: A
     const merchant = await getMerchantForUser(req.user!.id);
     const { name, description, category, lat, lng, hoursJson, bannerUrl, defaultDeliveryMode } = req.body;
     const store = await db.query(
-      `INSERT INTO stores (merchant_id, name, description, category, lat, lng, latitude, longitude, hours_json, status, is_active, banner_url, default_delivery_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$5,$6,$7,'active',TRUE,$8,$9)
+      `INSERT INTO stores (merchant_id, name, description, category, lat, lng, latitude, longitude, hours_json, status, is_active, banner_url, default_delivery_mode, store_code)
+       VALUES ($1,$2,$3,$4,$5,$6,$5,$6,$7,'active',TRUE,$8,$9,
+         'STR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', ''), 1, 5)))
        RETURNING *`,
       [
         merchant.id,
@@ -529,7 +530,25 @@ merchantRouter.patch('/stores/:id', authenticateToken, requireMerchant, async (r
     if (!store.rows[0]) {
       return res.status(404).json({ status: 'error', message: 'Store not found' });
     }
-    res.json({ status: 'success', data: store.rows[0] });
+    const seoPatch = await db
+      .query(
+        `UPDATE stores SET
+           logo_url = COALESCE($1, logo_url),
+           seo_title = COALESCE($2, seo_title),
+           seo_description = COALESCE($3, seo_description),
+           updated_at = NOW()
+         WHERE id = $4 AND merchant_id = $5
+         RETURNING *`,
+        [
+          b.logoUrl || b.logo_url || null,
+          b.seoTitle || b.seo_title || null,
+          b.seoDescription || b.seo_description || null,
+          req.params.id,
+          merchant.id,
+        ]
+      )
+      .catch(() => store);
+    res.json({ status: 'success', data: seoPatch.rows[0] || store.rows[0] });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });
   }
@@ -2089,8 +2108,19 @@ merchantRouter.patch(
 merchantRouter.get('/dashboard-board', authenticateToken, requireMerchant, async (req: AuthRequest, res: Response) => {
   try {
     const merchant = await getMerchantForUser(req.user!.id);
+    await db
+      .query(
+        `UPDATE stores
+         SET store_code = COALESCE(
+           NULLIF(store_code, ''),
+           'STR-' || UPPER(SUBSTRING(REPLACE(id::text, '-', ''), 1, 5))
+         )
+         WHERE merchant_id = $1 AND (store_code IS NULL OR store_code = '')`,
+        [merchant.id]
+      )
+      .catch(() => undefined);
     const store = await db.query(
-      `SELECT id, name, COALESCE(is_open, true) AS is_open, COALESCE(rating, 0)::float AS rating,
+      `SELECT id, name, store_code, COALESCE(is_open, true) AS is_open, COALESCE(rating, 0)::float AS rating,
               COALESCE(prep_time_minutes, 15)::int AS prep_time_minutes
        FROM stores WHERE merchant_id = $1 ORDER BY created_at DESC NULLS LAST LIMIT 1`,
       [merchant.id]
@@ -2187,10 +2217,12 @@ merchantRouter.get('/dashboard-board', authenticateToken, requireMerchant, async
           ? {
               id: storeRow.id,
               name: storeRow.name,
+              storeCode: storeRow.store_code || null,
+              sharePath: `/store/${storeRow.store_code || storeRow.id}`,
               isOpen: Boolean(storeRow.is_open),
               rating: Number(storeRow.rating || 0),
             }
-          : { id: null, name: 'Store', isOpen: true, rating: 0 },
+          : { id: null, name: 'Store', storeCode: null, sharePath: null, isOpen: true, rating: 0 },
         kpis: {
           revenueToday: revenue || 0,
           ordersToday: ordersCount,

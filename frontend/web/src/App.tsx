@@ -194,6 +194,9 @@ const App: React.FC = () => {
               <Route path="/channels/bot" element={<MovrAiPage />} />
               <Route path="/features" element={<LandingPage />} />
               <Route path="/pages/:slug" element={<DynamicCmsPage />} />
+              {/* Public merchant storefronts — shareable without login */}
+              <Route path="/store/:id" element={<StorePage />} />
+              <Route path="/store/:storeId/product/:productId" element={<ProductDetailPage />} />
 
               <Route element={<AuthLayout />}>
                 <Route path="/login" element={<LoginPage />} />
@@ -217,8 +220,6 @@ const App: React.FC = () => {
                 <Route path="/ride/active/:id" element={<ActiveRidePage />} />
                 <Route path="/ride/:id/chat" element={<RideChatPage />} />
                 <Route path="/marketplace" element={<MarketplacePage />} />
-                <Route path="/store/:id" element={<StorePage />} />
-                <Route path="/store/:storeId/product/:productId" element={<ProductDetailPage />} />
                 <Route path="/cart" element={<CartPage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/orders/:id/confirmed" element={<OrderConfirmedPage />} />

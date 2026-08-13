@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '../../lib/currency';
 import { mediaUrl } from '../../lib/media';
 import { isMediaVideo } from '../../components/ResponsiveMedia';
+import { usePageMeta } from '../../hooks/usePageMeta';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -39,6 +40,32 @@ const StorePage: React.FC = () => {
     if (store?.banner_url) return [store.banner_url];
     return [];
   }, [store]);
+
+  const shareMeta = useMemo(() => {
+    if (!store) return {};
+    const name = String(store.name || 'Store');
+    const title = String(store.seo_title || `${name} · Movr`);
+    const description = String(
+      store.seo_description ||
+        store.description ||
+        `${name} on Movr${store.category ? ` — ${store.category}` : ''}. Order online for delivery.`
+    ).slice(0, 300);
+    const imagePath = store.logo_url || store.banner_url || slides[0] || '/brand/shop-partner.png';
+    const image = mediaUrl(imagePath);
+    const absImage =
+      image.startsWith('http') || image.startsWith('data:')
+        ? image
+        : typeof window !== 'undefined'
+          ? `${window.location.origin}${image.startsWith('/') ? image : `/${image}`}`
+          : image;
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/store/${store.store_code || id}`
+        : undefined;
+    return { title, description, image: absImage, url };
+  }, [store, slides, id]);
+
+  usePageMeta(shareMeta);
 
   useEffect(() => {
     setSlide(0);
@@ -186,12 +213,23 @@ const StorePage: React.FC = () => {
       {error ? <p className="px-4 text-red-400 mt-4">{error}</p> : null}
       {store ? (
         <>
-          <h1 className="text-3xl font-extrabold px-4 mt-4">{store.name}</h1>
-          <p className="text-zinc-400 px-4 mt-2">
-            {[store.category, store.hours_text || store.hours_json?.label, store.address]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
+          <div className="flex items-start gap-3 px-4 mt-4">
+            {store.logo_url ? (
+              <img
+                src={mediaUrl(store.logo_url)}
+                alt=""
+                className="w-14 h-14 rounded-2xl object-cover border border-white/10 shrink-0 bg-zinc-900"
+              />
+            ) : null}
+            <div className="min-w-0">
+              <h1 className="text-3xl font-extrabold">{store.name}</h1>
+              <p className="text-zinc-400 mt-2">
+                {[store.category, store.hours_text || store.hours_json?.label, store.address]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          </div>
           {store.description ? (
             <p className="px-4 mt-3 text-sm text-zinc-300 leading-relaxed">{store.description}</p>
           ) : null}

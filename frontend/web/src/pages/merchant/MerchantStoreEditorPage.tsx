@@ -24,6 +24,7 @@ export default function MerchantStoreEditorPage() {
   const [selectedId, setSelectedId] = useState('');
   const [banners, setBanners] = useState<BannerRow[]>([]);
   const [busyBanner, setBusyBanner] = useState(false);
+  const [storeCode, setStoreCode] = useState('');
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -31,11 +32,15 @@ export default function MerchantStoreEditorPage() {
     hours: '9:00 AM – 9:00 PM',
     deliveryMode: 'Movr courier',
     bannerUrl: '',
+    logoUrl: '',
+    seoTitle: '',
+    seoDescription: '',
     address: '',
   });
 
   const applyStore = (row: any) => {
     setSelectedId(row.id);
+    setStoreCode(row.store_code || row.storeCode || '');
     setForm({
       name: row.name || '',
       description: row.description || '',
@@ -47,8 +52,26 @@ export default function MerchantStoreEditorPage() {
         '9:00 AM – 9:00 PM',
       deliveryMode: row.default_delivery_mode || 'Movr courier',
       bannerUrl: row.banner_url || '',
+      logoUrl: row.logo_url || '',
+      seoTitle: row.seo_title || '',
+      seoDescription: row.seo_description || '',
       address: row.address || '',
     });
+  };
+
+  const shareUrl =
+    selectedId && typeof window !== 'undefined'
+      ? `${window.location.origin}/store/${storeCode || selectedId}`
+      : '';
+
+  const copyShareLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success('Store link copied');
+    } catch {
+      toast.error('Could not copy link');
+    }
   };
 
   const loadBanners = async (storeId: string) => {
@@ -85,6 +108,9 @@ export default function MerchantStoreEditorPage() {
         hoursJson: { mon_sun: form.hours, label: form.hours },
         defaultDeliveryMode: form.deliveryMode,
         bannerUrl: form.bannerUrl || undefined,
+        logoUrl: form.logoUrl || undefined,
+        seoTitle: form.seoTitle || undefined,
+        seoDescription: form.seoDescription || undefined,
         address: form.address || undefined,
       };
       if (selectedId) {
@@ -172,6 +198,26 @@ export default function MerchantStoreEditorPage() {
     }
   };
 
+  const onLogoUpload = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      const url = await uploadCatalogImage(file, token(), 'avatar');
+      setForm((f) => ({ ...f, logoUrl: url }));
+      if (selectedId) {
+        await axios.patch(
+          `${API}/merchant/stores/${selectedId}`,
+          { logoUrl: url },
+          { headers: headers() }
+        );
+        toast.success('Store logo saved');
+      } else {
+        toast.success('Logo uploaded — click Save to create the store');
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const removeBanner = async (b: BannerRow) => {
     if (!selectedId || !window.confirm('Remove this banner?')) return;
     try {
@@ -192,6 +238,52 @@ export default function MerchantStoreEditorPage() {
         Banners auto-resize and save under /assets. Edit anytime — changes show on the customer
         storefront.
       </p>
+
+      {shareUrl ? (
+        <div className="rounded-2xl border border-white/10 bg-[#111] p-4 mb-6">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Share your storefront</p>
+          <p className="text-sm text-zinc-300 break-all mb-3">{shareUrl}</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={copyShareLink}
+              className="rounded-full bg-white text-black text-sm font-bold px-4 py-2"
+            >
+              Copy link
+            </button>
+            <a
+              href={shareUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-zinc-800 text-white text-sm font-bold px-4 py-2"
+            >
+              Preview
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <label className="w-24 h-24 rounded-2xl border border-dashed border-white/25 bg-[#111] flex flex-col items-center justify-center text-[#888888] cursor-pointer overflow-hidden relative shrink-0">
+          {form.logoUrl ? (
+            <img src={mediaUrl(form.logoUrl)} alt="Logo" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <>
+              <ImageIcon size={22} className="mb-1 opacity-60" />
+              <span className="text-[10px] text-center px-1">Store logo</span>
+            </>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onLogoUpload(e.target.files?.[0])}
+          />
+        </label>
+        <p className="text-sm text-zinc-500 max-w-sm">
+          Square logo appears on your storefront and in WhatsApp / social share previews.
+        </p>
+      </div>
 
       <label className="block w-full aspect-[21/9] max-h-56 rounded-2xl border border-dashed border-white/25 bg-[#111] flex flex-col items-center justify-center text-[#888888] mb-6 cursor-pointer overflow-hidden relative">
         {form.bannerUrl ? (
@@ -243,6 +335,24 @@ export default function MerchantStoreEditorPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Tell customers what makes your shop special"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm text-[#888888]">SEO / share title (optional)</span>
+            <input
+              className="mt-2 w-full rounded-xl bg-[#1A1A1A] border border-white/10 px-4 py-3 text-white"
+              value={form.seoTitle}
+              onChange={(e) => setForm({ ...form, seoTitle: e.target.value })}
+              placeholder={`${form.name || 'Store name'} · Movr`}
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm text-[#888888]">SEO / share description (optional)</span>
+            <textarea
+              className="mt-2 w-full rounded-xl bg-[#1A1A1A] border border-white/10 px-4 py-3 text-white min-h-[72px]"
+              value={form.seoDescription}
+              onChange={(e) => setForm({ ...form, seoDescription: e.target.value })}
+              placeholder="Short text shown when customers share your store link"
             />
           </label>
           <label className="block">

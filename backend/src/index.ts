@@ -252,6 +252,8 @@ app.use('/api/v1/public', publicVehicleCatalogRouter);
 const { publicCmsRouter, adminCmsRouter } = require('./routes/cms.routes');
 app.use('/api/v1/public/cms', publicCmsRouter);
 app.use('/api/v1/admin/cms', adminCmsRouter);
+const { publicStoreShareRouter } = require('./routes/public-store-share.routes');
+app.use('/api/v1/public/stores', publicStoreShareRouter);
 app.use('/api/v1/points', pointsRouter);
 app.use('/api/v1/referrals', referralsRouter);
 app.use('/api/v1/deliveries', deliveriesRouter);

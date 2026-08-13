@@ -129,7 +129,29 @@ export class MarketplaceService {
     }
   }
 
+  async resolveStoreId(idOrCode: string): Promise<string | null> {
+    const key = String(idOrCode || '').trim();
+    if (!key) return null;
+    const uuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key);
+    if (uuid) {
+      const byId = await this.db.query(`SELECT id FROM stores WHERE id = $1::uuid LIMIT 1`, [key]);
+      if (byId.rows[0]?.id) return byId.rows[0].id;
+    }
+    const byCode = await this.db
+      .query(
+        `SELECT id FROM stores
+         WHERE LOWER(store_code) = LOWER($1)
+            OR LOWER(store_code) = LOWER('STR-' || $1)
+         LIMIT 1`,
+        [key.replace(/^STR-/i, '')]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    return byCode.rows[0]?.id || null;
+  }
+
   async getStore(storeId: string) {
+    const id = (await this.resolveStoreId(storeId)) || storeId;
     const result = await this.db.query(
       `SELECT s.*,
               COALESCE(s.review_count, 0) AS review_count,
@@ -138,7 +160,7 @@ export class MarketplaceService {
               COALESCE(s.eta_min_minutes, 20)::text || '–' || COALESCE(s.eta_max_minutes, 30)::text || ' min' AS eta_text,
               COALESCE(s.hours_json->>'label', 'Open until 9:00 PM') AS hours_text
        FROM stores s WHERE s.id = $1`,
-      [storeId]
+      [id]
     );
     if (!result.rows[0]) return result;
     const banners = await this.db.query(
@@ -146,7 +168,7 @@ export class MarketplaceService {
        FROM store_banners
        WHERE store_id = $1 AND is_active = TRUE
        ORDER BY sort_order ASC, created_at ASC`,
-      [storeId]
+      [id]
     );
     return {
       ...result,
@@ -169,7 +191,8 @@ export class MarketplaceService {
   }
 
   async getStoreProducts(storeId: string, category?: string) {
-    const values: any[] = [storeId];
+    const id = (await this.resolveStoreId(storeId)) || storeId;
+    const values: any[] = [id];
     let filter = '';
     if (category && category !== 'all') {
       values.push(category);
@@ -197,7 +220,7 @@ export class MarketplaceService {
       this.db.query(
         `SELECT p.*, COALESCE(p.sale_price, p.price) AS effective_price
          FROM products p WHERE p.store_id = $1 AND COALESCE(p.in_stock, TRUE) = TRUE ORDER BY p.name`,
-        [storeId]
+        [id]
       )
     );
 
