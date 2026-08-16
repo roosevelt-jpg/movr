@@ -49,6 +49,13 @@ rideExperienceRouter.post(
       }
 
       try {
+        const { verified } = require('./verified.routes');
+        await verified.settleOnComplete(ride.rows[0].id);
+      } catch {
+        /* verified escrow settle is optional */
+      }
+
+      try {
         const { InboxService } = require('../services/inbox.service');
         const inboxSvc = new InboxService(db);
         const fare = ride.rows[0].actual_fare || ride.rows[0].estimated_fare;
@@ -229,6 +236,12 @@ rideExperienceRouter.put(
       );
       if (!result.rows[0]) {
         return res.status(404).json({ status: 'error', message: 'Ride not found' });
+      }
+      try {
+        const { verified } = require('./verified.routes');
+        await verified.markArrived(req.params.id);
+      } catch {
+        /* verified mobility is optional */
       }
       res.status(200).json({
         status: 'success',

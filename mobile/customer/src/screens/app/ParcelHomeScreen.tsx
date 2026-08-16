@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -28,7 +28,7 @@ function pkgIcon(key?: string) {
   return '📦';
 }
 
-/** Deliver — pickup/dropoff, package type cards, Schedule Pickup. */
+/** Parcel — pickup/dropoff, package type cards, Schedule Pickup. */
 export default function ParcelHomeScreen({
   onScheduled,
 }: {
@@ -106,20 +106,32 @@ export default function ParcelHomeScreen({
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.title}>Deliver</Text>
-      <Text style={styles.sub}>Send a parcel anywhere in the city</Text>
+      <Text style={styles.title}>Parcel</Text>
+      <Text style={styles.sub}>Send a package anywhere in the city</Text>
 
       <View style={styles.locCard}>
         <Text style={styles.locLabel}>PICKUP LOCATION</Text>
         <View style={styles.locRow}>
           <View style={[styles.dot, { backgroundColor: '#8E2DE2' }]} />
-          <Text style={styles.locText}>{pickup}</Text>
+          <TextInput
+            style={styles.locInput}
+            value={pickup}
+            onChangeText={setPickup}
+            placeholder="Pickup address"
+            placeholderTextColor="#71717A"
+          />
         </View>
         <View style={styles.vline} />
         <Text style={styles.locLabel}>DROP-OFF LOCATION</Text>
         <View style={styles.locRow}>
           <View style={[styles.dot, { backgroundColor: '#3B5CFF' }]} />
-          <Text style={styles.locText}>{dropoff}</Text>
+          <TextInput
+            style={styles.locInput}
+            value={dropoff}
+            onChangeText={setDropoff}
+            placeholder="Drop-off address"
+            placeholderTextColor="#71717A"
+          />
         </View>
       </View>
 
@@ -175,6 +187,7 @@ const styles = StyleSheet.create({
   locRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   dot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   locText: { flex: 1, color: '#fff', fontWeight: '600', lineHeight: 20 },
+  locInput: { flex: 1, color: '#fff', fontWeight: '600', paddingVertical: 0 },
   vline: {
     width: 2,
     height: 18,

@@ -1,23 +1,43 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
+import { apiBase, authIdBody } from '../../lib/api-base';
+import {
+  confirmFirebasePhoneCode,
+  hasFirebasePhoneSession,
+  startFirebasePhoneAuth,
+} from '../../lib/firebase';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API = () => apiBase();
+const EMPTY = ['', '', '', '', '', ''];
 
-/** 4-digit OTP verify — phone icon, resend timer, Verify Code (mockup). */
+function toE164(value: string) {
+  const trimmed = value.replace(/[\s\-()]/g, '');
+  return trimmed.startsWith('+') ? trimmed : `+${trimmed.replace(/^\+/, '')}`;
+}
+
+/** 6-digit Firebase OTP (4-digit legacy codes still accepted). */
 export default function OtpVerifyScreen({
-  phone = '+234 801 234 5678',
+  phone,
+  identifier,
   purpose = 'signup',
+  firebasePhone,
   onVerified,
+  onBack,
 }: {
   phone?: string;
+  identifier?: string;
   purpose?: 'signup' | 'reset';
+  firebasePhone?: boolean;
   onVerified?: (payload?: { resetToken?: string }) => void;
+  onBack?: () => void;
 }) {
-  const [digits, setDigits] = useState(['', '', '', '']);
+  const id = String(identifier || phone || '').trim();
+  const [digits, setDigits] = useState(EMPTY);
   const [seconds, setSeconds] = useState(42);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hint, setHint] = useState('');
   const refs = useRef<(TextInput | null)[]>([]);
 
   useEffect(() => {
@@ -27,26 +47,54 @@ export default function OtpVerifyScreen({
   }, [seconds]);
 
   const setDigit = (i: number, v: string) => {
-    const d = v.replace(/\D/g, '').slice(-1);
+    const cleaned = v.replace(/\D/g, '');
+    if (cleaned.length > 1) {
+      const next = [...EMPTY];
+      cleaned.slice(0, 6).split('').forEach((c, idx) => {
+        next[idx] = c;
+      });
+      setDigits(next);
+      refs.current[Math.min(cleaned.length, 5)]?.focus();
+      return;
+    }
+    const d = cleaned.slice(-1);
     const next = [...digits];
     next[i] = d;
     setDigits(next);
-    if (d && i < 3) refs.current[i + 1]?.focus();
+    if (d && i < 5) refs.current[i + 1]?.focus();
   };
 
   const verify = async () => {
     const code = digits.join('');
     if (code.length < 4) {
-      setError('Enter the 4-digit code');
+      setError('Enter the verification code');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/auth/verify-otp`, {
+      if (firebasePhone || hasFirebasePhoneSession()) {
+        try {
+          const idToken = await confirmFirebasePhoneCode(code);
+          if (idToken) {
+            const res = await fetch(`${API()}/auth/verify-otp`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(authIdBody(id, { purpose, firebaseIdToken: idToken })),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.message || 'Invalid code');
+            onVerified?.({ resetToken: json.data?.resetToken });
+            return;
+          }
+        } catch {
+          /* fall through to backend OTP */
+        }
+      }
+      const res = await fetch(`${API()}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code, purpose }),
+        body: JSON.stringify(authIdBody(id, { code, purpose })),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Invalid code');
@@ -62,17 +110,31 @@ export default function OtpVerifyScreen({
     if (seconds > 0) return;
     setSeconds(42);
     setError('');
-    setDigits(['', '', '', '']);
+    setDigits([...EMPTY]);
     refs.current[0]?.focus();
-    await fetch(`${API}/auth/resend-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, purpose }),
-    }).catch(() => undefined);
+    try {
+      let firebaseResent = false;
+      if (!id.includes('@')) {
+        try {
+          firebaseResent = await startFirebasePhoneAuth(toE164(id));
+        } catch {
+          firebaseResent = false;
+        }
+      }
+      const res = await fetch(`${API()}/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...authIdBody(id, { purpose }), skipDelivery: firebaseResent }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (json?.data?.devCode) setHint(`Dev code: ${json.data.devCode}`);
+    } catch {
+      /* ignore */
+    }
   };
 
   const focusIndex = digits.findIndex((d) => !d);
-  const active = focusIndex === -1 ? 3 : focusIndex;
+  const active = focusIndex === -1 ? 5 : focusIndex;
 
   return (
     <View style={styles.root}>
@@ -82,8 +144,12 @@ export default function OtpVerifyScreen({
         <View style={styles.iconGlowB} />
         <Text style={styles.icon}>📱</Text>
       </View>
-      <Text style={styles.title}>Verify your number</Text>
-      <Text style={styles.sub}>Code sent to {phone}</Text>
+      <Text style={styles.title}>{purpose === 'reset' ? 'Enter reset code' : 'Verify your number'}</Text>
+      <Text style={styles.sub}>
+        {id.includes('@')
+          ? `Firebase emailed ${id}. Follow the link, or enter a code if you received one.`
+          : `Code sent to ${id || 'your account'}${firebasePhone ? ' via Firebase' : ''}`}
+      </Text>
 
       <View style={styles.row}>
         {digits.map((d, i) => (
@@ -94,7 +160,7 @@ export default function OtpVerifyScreen({
             }}
             style={[styles.box, (i === active || d) && styles.boxFocus]}
             keyboardType="number-pad"
-            maxLength={1}
+            maxLength={i === 0 ? 6 : 1}
             value={d}
             onChangeText={(t) => setDigit(i, t)}
             onKeyPress={({ nativeEvent }) => {
@@ -115,6 +181,7 @@ export default function OtpVerifyScreen({
         </Text>
       </Pressable>
 
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {error ? <Text style={styles.err}>{error}</Text> : null}
 
       <Pressable style={styles.cta} onPress={verify} disabled={loading}>
@@ -122,6 +189,12 @@ export default function OtpVerifyScreen({
         <View style={styles.ctaB} />
         <Text style={styles.ctaText}>{loading ? 'Verifying…' : 'Verify Code'}</Text>
       </Pressable>
+
+      {onBack ? (
+        <Pressable onPress={onBack} style={{ marginBottom: 24 }}>
+          <Text style={styles.resendLink}>Use a different email or phone</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -172,22 +245,23 @@ const styles = StyleSheet.create({
     marginBottom: 36,
     fontSize: 15,
   },
-  row: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 20 },
+  row: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 20 },
   box: {
-    width: 56,
-    height: 60,
+    width: 46,
+    height: 56,
     borderRadius: 14,
     backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: '#2A2A2A',
     color: '#FFFFFF',
     textAlign: 'center',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
   },
   boxFocus: { borderColor: '#A855F7' },
   resend: { color: '#A1A1AA', textAlign: 'center', marginBottom: 28, fontSize: 14 },
-  resendLink: { color: '#A855F7', fontWeight: '700' },
+  resendLink: { color: '#A855F7', fontWeight: '700', textAlign: 'center' },
+  hint: { color: '#4ADE80', textAlign: 'center', marginBottom: 12 },
   err: { color: '#F87171', textAlign: 'center', marginBottom: 12 },
   cta: {
     marginTop: 'auto' as any,

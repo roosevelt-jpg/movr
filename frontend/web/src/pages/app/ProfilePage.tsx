@@ -43,6 +43,7 @@ const ProfilePage: React.FC = () => {
   const [points, setPoints] = useState(0);
   const [unread, setUnread] = useState(0);
   const [trustScore, setTrustScore] = useState<any>(null);
+  const [kyc, setKyc] = useState<any>(null);
 
   useEffect(() => {
     fetch(`${API}/users/me/profile`, { headers: authHeaders() })
@@ -65,6 +66,15 @@ const ProfilePage: React.FC = () => {
       .then((r) => r.json())
       .then((j) => setTrustScore(j?.data || null))
       .catch(() => undefined);
+    const loadKyc = () => {
+      fetch(`${API}/kyc/me`, { headers: authHeaders() })
+        .then((r) => r.json())
+        .then((j) => setKyc(j?.data || null))
+        .catch(() => undefined);
+    };
+    loadKyc();
+    const timer = setInterval(loadKyc, 8000);
+    return () => clearInterval(timer);
   }, []);
 
   const Row = ({
@@ -118,6 +128,18 @@ const ProfilePage: React.FC = () => {
         )}
         <h1 className="text-2xl font-bold mt-4">{name}</h1>
         <p className="text-zinc-400 mt-1">{phone}</p>
+        {kyc?.onchain && !kyc.onchain.empty && kyc.onchain.statusLabel === 'Verified' ? (
+          <a
+            className="mt-2 text-xs font-semibold text-emerald-400"
+            href={kyc.explorerUrl || undefined}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Verified on-chain
+          </a>
+        ) : kyc?.live ? (
+          <p className="mt-2 text-xs text-zinc-500">KYC not yet attested on Polygon</p>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-center mb-8">

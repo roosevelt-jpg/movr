@@ -1,8 +1,11 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
+import { deleteMovrAccount } from '../services/account-deletion.service';
+import { IntegrationsService } from '../services/integrations.service';
 
 const db = new DatabaseService();
+const integrations = new IntegrationsService(db);
 
 export const customerExtrasRouter = Router();
 
@@ -111,16 +114,59 @@ customerExtrasRouter.patch('/settings', authenticateToken, async (req: AuthReque
   }
 });
 
-customerExtrasRouter.post('/account/delete', authenticateToken, async (req: AuthRequest, res: Response) => {
+customerExtrasRouter.patch('/location', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const lat = Number(req.body.lat ?? req.body.latitude);
+    const lng = Number(req.body.lng ?? req.body.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ status: 'error', message: 'lat and lng are required' });
+    }
+    let label = String(req.body.label || req.body.address || '').trim() || null;
+    let city: string | null = null;
+    let country: string | null = null;
+    if (!label) {
+      try {
+        const geo = await integrations.reverseGeocode(lat, lng);
+        label = geo.label || geo.formattedAddress;
+        city = geo.city;
+        country = geo.countryCode;
+      } catch {
+        label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      }
+    }
     await db.query(
-      `UPDATE users SET deletion_requested_at = NOW(), is_active = FALSE, updated_at = NOW()
+      `UPDATE users SET
+         home_address = COALESCE($2, home_address),
+         home_lat = $3,
+         home_lng = $4,
+         city = COALESCE($5, city),
+         country = COALESCE($6, country),
+         updated_at = NOW()
        WHERE id = $1`,
-      [req.user!.id]
+      [req.user!.id, label, lat, lng, city, country]
     );
+    await db
+      .query(`UPDATE users SET latitude = $2, longitude = $3 WHERE id = $1`, [req.user!.id, lat, lng])
+      .catch(() => undefined);
     res.json({
       status: 'success',
-      data: { requested: true, message: 'Account deletion requested' },
+      data: { label, lat, lng, city, country },
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+});
+
+customerExtrasRouter.post('/account/delete', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    await deleteMovrAccount(db, req.user!.id);
+    res.json({
+      status: 'success',
+      data: {
+        requested: true,
+        deleted: true,
+        message: 'Account deleted. Personal profile data has been anonymized.',
+      },
     });
   } catch (error: any) {
     res.status(400).json({ status: 'error', message: error.message });

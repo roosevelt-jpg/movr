@@ -5,9 +5,11 @@ import { Router, Response } from 'express';
 import { authenticateToken, AuthRequest, requireAdmin } from '../middleware/auth.middleware';
 import { DatabaseService } from '../services/database.service';
 import { InboxService } from '../services/inbox.service';
+import { getKycAttestationService } from '../services/kyc-attestation.service';
 
 const db = new DatabaseService();
 const inbox = new InboxService(db);
+const kyc = getKycAttestationService(db);
 
 export const adminProfilesRouter = Router();
 
@@ -28,6 +30,17 @@ function csv(v: any) {
   const s = String(v ?? '');
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+async function userIdForKycSubject(type: string, id: string): Promise<string | null> {
+  if (type === 'driver') {
+    const byDriver = await db.query(`SELECT user_id FROM drivers WHERE id = $1`, [id]);
+    if (byDriver.rows[0]?.user_id) return byDriver.rows[0].user_id;
+    const asUser = await db.query(`SELECT id FROM users WHERE id = $1`, [id]);
+    return asUser.rows[0]?.id || null;
+  }
+  const merchant = await db.query(`SELECT user_id FROM merchants WHERE id = $1`, [id]);
+  return merchant.rows[0]?.user_id || null;
 }
 
 function relativeTime(d?: string | Date | null) {
@@ -577,7 +590,28 @@ adminProfilesRouter.post('/kyc/:type/:id/decide', authenticateToken, requireAdmi
        VALUES ($1,$2,$3,$4,$5, NOW() - INTERVAL '2 hours', NOW())`,
       [type, id, decision, note, req.user?.id || null]
     );
-    res.json({ status: 'success' });
+    const userId = await userIdForKycSubject(type, id);
+    let attestation: any = null;
+    if (userId) {
+      attestation = await kyc.publishAttestation(
+        userId,
+        decision === 'approved' ? 'Verified' : 'Rejected',
+        {
+          documentType: type === 'driver' ? 'driver_kyc' : 'merchant_kyc',
+          verificationMethod: 'manual',
+          approvalTimestamp: new Date(),
+          verifierAdminId: req.user!.id,
+        }
+      );
+      if (!attestation.publishedOnChain) {
+        return res.status(503).json({
+          status: 'error',
+          message: attestation.chainError || 'On-chain publish did not confirm',
+          data: { type, id, userId, attestation },
+        });
+      }
+    }
+    res.json({ status: 'success', data: { attestation } });
   } catch (error: any) {
     res.status(500).json({ status: 'error', message: error.message });
   }
@@ -587,6 +621,7 @@ adminProfilesRouter.post('/kyc/bulk-approve', authenticateToken, requireAdmin, a
   try {
     const items: Array<{ type: string; id: string }> = req.body?.items || [];
     let n = 0;
+    const chainErrors: any[] = [];
     for (const item of items) {
       if (item.type === 'driver') {
         await db.query(`UPDATE drivers SET kyc_status = 'approved' WHERE id = $1`, [item.id]);
@@ -598,7 +633,26 @@ adminProfilesRouter.post('/kyc/bulk-approve', authenticateToken, requireAdmin, a
          VALUES ($1,$2,'approved','Bulk approve',$3,NOW())`,
         [item.type, item.id, req.user?.id || null]
       );
+      const userId = await userIdForKycSubject(item.type, item.id);
+      if (userId) {
+        const att = await kyc.publishAttestation(userId, 'Verified', {
+          documentType: item.type === 'driver' ? 'driver_kyc' : 'merchant_kyc',
+          verificationMethod: 'manual_bulk',
+          approvalTimestamp: new Date(),
+          verifierAdminId: req.user!.id,
+        });
+        if (!att.publishedOnChain) {
+          chainErrors.push({ id: item.id, userId, message: att.chainError });
+        }
+      }
       n += 1;
+    }
+    if (chainErrors.length) {
+      return res.status(503).json({
+        status: 'error',
+        message: chainErrors[0].message || 'On-chain publish failed for one or more records',
+        data: { approved: n, chainErrors },
+      });
     }
     res.json({ status: 'success', data: { approved: n } });
   } catch (error: any) {

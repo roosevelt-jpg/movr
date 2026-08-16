@@ -15,6 +15,9 @@ import RentalHomeScreen from './RentalHomeScreen';
 import RentalConfirmScreen from './RentalConfirmScreen';
 import ActiveRentalScreen from './ActiveRentalScreen';
 import CompareTravelScreen from './CompareTravelScreen';
+import VerifiedFleetScreen from './VerifiedFleetScreen';
+import VerifiedBookScreen from './VerifiedBookScreen';
+import CorporateDeskScreen from './CorporateDeskScreen';
 import ActiveRideScreen from './ActiveRideScreen';
 import WalletScreen from './WalletScreen';
 import ProfileSettingsScreen from './ProfileSettingsScreen';
@@ -26,6 +29,7 @@ import TripHistoryScreen from './TripHistoryScreen';
 import ReferralScreen from './ReferralScreen';
 import AppSettingsScreen from './AppSettingsScreen';
 import ExploreScreen from './ExploreScreen';
+import { getCurrentGps, persistCustomerLocation, reverseLabel } from '../../lib/location';
 import PaymentMethodsScreen from './PaymentMethodsScreen';
 import DealsScreen from './DealsScreen';
 import HelpCentreScreen from './HelpCentreScreen';
@@ -47,12 +51,17 @@ import OrdersHistoryScreen from './OrdersHistoryScreen';
 import MovrBotConversationScreen from './MovrBotConversationScreen';
 import VoiceBookingScreen from './VoiceBookingScreen';
 import WhatsAppConversationScreen from './WhatsAppConversationScreen';
+import ServiceLandingScreen from './ServiceLandingScreen';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 type Tab = 'home' | 'shop' | 'wallet' | 'profile';
 type Service =
   | 'hub'
+  | 'ride_landing'
+  | 'shop_landing'
+  | 'parcel_landing'
+  | 'rental_landing'
   | 'ride'
   | 'shop'
   | 'deliver'
@@ -88,7 +97,11 @@ type Service =
   | 'ai'
   | 'voice'
   | 'whatsapp_ai'
-  | 'active_ride';
+  | 'active_ride'
+  | 'orders'
+  | 'verified'
+  | 'verified_book'
+  | 'corporate';
 
 function authHeaders(): Record<string, string> {
   const token =
@@ -106,8 +119,8 @@ function relativeTime(iso: string) {
 }
 
 /**
- * Super-app home — greeting, map pin, services, wallet card, recent, bottom nav.
- * Service taps open Ride / Shop / Deliver / Rental modules.
+ * Super-app home — greeting, map pin, Ride / Shop / Parcel / Rentals, wallet, bottom nav.
+ * Service taps open a landing page first; users start booking or browsing from there.
  */
 export default function SuperAppHomeScreen({
   onOpenStore,
@@ -115,6 +128,7 @@ export default function SuperAppHomeScreen({
   onOpenProfile,
   onTopUp,
   onSend,
+  onSignOut,
 }: {
   onOpenVoice?: () => void;
   onOpenAi?: () => void;
@@ -125,6 +139,7 @@ export default function SuperAppHomeScreen({
   onOpenProfile?: () => void;
   onTopUp?: () => void;
   onSend?: () => void;
+  onSignOut?: () => void;
 }) {
   const [service, setService] = useState<Service>('hub');
   const [tab, setTab] = useState<Tab>('home');
@@ -138,6 +153,7 @@ export default function SuperAppHomeScreen({
   const [parcelRef, setParcelRef] = useState('');
   const [receiptRideId, setReceiptRideId] = useState('');
   const [activeRideId, setActiveRideId] = useState('');
+  const [listingId, setListingId] = useState('');
   const [voiceBooking, setVoiceBooking] = useState(true);
   const [forYou, setForYou] = useState<any[]>([]);
 
@@ -173,6 +189,19 @@ export default function SuperAppHomeScreen({
   useEffect(() => {
     load();
     (async () => {
+      const fix = await getCurrentGps();
+      if (fix) {
+        const label = await reverseLabel(fix);
+        await persistCustomerLocation(fix, label);
+        setData((prev: any) => ({
+          ...(prev || {}),
+          location: {
+            label: label || prev?.location?.label || 'Current location',
+            lat: fix.latitude,
+            lng: fix.longitude,
+          },
+        }));
+      }
       try {
         const [flagRes, recRes] = await Promise.all([
           fetch(`${API}/ai/features/voice_booking`, { headers: authHeaders() }),
@@ -246,6 +275,7 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <ProfileSettingsScreen
+          onSignOut={onSignOut}
           onLeaderboard={() => setService('rewards')}
           onNotifications={() => setService('notifications')}
           onRewards={() => setService('rewards')}
@@ -269,7 +299,12 @@ export default function SuperAppHomeScreen({
   if (service === 'settings') {
     return (
       <View style={styles.root}>
-        <AppSettingsScreen onBack={() => setService('hub')} />
+        <AppSettingsScreen
+          onBack={() => setService('hub')}
+          onDeleted={() => {
+            onSignOut?.();
+          }}
+        />
       </View>
     );
   }
@@ -281,9 +316,9 @@ export default function SuperAppHomeScreen({
         </Pressable>
         <ExploreScreen
           onOpenStore={onOpenStore}
-          onRide={() => setService('ride')}
-          onParcel={() => setService('deliver')}
-          onRental={() => setService('rental')}
+          onRide={() => setService('ride_landing')}
+          onParcel={() => setService('parcel_landing')}
+          onRental={() => setService('rental_landing')}
         />
       </View>
     );
@@ -324,9 +359,9 @@ export default function SuperAppHomeScreen({
       <View style={styles.root}>
         <TripHistoryScreen
           onBack={() => setService('hub')}
-          onBookRide={() => setService('ride')}
-          onBrowseStores={() => setService('shop')}
-          onDeliver={() => setService('deliver')}
+          onBookRide={() => setService('ride_landing')}
+          onBrowseStores={() => setService('shop_landing')}
+          onDeliver={() => setService('parcel_landing')}
           onReceipt={(id) => {
             setReceiptRideId(id || 'f3000000-0000-4000-8000-000000004821');
             setService('receipt');
@@ -373,9 +408,9 @@ export default function SuperAppHomeScreen({
           onOpenSupport={() => setService('support')}
           onNavigate={(target) => {
             const map: Record<string, Service> = {
-              ride: 'ride',
-              shop: 'shop',
-              deliver: 'deliver',
+              ride: 'ride_landing',
+              shop: 'shop_landing',
+              deliver: 'parcel_landing',
               wallet: 'hub',
               help: 'help',
               safety: 'safety',
@@ -615,6 +650,50 @@ export default function SuperAppHomeScreen({
     );
   }
 
+  if (service === 'ride_landing') {
+    return (
+      <View style={styles.root}>
+        <ServiceLandingScreen
+          service="ride"
+          onBack={() => setService('hub')}
+          onStart={() => setService('ride')}
+        />
+      </View>
+    );
+  }
+  if (service === 'shop_landing') {
+    return (
+      <View style={styles.root}>
+        <ServiceLandingScreen
+          service="shop"
+          onBack={() => setService('hub')}
+          onStart={() => setService('shop')}
+        />
+      </View>
+    );
+  }
+  if (service === 'parcel_landing') {
+    return (
+      <View style={styles.root}>
+        <ServiceLandingScreen
+          service="parcel"
+          onBack={() => setService('hub')}
+          onStart={() => setService('deliver')}
+        />
+      </View>
+    );
+  }
+  if (service === 'rental_landing') {
+    return (
+      <View style={styles.root}>
+        <ServiceLandingScreen
+          service="rental"
+          onBack={() => setService('hub')}
+          onStart={() => setService('rental')}
+        />
+      </View>
+    );
+  }
   if (service === 'ride') {
     return (
       <View style={styles.root}>
@@ -622,6 +701,48 @@ export default function SuperAppHomeScreen({
           onBack={() => setService('hub')}
           onBooked={(rideId) => {
             setActiveRideId(rideId);
+            setService('active_ride');
+          }}
+          onOpenVerified={() => setService('verified')}
+        />
+      </View>
+    );
+  }
+  if (service === 'verified') {
+    return (
+      <View style={styles.root}>
+        <VerifiedFleetScreen
+          onBack={() => setService('hub')}
+          onOpenCorporate={() => setService('corporate')}
+          onOpenListing={(id) => {
+            setListingId(id);
+            setService('verified_book');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'verified_book') {
+    return (
+      <View style={styles.root}>
+        <VerifiedBookScreen
+          listingId={listingId}
+          onBack={() => setService('verified')}
+          onBooked={(rideId) => {
+            setActiveRideId(rideId);
+            setService('active_ride');
+          }}
+        />
+      </View>
+    );
+  }
+  if (service === 'corporate') {
+    return (
+      <View style={styles.root}>
+        <CorporateDeskScreen
+          onBack={() => setService('hub')}
+          onOpenRide={(id) => {
+            setActiveRideId(id);
             setService('active_ride');
           }}
         />
@@ -672,7 +793,7 @@ export default function SuperAppHomeScreen({
     return (
       <View style={styles.root}>
         <Pressable onPress={() => setService('deliver')} style={styles.back}>
-          <Text style={styles.backText}>← Deliver</Text>
+          <Text style={styles.backText}>← Parcel</Text>
         </Pressable>
         <ParcelTrackingScreen parcelRef={parcelRef} onBack={() => setService('deliver')} />
       </View>
@@ -755,9 +876,9 @@ export default function SuperAppHomeScreen({
               <View style={styles.locBar}>
                 <View style={styles.locDot} />
                 <Text style={styles.locText} numberOfLines={1}>
-                  {data?.location?.label || 'Victoria Island, Lagos'}
+                  {data?.location?.label || 'Current location'}
                 </Text>
-                <Pressable onPress={() => setService('ride')}>
+                <Pressable onPress={() => setService('ride_landing')}>
                   <Text style={styles.change}>Change</Text>
                 </Pressable>
               </View>
@@ -766,10 +887,10 @@ export default function SuperAppHomeScreen({
             <Text style={styles.section}>SERVICES</Text>
             <View style={styles.services}>
               {[
-                { id: 'ride' as Service, label: 'Ride', icon: '🚗' },
-                { id: 'shop' as Service, label: 'Shop', icon: '🛍️' },
-                { id: 'deliver' as Service, label: 'Deliver', icon: '📦' },
-                { id: 'rental' as Service, label: 'Rental', icon: '🔑' },
+                { id: 'ride_landing' as Service, label: 'Ride', icon: '🚗' },
+                { id: 'shop_landing' as Service, label: 'Shop', icon: '🛍️' },
+                { id: 'parcel_landing' as Service, label: 'Parcel', icon: '📦' },
+                { id: 'rental_landing' as Service, label: 'Rentals', icon: '🔑' },
               ].map((s) => (
                 <Pressable key={s.id} style={styles.service} onPress={() => setService(s.id)}>
                   <Text style={styles.serviceIcon}>{s.icon}</Text>
@@ -822,7 +943,7 @@ export default function SuperAppHomeScreen({
               </>
             ) : null}
 
-            <Pressable style={styles.fairStrip} onPress={() => setService('ride')}>
+            <Pressable style={styles.fairStrip} onPress={() => setService('ride_landing')}>
               <Text style={styles.fairStripText}>
                 Fair fares · driver keeps 100% · no commission
               </Text>
@@ -830,9 +951,10 @@ export default function SuperAppHomeScreen({
 
             <View style={styles.crossSell}>
               {[
-                { id: 'deliver' as Service, t: 'Send a parcel?', s: 'Same-day across town' },
-                { id: 'shop' as Service, t: 'Hungry?', s: 'Order from nearby stores' },
-                { id: 'rental' as Service, t: 'Need a car for the day?', s: 'Self-drive & chauffeur' },
+                { id: 'parcel_landing' as Service, t: 'Send a parcel?', s: 'Same-day across town' },
+                { id: 'shop_landing' as Service, t: 'Hungry?', s: 'Order from nearby stores' },
+                { id: 'rental_landing' as Service, t: 'Need a car for the day?', s: 'Self-drive & chauffeur' },
+                { id: 'verified' as Service, t: 'Need this exact car?', s: 'Verified chauffeur + escrow' },
                 { id: 'refer' as Service, t: 'Refer & earn', s: 'Invite friends to fair rides' },
               ].map((x) => (
                 <Pressable key={x.id} style={styles.crossCard} onPress={() => setService(x.id)}>

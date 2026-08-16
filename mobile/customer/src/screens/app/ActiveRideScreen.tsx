@@ -44,6 +44,7 @@ export default function ActiveRideScreen({
   const [cancelling, setCancelling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [verified, setVerified] = useState<any>(null);
 
   const loadRide = async () => {
     if (!rideId) {
@@ -55,6 +56,10 @@ export default function ActiveRideScreen({
     const json = await res.json();
     if (!res.ok || !json?.data) throw new Error(json?.message || 'Ride not found');
     setRide(json.data);
+    fetch(`${API}/verified/by-ride/${rideId}`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => setVerified(j?.data || null))
+      .catch(() => setVerified(null));
   };
 
   useEffect(() => {
@@ -224,6 +229,50 @@ export default function ActiveRideScreen({
           <Text style={styles.plateText}>{plate}</Text>
         </View>
       </View>
+
+      {verified?.passport ? (
+        <View style={styles.card}>
+          <Text style={styles.name}>{verified.passport.title}</Text>
+          <Text style={styles.meta}>
+            {verified.passport.className} · {verified.passport.plateMasked} · {verified.passport.inspection?.badge}
+          </Text>
+          <Text style={styles.meta}>Escrow {verified.escrow?.status}</Text>
+          {!verified.booking?.match_confirmed_at && !verified.booking?.match_rejected_at ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <Pressable
+                style={[styles.action, { flex: 1 }]}
+                onPress={async () => {
+                  await fetch(`${API}/verified/by-ride/${rideId}/match`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ matches: true }),
+                  });
+                  loadRide().catch(() => undefined);
+                }}
+              >
+                <Text style={styles.actionLabel}>This is the car</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.action, styles.sos, { flex: 1 }]}
+                onPress={async () => {
+                  await fetch(`${API}/verified/by-ride/${rideId}/match`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ matches: false }),
+                  });
+                  loadRide().catch(() => undefined);
+                }}
+              >
+                <Text style={styles.sosLabel}>Wrong car</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={styles.meta}>
+              {verified.booking?.match_confirmed_at ? 'Match confirmed' : 'Mismatch reported'}
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable

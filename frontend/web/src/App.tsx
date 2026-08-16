@@ -18,8 +18,12 @@ import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import OtpVerifyPage from './pages/auth/OtpVerifyPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import AuthActionPage from './pages/auth/AuthActionPage';
 
 import DashboardPage from './pages/app/DashboardPage';
+import AppHomePage from './pages/app/AppHomePage';
+import ServiceStartPage from './pages/app/ServiceStartPage';
+import ParcelSendPage from './pages/app/ParcelSendPage';
 import RideDetailPage from './pages/app/RideDetailPage';
 import ActiveRidePage from './pages/app/ActiveRidePage';
 import MarketplacePage from './pages/app/MarketplacePage';
@@ -91,6 +95,10 @@ import WithdrawPage from './pages/app/WithdrawPage';
 import ProductDetailPage from './pages/app/ProductDetailPage';
 import WishlistPage from './pages/app/WishlistPage';
 import MerchantReturnsPage from './pages/merchant/MerchantReturnsPage';
+import VerifiedFleetPage from './pages/app/VerifiedFleetPage';
+import VerifiedBookPage from './pages/app/VerifiedBookPage';
+import CorporateDeskPage from './pages/app/CorporateDeskPage';
+import BusinessMobilityPage from './pages/public/BusinessMobilityPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -152,8 +160,10 @@ const App: React.FC = () => {
               <Route path="/for-drivers" element={<DriverLandingPage />} />
               <Route path="/ride" element={<ServiceLandingPage slug="ride" fallbackTitle="Ride" />} />
               <Route path="/shop" element={<ServiceLandingPage slug="shop" fallbackTitle="Shop" />} />
-              <Route path="/deliver" element={<ServiceLandingPage slug="deliver" fallbackTitle="Deliver" />} />
+              <Route path="/deliver" element={<ServiceLandingPage slug="deliver" fallbackTitle="Parcel" />} />
               <Route path="/rent" element={<ServiceLandingPage slug="rentals" fallbackTitle="Rentals" />} />
+              <Route path="/business" element={<BusinessMobilityPage />} />
+              <Route path="/verified" element={<VerifiedFleetPage />} />
               <Route
                 element={
                   <ProtectedRoute>
@@ -206,6 +216,7 @@ const App: React.FC = () => {
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/verify-otp" element={<OtpVerifyPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/auth/action" element={<AuthActionPage />} />
               </Route>
 
               <Route
@@ -215,7 +226,13 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 }
               >
-                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard" element={<AppHomePage />} />
+                <Route path="/book" element={<DashboardPage />} />
+                <Route path="/rides" element={<ServiceStartPage service="ride" />} />
+                <Route path="/shops" element={<ServiceStartPage service="shop" />} />
+                <Route path="/parcel" element={<ServiceStartPage service="parcel" />} />
+                <Route path="/parcel/send" element={<ParcelSendPage />} />
+                <Route path="/rentals/start" element={<ServiceStartPage service="rentals" />} />
                 <Route path="/ride/:id" element={<RideDetailPage />} />
                 <Route path="/ride/active/:id" element={<ActiveRidePage />} />
                 <Route path="/ride/:id/chat" element={<RideChatPage />} />
@@ -238,6 +255,8 @@ const App: React.FC = () => {
                 <Route path="/ride/:id/receipt" element={<RideReceiptPage />} />
                 <Route path="/staking" element={<Navigate to="/rewards" replace />} />
                 <Route path="/rentals" element={<RentalsPage />} />
+                <Route path="/verified/book/:listingId" element={<VerifiedBookPage />} />
+                <Route path="/corporate" element={<CorporateDeskPage />} />
                 <Route path="/rentals/list" element={<RentalOwnerListPage />} />
                 <Route path="/rentals/confirm" element={<RentalConfirmPage />} />
                 <Route path="/rentals/active" element={<ActiveRentalPage />} />

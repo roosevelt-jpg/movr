@@ -155,7 +155,13 @@ class SOSEmergencyService {
         `,
       });
 
-      // Send push notification
+      // Send push notification (FCM)
+      try {
+        const { getPushService } = require('./push.service');
+        await getPushService().ensureFirebase();
+      } catch {
+        /* init best-effort */
+      }
       const admin = require('firebase-admin');
       await admin.messaging().send({
         notification: {
@@ -163,8 +169,8 @@ class SOSEmergencyService {
           body: `SOS triggered - Ride ${sosData.rideId}`,
         },
         data: {
-          sosId: sosData.sosId,
-          videoLink: sosData.recordingId,
+          sosId: String(sosData.sosId || ''),
+          videoLink: String(sosData.recordingId || ''),
         },
         token: personnel.fcm_token,
       });

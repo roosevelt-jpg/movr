@@ -18,7 +18,7 @@ async function main() {
   console.log('KYCRegistry deployed to', address);
   console.log('Admin', deployer.address);
   console.log('Verifier', verifier);
-  console.log('Set KYC_REGISTRY_ADDRESS in .env');
+  console.log('Paste this address as kyc_registry.contract_address in Integrations Hub (or KYC_REGISTRY_ADDRESS in .env).');
 }
 
 main().catch((err) => {

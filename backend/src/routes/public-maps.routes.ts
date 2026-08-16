@@ -43,6 +43,15 @@ publicMapsRouter.get('/geocode', async (req: any, res: Response) => {
   }
 });
 
+publicMapsRouter.get('/reverse', async (req: any, res: Response) => {
+  try {
+    const data = await integrations.reverseGeocode(Number(req.query.lat), Number(req.query.lng));
+    res.json({ status: 'success', data });
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ status: 'error', message: error.message });
+  }
+});
+
 publicMapsRouter.get('/status', async (_req: any, res: Response) => {
   try {
     const key = await (integrations as any).resolveGoogleMapsKey?.();

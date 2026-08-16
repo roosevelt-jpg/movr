@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
+import { persistAuthToken } from '../../lib/token';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -112,12 +113,7 @@ export default function ProfileSettingsScreen({
   );
 
   const signOut = () => {
-    try {
-      delete (globalThis as any).__MOVR_TOKEN__;
-      if (typeof localStorage !== 'undefined') localStorage.removeItem('movr_token');
-    } catch {
-      /* ignore */
-    }
+    persistAuthToken(null).catch(() => undefined);
     onSignOut?.();
   };
 

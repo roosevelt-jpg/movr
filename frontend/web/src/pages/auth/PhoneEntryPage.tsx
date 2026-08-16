@@ -30,17 +30,37 @@ export default function PhoneEntryPage() {
     }
     setLoading(true);
     try {
+      const e164 = `${countryCode}${digits.replace(/^0/, '')}`;
+      let firebasePhone = false;
+      try {
+        const { startFirebasePhoneAuth } = await import('../../lib/firebase');
+        await startFirebasePhoneAuth(e164.startsWith('+') ? e164 : `+${e164}`);
+        firebasePhone = true;
+      } catch {
+        firebasePhone = false;
+      }
       const res = await fetch(`${API}/auth/send-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: digits, countryCode, autoFillFromSim: autoFill }),
+        body: JSON.stringify({
+          phone: digits,
+          countryCode,
+          autoFillFromSim: autoFill,
+          skipDelivery: firebasePhone,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Could not send code');
-      const full = json.data?.phone || `${countryCode}${digits.replace(/^0/, '')}`;
+      const full = json.data?.phone || e164;
       if (json.data?.devCode) toast.success(`Dev code: ${json.data.devCode}`);
       navigate('/verify-otp', {
-        state: { phone: full, identifier: full, mode: 'signup', devCode: json.data?.devCode },
+        state: {
+          phone: full,
+          identifier: full,
+          mode: 'signup',
+          devCode: json.data?.devCode,
+          firebasePhone,
+        },
       });
     } catch (err: any) {
       toast.error(err.message || 'Could not send code');

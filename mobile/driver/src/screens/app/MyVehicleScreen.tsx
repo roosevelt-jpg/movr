@@ -397,6 +397,24 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
               {editing ? 'Save changes' : 'Edit vehicle details'}
             </Text>
           </Pressable>
+          <Pressable
+            style={styles.editBtn}
+            onPress={async () => {
+              try {
+                const res = await fetch(`${API}/verified/driver/listing`, {
+                  method: 'POST',
+                  headers: authHeaders(),
+                  body: JSON.stringify({ listedForHire: true, classCode: 'classic' }),
+                });
+                const j = await res.json();
+                setMsg(res.ok ? 'Listed as a verified chauffeur vehicle' : j?.message || 'Could not list');
+              } catch (e: any) {
+                setMsg(e?.message || 'Could not list');
+              }
+            }}
+          >
+            <Text style={styles.editText}>List as verified chauffeur car</Text>
+          </Pressable>
         </>
       )}
     </ScrollView>

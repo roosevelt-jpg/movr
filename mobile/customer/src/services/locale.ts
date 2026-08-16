@@ -99,26 +99,19 @@ export async function detectAppLocale(coords?: {
   return next;
 }
 
-/** Boot helper — try GPS once, then IP/timezone detect. */
+/** Boot helper — native GPS first, then IP/timezone detect. */
 export function bootLocaleDetect(): void {
-  const run = (lat?: number, lng?: number) => {
-    detectAppLocale(
-      lat != null && lng != null ? { latitude: lat, longitude: lng } : undefined
-    ).catch(() => undefined);
-  };
-
-  try {
-    const geo = (globalThis as any).navigator?.geolocation;
-    if (geo?.getCurrentPosition) {
-      geo.getCurrentPosition(
-        (pos: any) => run(pos.coords.latitude, pos.coords.longitude),
-        () => run(),
-        { maximumAge: 300_000, timeout: 6_000 }
-      );
-      return;
+  (async () => {
+    try {
+      const { getCurrentGps } = require('../lib/location');
+      const fix = await getCurrentGps();
+      if (fix) {
+        await detectAppLocale({ latitude: fix.latitude, longitude: fix.longitude });
+        return;
+      }
+    } catch {
+      /* */
     }
-  } catch {
-    /* */
-  }
-  run();
+    detectAppLocale().catch(() => undefined);
+  })();
 }

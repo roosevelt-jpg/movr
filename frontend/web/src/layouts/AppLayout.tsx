@@ -20,14 +20,18 @@ import {
   Moon,
   Sun,
   Sparkles,
+  Package,
+  KeyRound,
 } from 'lucide-react';
 import MovrLogoMark from '../components/MovrLogoMark';
 import { useTheme } from '../theme/ThemeProvider';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/dashboard', icon: Home, match: ['/dashboard'] },
-  { label: 'Rides', path: '/ride/active/new', icon: Car, match: ['/ride'] },
-  { label: 'Marketplace', path: '/marketplace', icon: Store, match: ['/marketplace', '/store', '/cart'] },
+  { label: 'Home', path: '/dashboard', icon: Home, match: ['/dashboard'] },
+  { label: 'Ride', path: '/rides', icon: Car, match: ['/rides', '/book', '/ride'] },
+  { label: 'Shop', path: '/shops', icon: Store, match: ['/shops', '/marketplace', '/store', '/cart'] },
+  { label: 'Parcel', path: '/parcel', icon: Package, match: ['/parcel'] },
+  { label: 'Rentals', path: '/rentals/start', icon: KeyRound, match: ['/rentals'] },
   { label: 'Wallet', path: '/wallet', icon: Wallet, match: ['/wallet'] },
   { label: 'History', path: '/history', icon: Clock, match: ['/history'] },
   { label: 'Movr AI', path: '/ai', icon: Sparkles, match: ['/ai', '/bot', '/channels/bot'] },
@@ -185,8 +189,18 @@ const AppLayout: React.FC = () => {
     </>
   );
 
-  // Ride booking shell matches mockup full-bleed (own header/sidebar)
-  if (location.pathname === '/dashboard') {
+  const fullBleed = [
+    '/dashboard',
+    '/book',
+    '/rides',
+    '/shops',
+    '/parcel',
+    '/parcel/send',
+    '/rentals/start',
+  ].includes(location.pathname);
+
+  // Ride/hub shells match mockup full-bleed (own header)
+  if (fullBleed) {
     return <Outlet />;
   }
 

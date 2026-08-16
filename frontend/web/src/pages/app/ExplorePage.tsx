@@ -9,7 +9,7 @@ const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'ride', label: 'Ride', icon: '🚗' },
   { id: 'shop', label: 'Shop', icon: '🛍' },
-  { id: 'deliver', label: 'Deliver', icon: '📦' },
+  { id: 'deliver', label: 'Parcel', icon: '📦' },
 ];
 
 function authHeaders() {
@@ -95,19 +95,19 @@ export default function ExplorePage() {
 
       <div className="sticky bottom-4 mt-8 flex gap-2 rounded-2xl bg-black/90 p-2">
         <Link
-          to="/"
+          to="/rides"
           className="flex-1 rounded-xl bg-purple-200 py-3 text-center text-purple-900 font-extrabold text-xs"
         >
           🚗 Book Ride
         </Link>
         <Link
-          to="/marketplace"
+          to="/parcel"
           className="flex-1 rounded-xl bg-blue-200 py-3 text-center text-amber-900 font-extrabold text-xs"
         >
           📦 Send Parcel
         </Link>
         <Link
-          to="/rentals"
+          to="/rentals/start"
           className="flex-1 rounded-xl bg-green-200 py-3 text-center text-green-900 font-extrabold text-xs"
         >
           🚙 Rent Car

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Alert } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
+import { openLegal } from '../../lib/location';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -24,7 +25,7 @@ type Prefs = {
   walletPaymentEnabled: boolean;
 };
 
-/** Settings — language, currency, toggles, delete account (mockup). */
+/** Settings — language, currency, legal links, delete account. */
 export default function AppSettingsScreen({
   onBack,
   onDeleted,
@@ -65,21 +66,31 @@ export default function AppSettingsScreen({
   };
 
   const deleteAccount = () => {
-    Alert.alert('Delete Account', 'This will deactivate your Movr account. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await fetch(`${API}/me/account/delete`, {
-            method: 'POST',
-            headers: authHeaders(),
-            body: '{}',
-          }).catch(() => undefined);
-          onDeleted?.();
+    Alert.alert(
+      'Delete Account',
+      'This permanently deactivates your Movr account and anonymizes your profile. Trip records needed for tax, disputes, or safety may be kept in limited form. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await fetch(`${API}/me/account/delete`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: '{}',
+              });
+              const json = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(json.message || 'Could not delete account');
+              onDeleted?.();
+            } catch (e: any) {
+              Alert.alert('Could not delete account', e?.message || 'Try again or email support@mymovr.io');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const RowNav = ({
@@ -171,6 +182,21 @@ export default function AppSettingsScreen({
           value={prefs.walletPaymentEnabled}
           onChange={(v) => patch({ walletPaymentEnabled: v })}
         />
+        <Pressable style={styles.row} onPress={() => openLegal('privacy')}>
+          <Text style={styles.icon}>🔒</Text>
+          <Text style={styles.value}>Privacy policy</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={() => openLegal('terms')}>
+          <Text style={styles.icon}>📄</Text>
+          <Text style={styles.value}>Terms of service</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={() => openLegal('support')}>
+          <Text style={styles.icon}>💬</Text>
+          <Text style={styles.value}>Support</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
         <Pressable style={styles.row} onPress={deleteAccount}>
           <Text style={styles.icon}>🗑</Text>
           <Text style={styles.delete}>Delete Account</Text>

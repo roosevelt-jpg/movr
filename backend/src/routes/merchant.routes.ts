@@ -11,13 +11,13 @@ import { DatabaseService } from '../services/database.service';
 import { PaymentService } from '../services/payment.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
 import identityVerification from '../services/identity-verification.service';
-import { KycAttestationService } from '../services/kyc-attestation.service';
+import { getKycAttestationService } from '../services/kyc-attestation.service';
 import { InboxService } from '../services/inbox.service';
 import { assertDirectUploadUrl } from '../utils/media-url';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
-const kycAttestation = new KycAttestationService(db);
+const kycAttestation = getKycAttestationService(db);
 const inbox = new InboxService(db);
 
 async function notifyCustomerOrderUpdate(order: any) {
@@ -2119,12 +2119,21 @@ merchantRouter.patch(
       if (result.rows[0]?.user_id) {
         const mapped =
           status === 'approved' ? 'Verified' : status === 'rejected' ? 'Rejected' : 'Pending';
-        await kycAttestation.publishAttestation(result.rows[0].user_id, mapped as any, {
+        const att = await kycAttestation.publishAttestation(result.rows[0].user_id, mapped as any, {
           documentType: 'merchant_kyc',
           verificationMethod: 'manual',
           approvalTimestamp: new Date(),
           verifierAdminId: req.user!.id,
         });
+        if (!att.publishedOnChain) {
+          return res.status(503).json({
+            status: 'error',
+            message:
+              att.chainError ||
+              'On-chain publish did not confirm. Configure Polygon Amoy + KYCRegistry in Integrations Hub.',
+            data: { ...result.rows[0], chain: att },
+          });
+        }
       }
 
       res.json({ status: 'success', data: result.rows[0] });

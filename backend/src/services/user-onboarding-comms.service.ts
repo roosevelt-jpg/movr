@@ -79,11 +79,21 @@ export class UserOnboardingCommsService {
           purpose: 'signup',
           userId: user.id,
         });
-        const sent = await emailSvc.sendEmailVerification({
-          to: email,
-          firstName,
-          code,
-        });
+        let sent: any = { sent: false };
+        try {
+          const { getFirebaseAuthService } = require('./firebase-auth.service');
+          sent = await getFirebaseAuthService(this.db).sendEmailOob(email, 'signup');
+          if (sent?.sent) sent = { ...sent, provider: 'firebase' };
+        } catch {
+          sent = { sent: false };
+        }
+        if (!sent?.sent) {
+          sent = await emailSvc.sendEmailVerification({
+            to: email,
+            firstName,
+            code,
+          });
+        }
         out.emailVerification = {
           ...sent,
           ...(process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true'

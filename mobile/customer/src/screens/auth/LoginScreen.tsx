@@ -1,48 +1,51 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
+import { apiBase, authIdBody } from '../../lib/api-base';
+import { persistAuthToken } from '../../lib/token';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API = () => apiBase();
 
-/** Customer login — phone + password (mockup). */
+/** Sign in with email or phone + password. */
 export default function LoginScreen({
   onSuccess,
   onForgot,
   onCreate,
+  initialIdentifier,
 }: {
   onSuccess?: (token: string) => void;
   onForgot?: () => void;
   onCreate?: () => void;
+  initialIdentifier?: string;
 }) {
-  const [phone, setPhone] = useState('+233 24 000 0000');
+  const [identifier, setIdentifier] = useState(initialIdentifier || '');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async () => {
+    const value = identifier.trim();
+    if (!value || !password) {
+      setError('Enter your email or phone and password');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const cleanPhone = phone.trim();
-      const res = await fetch(`${API}/auth/login`, {
+      const res = await fetch(`${API()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: cleanPhone,
-          identifier: cleanPhone,
+          ...authIdBody(value),
+          identifier: value,
           password,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Login failed');
       const token = json.data?.token || '';
-      if (token) {
-        (globalThis as any).__MOVR_TOKEN__ = token;
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('movr_token', token);
-        }
-      }
+      if (token) await persistAuthToken(token);
       onSuccess?.(token);
     } catch (e: any) {
       setError(e.message || 'Login failed');
@@ -56,17 +59,18 @@ export default function LoginScreen({
       <Text style={styles.brand}>Movr</Text>
       <Text style={styles.sub}>Welcome back</Text>
 
-      <Text style={styles.label}>Phone number</Text>
+      <Text style={styles.label}>Email or phone</Text>
       <View style={styles.field}>
         <Text style={styles.fieldIcon}>✉</Text>
         <TextInput
           style={styles.input}
-          placeholder="+233 24 000 0000"
+          placeholder="you@email.com or +233…"
           placeholderTextColor="#71717A"
-          keyboardType="phone-pad"
-          autoComplete="tel"
-          value={phone}
-          onChangeText={setPhone}
+          keyboardType="default"
+          autoComplete="username"
+          autoCapitalize="none"
+          value={identifier}
+          onChangeText={setIdentifier}
         />
       </View>
 
@@ -83,7 +87,7 @@ export default function LoginScreen({
           onChangeText={setPassword}
         />
         <Pressable onPress={() => setShow((s) => !s)} hitSlop={8}>
-          <Text style={styles.eye}>{show ? '○' : '◉'}</Text>
+          <Text style={styles.eye}>{show ? 'Hide' : 'Show'}</Text>
         </Pressable>
       </View>
 
@@ -142,7 +146,7 @@ const styles = StyleSheet.create({
   },
   fieldIcon: { marginRight: 10, fontSize: 14, color: '#A1A1AA' },
   input: { flex: 1, color: '#FFFFFF', paddingVertical: 14, fontSize: 15 },
-  eye: { fontSize: 14, padding: 4, color: '#A1A1AA' },
+  eye: { fontSize: 13, padding: 4, color: '#A1A1AA' },
   forgotWrap: { alignSelf: 'flex-end', marginBottom: spacing[5] },
   link: { color: '#5B8AFF', fontWeight: '600' },
   error: { color: '#F87171', marginBottom: 12 },

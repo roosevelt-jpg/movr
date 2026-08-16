@@ -2,17 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Home, Briefcase, Clock, Car, Heart, Package, KeyRound } from 'lucide-react';
+import { Home, Briefcase, Clock } from 'lucide-react';
 import { ridesApi, walletApi } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
 import { useLocaleStore } from '../../store/locale.store';
-
-const MODULES = [
-  { id: 'Ride', icon: Car },
-  { id: 'Shop', icon: Heart },
-  { id: 'Deliver', icon: Package },
-  { id: 'Rentals', icon: KeyRound },
-] as const;
 
 const SHORTCUTS = [
   { id: 'Home', icon: Home },
@@ -25,7 +18,6 @@ const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const countryCode = useLocaleStore((s) => s.country) || user?.country || 'GH';
-  const [activeModule, setActiveModule] = useState<(typeof MODULES)[number]['id']>('Ride');
   const [pickupAddress, setPickupAddress] = useState('12 Oxford St');
   const [dropoffAddress, setDropoffAddress] = useState('');
   const [pickupLocation, setPickupLocation] = useState<{ latitude: number; longitude: number } | null>(
@@ -82,12 +74,10 @@ const DashboardPage: React.FC = () => {
       if (row.lat != null && row.lng != null) {
         setDropoffLocation({ latitude: Number(row.lat), longitude: Number(row.lng) });
       }
-      setActiveModule('Ride');
       toast.success(`Destination set to ${label}`);
       return;
     }
     toast(`No saved “${label}” address yet — add one from Profile`, { icon: '📍' });
-    setActiveModule('Ride');
   };
 
   useEffect(() => {
@@ -118,10 +108,6 @@ const DashboardPage: React.FC = () => {
   }, [savedAddresses]);
 
   const handleConfirmPickup = async () => {
-    if (activeModule === 'Deliver') {
-      navigate('/marketplace');
-      return;
-    }
     const pickup = pickupLocation || { latitude: 5.6037, longitude: -0.187 };
     const dropoff = dropoffLocation || { latitude: 5.605, longitude: -0.17 };
     if (!dropoffAddress.trim()) {
@@ -205,7 +191,11 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white font-[Poppins,Montserrat,sans-serif]">
       <header className="flex flex-wrap items-center gap-3 px-4 py-4 sm:flex-nowrap sm:justify-between sm:px-6">
-        <div className="shrink-0 text-lg font-bold tracking-tight sm:text-xl">Movr</div>
+        <div className="shrink-0 text-lg font-bold tracking-tight sm:text-xl">
+          <button type="button" onClick={() => navigate('/dashboard')}>
+            Movr
+          </button>
+        </div>
         <div className="order-3 flex w-full gap-2 overflow-x-auto sm:order-none sm:w-auto">
           {SHORTCUTS.map((s) => (
             <button
@@ -232,28 +222,30 @@ const DashboardPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-72px)] px-4 pb-4 gap-4">
         <aside className="w-full lg:w-[300px] shrink-0 space-y-6">
           <nav className="space-y-1">
-            {MODULES.map((m) => {
-              const active = activeModule === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveModule(m.id);
-                    if (m.id === 'Shop') navigate('/marketplace');
-                    if (m.id === 'Deliver') navigate('/explore');
-                    if (m.id === 'Rentals') navigate('/rentals');
-                  }}
-                  className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold ${
-                    active
-                      ? 'bg-gradient-to-r from-[#6345ED] to-[#3B5CFF] text-white'
-                      : 'text-white hover:bg-[#111]'
-                  }`}
-                >
-                  <m.icon size={18} /> {m.id}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white hover:bg-[#111]"
+            >
+              ← Home
+            </button>
+            <div className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold bg-gradient-to-r from-[#6345ED] to-[#3B5CFF] text-white">
+              Ride
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/verified')}
+              className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white hover:bg-[#111]"
+            >
+              Verified cars
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/corporate')}
+              className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white hover:bg-[#111]"
+            >
+              Company desk
+            </button>
           </nav>
 
           <div className="space-y-3 pt-4">

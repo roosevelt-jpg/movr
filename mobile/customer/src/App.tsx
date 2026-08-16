@@ -3,6 +3,7 @@ import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
 import { ThemeProvider, useTheme } from './theme';
 import NoConnectionScreen from './screens/app/NoConnectionScreen';
 import { bootLocaleDetect } from './services/locale';
+import RootNavigator from './RootNavigator';
 
 /**
  * Customer app root — wrap every host (Expo / RN web) with ThemeProvider
@@ -54,7 +55,7 @@ function ThemedChrome({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.jetBlack }]}>
       <StatusBar barStyle={mode === 'light' ? 'dark-content' : 'light-content'} />
-      <View style={styles.fill}>{children ?? null}</View>
+      <View style={styles.fill}>{children ?? <RootNavigator />}</View>
       {offline ? (
         <NoConnectionScreen
           visible

@@ -15,11 +15,12 @@ import { FeatureFlagsService } from '../services/feature-flags.service';
 import { RewardsEngineService } from '../services/rewards-engine.service';
 import { SettlementService } from '../services/settlement.service';
 import { InboxService } from '../services/inbox.service';
-import { KycAttestationService } from '../services/kyc-attestation.service';
+import { getKycAttestationService } from '../services/kyc-attestation.service';
 import identityVerification from '../services/identity-verification.service';
 import { assertDirectUploadUrl } from '../utils/media-url';
 import { VehicleCatalogService } from '../services/vehicle-catalog.service';
 import { MatchingEngineService } from '../services/matching-engine.service';
+import { RedisService } from '../services/redis.service';
 
 const db = new DatabaseService();
 const payments = new PaymentService(db);
@@ -30,7 +31,7 @@ const flags = new FeatureFlagsService(db);
 const rewards = new RewardsEngineService(db);
 const settlement = new SettlementService(db, payments);
 const inbox = new InboxService(db);
-const kyc = new KycAttestationService(db);
+const kyc = getKycAttestationService(db);
 const vehicleCatalog = new VehicleCatalogService(db);
 const matching = new MatchingEngineService(db, null, {
   broadcastToDrivers: () => undefined,
@@ -732,6 +733,21 @@ driverRouter.get(
         0,
         Math.round((new Date(o.expires_at).getTime() - Date.now()) / 1000)
       );
+      let verifiedPassport = null as any;
+      try {
+        const vb = await db.query(
+          `SELECT b.id, b.class_code, b.escrow_status, l.title, l.exterior_photo_url,
+                  l.interior_photo_url, l.plate_number, l.year, l.chauffeur_name, l.make, l.model
+           FROM verified_bookings b
+           JOIN verified_listings l ON l.id = b.listing_id
+           WHERE b.ride_id = $1
+           LIMIT 1`,
+          [o.ride_id]
+        );
+        if (vb.rows[0]) verifiedPassport = vb.rows[0];
+      } catch {
+        verifiedPassport = null;
+      }
       res.json({
         status: 'success',
         data: {
@@ -749,6 +765,7 @@ driverRouter.get(
           currency: o.currency_code || 'NGN',
           dvtReward: Number(o.dvt_reward || 0),
           expiresAt: o.expires_at,
+          verified: verifiedPassport,
         },
       });
     } catch (error: any) {
@@ -959,7 +976,6 @@ driverRouter.patch(
          RETURNING is_online`,
         [req.user!.id, online]
       ).catch(async () => {
-        // drivers may lack UNIQUE(user_id) in some envs
         await db.query(`UPDATE drivers SET is_online = $2 WHERE user_id = $1`, [
           req.user!.id,
           online,
@@ -968,10 +984,73 @@ driverRouter.patch(
           req.user!.id,
         ]);
       });
+      const lat = Number(req.body.lat ?? req.body.latitude);
+      const lng = Number(req.body.lng ?? req.body.longitude);
+      if (online && Number.isFinite(lat) && Number.isFinite(lng)) {
+        await persistDriverGps(req.user!.id, lat, lng);
+      }
+      if (!online) {
+        try {
+          const redis = new RedisService();
+          await redis.removeDriverFromGeo(req.user!.id);
+        } catch {
+          /* optional */
+        }
+      }
       res.json({
         status: 'success',
         data: { online: result.rows[0]?.is_online === true },
       });
+    } catch (error: any) {
+      res.status(400).json({ status: 'error', message: error.message });
+    }
+  }
+);
+
+async function persistDriverGps(userId: string, lat: number, lng: number, heading?: number, speed?: number) {
+  await db
+    .query(
+      `UPDATE drivers SET last_lat = $2, last_lng = $3 WHERE user_id = $1`,
+      [userId, lat, lng]
+    )
+    .catch(() => undefined);
+  await db
+    .query(`UPDATE users SET latitude = $2, longitude = $3, updated_at = NOW() WHERE id = $1`, [
+      userId,
+      lat,
+      lng,
+    ])
+    .catch(() => undefined);
+  try {
+    const redis = new RedisService();
+    await redis.setDriverLocation(userId, lat, lng);
+    await redis.addDriverToGeo(userId, lat, lng);
+  } catch {
+    /* Redis optional */
+  }
+  void heading;
+  void speed;
+}
+
+driverRouter.post(
+  '/location',
+  authenticateToken,
+  requireDriver,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const lat = Number(req.body.lat ?? req.body.latitude);
+      const lng = Number(req.body.lng ?? req.body.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ status: 'error', message: 'lat and lng are required' });
+      }
+      await persistDriverGps(
+        req.user!.id,
+        lat,
+        lng,
+        Number(req.body.heading),
+        Number(req.body.speed)
+      );
+      res.json({ status: 'success', data: { lat, lng } });
     } catch (error: any) {
       res.status(400).json({ status: 'error', message: error.message });
     }
@@ -3200,12 +3279,19 @@ adminOpsRouter.patch(
       }
 
       if (userId) {
-        await kyc.publishAttestation(userId, mapped as any, {
+        const att = await kyc.publishAttestation(userId, mapped as any, {
           documentType: role === 'Merchant' ? 'merchant_kyc' : 'driver_kyc',
           verificationMethod: 'manual',
           approvalTimestamp: new Date(),
           verifierAdminId: req.user!.id,
         });
+        if (!att.publishedOnChain) {
+          return res.status(503).json({
+            status: 'error',
+            message: att.chainError || 'On-chain publish did not confirm. Configure Polygon Amoy + KYCRegistry in Integrations Hub.',
+            data: { id: req.params.id, status, attestation: mapped, chain: att },
+          });
+        }
         if (status === 'approved') {
           try {
             const { MatchingEngineService } = require('../services/matching-engine.service');

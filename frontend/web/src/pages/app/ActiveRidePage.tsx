@@ -18,6 +18,7 @@ const ActiveRidePage: React.FC = () => {
   const navigate = useNavigate();
   const { currency: locCurrency } = useLocalCurrency();
   const [ride, setRide] = useState<any>(null);
+  const [verified, setVerified] = useState<any>(null);
   const [proxy, setProxy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatBody, setChatBody] = useState('');
@@ -39,6 +40,10 @@ const ActiveRidePage: React.FC = () => {
       })
       .catch(() => setError('Could not load active ride'))
       .finally(() => setLoading(false));
+    fetch(`${API}/verified/by-ride/${id}`, { headers: headers() })
+      .then((r) => r.json())
+      .then((j) => setVerified(j?.data || null))
+      .catch(() => setVerified(null));
   };
 
   useEffect(() => {
@@ -233,6 +238,71 @@ const ActiveRidePage: React.FC = () => {
             {plate}
           </div>
         </div>
+
+        {verified ? (
+          <div className="rounded-2xl bg-zinc-900 p-4 space-y-3 border border-purple-500/40">
+            <p className="text-xs font-bold uppercase tracking-wide text-purple-300">Vehicle passport</p>
+            <p className="font-bold">{verified.passport?.title}</p>
+            <p className="text-xs text-zinc-400">
+              {verified.passport?.className} · plate {verified.passport?.plateMasked} ·{' '}
+              {verified.passport?.inspection?.badge}
+            </p>
+            <p className="text-xs text-emerald-400">
+              Escrow {verified.escrow?.status} · {formatCurrency(Number(verified.escrow?.amount || 0), verified.escrow?.currency || currency)}
+            </p>
+            {verified.passport?.photos?.exterior ? (
+              <img src={verified.passport.photos.exterior} alt="" className="h-28 w-full object-cover rounded-xl" />
+            ) : null}
+            {!verified.booking?.match_confirmed_at && !verified.booking?.match_rejected_at ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-emerald-700 py-2 text-sm font-bold"
+                  onClick={async () => {
+                    if (!id) return;
+                    const res = await fetch(`${API}/verified/by-ride/${id}/match`, {
+                      method: 'POST',
+                      headers: headers(),
+                      body: JSON.stringify({ matches: true }),
+                    });
+                    const j = await res.json();
+                    if (!res.ok) toast.error(j.message || 'Could not confirm');
+                    else {
+                      toast.success('This is the car — escrow releasing');
+                      load();
+                    }
+                  }}
+                >
+                  This is the car
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl bg-red-900 py-2 text-sm font-bold"
+                  onClick={async () => {
+                    if (!id) return;
+                    const res = await fetch(`${API}/verified/by-ride/${id}/match`, {
+                      method: 'POST',
+                      headers: headers(),
+                      body: JSON.stringify({ matches: false }),
+                    });
+                    const j = await res.json();
+                    if (!res.ok) toast.error(j.message || 'Could not reject');
+                    else {
+                      toast.success('Wrong car — fare refunded');
+                      load();
+                    }
+                  }}
+                >
+                  Wrong car
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-emerald-300">
+                {verified.booking?.match_confirmed_at ? 'Match confirmed' : 'Mismatch reported'}
+              </p>
+            )}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-4 gap-2">
           <a

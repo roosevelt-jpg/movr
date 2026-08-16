@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
@@ -7,7 +7,8 @@ import { TextField } from '../../components/forms';
 
 /** Sign in — email or phone + password. */
 const LoginPage: React.FC = () => {
-  const [identifier, setIdentifier] = useState('');
+  const location = useLocation() as { state?: { identifier?: string } };
+  const [identifier, setIdentifier] = useState(location.state?.identifier || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

@@ -1,6 +1,7 @@
 import React from 'react';
 import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
 import { ThemeProvider, useTheme } from './theme';
+import RootNavigator from './RootNavigator';
 
 /**
  * Driver app root — wrap every host (Expo / RN web) with ThemeProvider
@@ -19,7 +20,7 @@ function ThemedChrome({ children }: { children: React.ReactNode }) {
 export default function App({ children }: { children?: React.ReactNode }) {
   return (
     <ThemeProvider>
-      <ThemedChrome>{children ?? null}</ThemedChrome>
+      <ThemedChrome>{children ?? <RootNavigator />}</ThemedChrome>
     </ThemeProvider>
   );
 }

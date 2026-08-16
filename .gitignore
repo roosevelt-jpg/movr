@@ -23,3 +23,9 @@ node_modules
 backend/*.log
 *.log
 
+# Play / Firebase secrets (copy from *.example, never commit)
+mobile/**/google-services.json
+mobile/**/play-service-account.json
+google-services.json
+play-service-account.json
+

@@ -248,7 +248,7 @@ export const PLAYSTORE_CMS_PAGES: Array<{
     slug: 'app-permissions',
     title: 'App permissions',
     status: 'published',
-    meta: { playstorePack: 1, category: 'store' },
+    meta: { playstorePack: 2, category: 'store' },
     sections: [
       {
         type: 'legal',
@@ -258,7 +258,7 @@ export const PLAYSTORE_CMS_PAGES: Array<{
           clauses: [
             {
               title: 'Location (precise)',
-              body: 'Required to show nearby drivers, set pickup points, share trip progress, and complete deliveries. Background location may be used for driver navigation and active trip tracking only while a trip is in progress or the driver is online.',
+              body: 'Required to show nearby drivers, set pickup points, share trip progress, and complete deliveries. The driver app uses a foreground notification to share location only while the driver is online or on a trip. We do not request Android background location when the app is fully closed.',
             },
             {
               title: 'Notifications',

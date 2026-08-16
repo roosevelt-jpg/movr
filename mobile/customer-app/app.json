@@ -25,6 +25,11 @@
         "RECORD_AUDIO",
         "POST_NOTIFICATIONS"
       ],
+      "blockedPermissions": [
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -42,8 +47,7 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Movr uses your location to set pickup points and match nearby drivers.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Movr uses location during active trips for safety and navigation.",
-        "NSCameraUsageDescription": "Movr uses the camera for profile photos and support attachments.",
+        "NSCameraUsageDescription": "Movr uses the camera for profile photos, KYC, and support attachments.",
         "NSMicrophoneUsageDescription": "Movr uses the microphone for optional voice booking.",
         "NSPhotoLibraryUsageDescription": "Movr needs photo access for profile and KYC uploads."
       }
@@ -54,8 +58,39 @@
       "webUrl": "https://mymovr.io",
       "privacyUrl": "https://mymovr.io/privacy",
       "termsUrl": "https://mymovr.io/terms",
-      "deleteAccountUrl": "https://mymovr.io/delete-account"
+      "deleteAccountUrl": "https://mymovr.io/delete-account",
+      "supportUrl": "https://mymovr.io/support"
     },
-    "plugins": []
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#0F766E",
+          "defaultChannel": "movr-default"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Movr uses your location to set pickup points, show nearby drivers, and share trip progress.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Movr needs photo access for profile and KYC uploads.",
+          "cameraPermission": "Movr uses the camera for profile photos, KYC, and support attachments."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Movr uses the microphone for optional voice booking."
+        }
+      ]
+    ]
   }
 }

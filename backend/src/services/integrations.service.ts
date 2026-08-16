@@ -106,6 +106,15 @@ export class IntegrationsService {
       ]
     );
 
+    if (key === 'polygon_amoy' || key === 'kyc_registry') {
+      try {
+        const { getKycAttestationService } = require('./kyc-attestation.service');
+        getKycAttestationService(this.db).resetConnection();
+      } catch {
+        /* watcher reconnects on next poll */
+      }
+    }
+
     return this.getIntegration(key);
   }
 
@@ -320,6 +329,30 @@ export class IntegrationsService {
             status = 'connected';
           }
         }
+      } else if (key === 'polygon_amoy' || key === 'kyc_registry') {
+        const { getKycAttestationService } = require('./kyc-attestation.service');
+        getKycAttestationService(this.db).resetConnection();
+        const st = await getKycAttestationService(this.db).chainStatus();
+        if (key === 'polygon_amoy') {
+          if (st.blockNumber != null) {
+            status = 'connected';
+          } else {
+            status = 'error';
+            lastError = st.lastError || 'Polygon RPC unreachable';
+          }
+        } else if (!st.registryAddress) {
+          status = 'not_configured';
+          lastError = 'Missing contract_address (deploy KYCRegistry, then paste address here)';
+        } else if (st.live && st.writable) {
+          status = 'connected';
+        } else if (st.live) {
+          status = 'configured';
+          lastError =
+            'RPC + KYCRegistry are live (reads work). Add verifier_private_key with POL for gas to publish attestations.';
+        } else {
+          status = 'error';
+          lastError = st.lastError || 'Could not read KYCRegistry on Polygon';
+        }
       } else {
         const hasCreds = (detail.credentials || []).length > 0;
         status = hasCreds ? 'configured' : 'not_configured';
@@ -494,6 +527,47 @@ export class IntegrationsService {
       lng: Number(r.geometry?.location?.lng),
       countryCode: country?.short_name || null,
       locality: locality?.long_name || null,
+    };
+  }
+
+  async reverseGeocode(lat: number, lng: number) {
+    const apiKey = await this.resolveGoogleMapsKey();
+    if (!apiKey) {
+      throw Object.assign(new Error('Google Maps is not configured'), { statusCode: 400 });
+    }
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw Object.assign(new Error('lat and lng are required'), { statusCode: 400 });
+    }
+    const axios = require('axios');
+    const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+      params: { latlng: `${latitude},${longitude}`, key: apiKey },
+      timeout: 10000,
+    });
+    const status = String(res.data?.status || '');
+    if (status !== 'OK' || !res.data?.results?.[0]) {
+      throw Object.assign(
+        new Error(res.data?.error_message || `Reverse geocode failed (${status || 'no results'})`),
+        { statusCode: 400 }
+      );
+    }
+    const r = res.data.results[0];
+    const components: any[] = r.address_components || [];
+    const country = components.find((c) => (c.types || []).includes('country'));
+    const locality =
+      components.find((c) => (c.types || []).includes('locality')) ||
+      components.find((c) => (c.types || []).includes('administrative_area_level_2')) ||
+      components.find((c) => (c.types || []).includes('sublocality'));
+    const formatted = r.formatted_address || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    return {
+      placeId: r.place_id || null,
+      label: locality?.long_name || formatted,
+      formattedAddress: formatted,
+      lat: latitude,
+      lng: longitude,
+      countryCode: country?.short_name || null,
+      city: locality?.long_name || null,
     };
   }
 

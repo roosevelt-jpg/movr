@@ -11,14 +11,14 @@ import { NationalIdVerificationService } from '../services/ghana-card-verificati
 import identityVerification from '../services/identity-verification.service';
 import { WalletTransferService } from '../services/wallet-transfer.service';
 import { TripRecordingService } from '../services/trip-recording.service';
-import { KycAttestationService } from '../services/kyc-attestation.service';
+import { getKycAttestationService } from '../services/kyc-attestation.service';
 
 const db = new DatabaseService();
 const pricing = new PricingEngineService(db);
 const nationalId = new NationalIdVerificationService(db);
 const transfers = new WalletTransferService(db);
 const recordings = new TripRecordingService(db);
-const kycAttestation = new KycAttestationService(db);
+const kycAttestation = getKycAttestationService(db);
 
 export const adminPricingRouter = Router();
 export const identityLinkRouter = Router();
@@ -343,19 +343,12 @@ identityLinkRouter.get(
           })),
         });
       }
-      // Fallback summary when no rows yet
       res.json({
         status: 'success',
         data: [
-          { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
+          { key: 'ghana_card', label: 'Ghana Card', status: 'in_review' },
           { key: 'driving_license', label: 'Driving license', status: 'in_review' },
-          {
-            key: 'vehicle_registration',
-            label: 'Vehicle registration',
-            status: 'rejected',
-            rejection_reason:
-              'Vehicle registration photo was blurry. Please re-upload a clear photo.',
-          },
+          { key: 'vehicle_registration', label: 'Vehicle registration', status: 'in_review' },
         ],
       });
     } catch (error: any) {
@@ -824,9 +817,7 @@ identityLinkRouter.get(
           [userId]
         )
         .catch(() => ({ rows: [] as any[] }));
-      const attestation = await db
-        .query(`SELECT * FROM kyc_attestations WHERE user_id = $1::uuid`, [userId])
-        .catch(() => ({ rows: [] as any[] }));
+      const liveAtt = await kycAttestation.getByUserId(userId).catch(() => null);
 
       const u = user.rows[0];
       const m = merchant.rows[0];
@@ -934,7 +925,8 @@ identityLinkRouter.get(
             { label: 'National ID ↔ Phone number', type: 'id_to_phone', status: idPhone },
           ];
 
-      const att = attestation.rows[0];
+      const att = liveAtt?.local;
+      const onchain = liveAtt?.onchain;
       const identityLinked =
         Boolean(m?.identity_linked) ||
         docs.rows.some((row: any) => row.identity_linked) ||
@@ -953,13 +945,22 @@ identityLinkRouter.get(
           documentsSummary,
           identityLinked,
           kycStatus: m?.kyc_status || d?.kyc_status || null,
-          attestation: att
+          attestation: liveAtt
             ? {
-                status: att.status,
-                txHash: att.tx_hash,
-                chain: att.chain,
-                verifiedAt: att.verified_at,
-                explorerUrl: kycAttestation.explorerTxUrl(att.tx_hash),
+                status:
+                  onchain && !onchain.empty
+                    ? onchain.statusLabel
+                    : att?.status || null,
+                txHash: att?.tx_hash || null,
+                chain: att?.chain || null,
+                verifiedAt: att?.verified_at || null,
+                explorerUrl: liveAtt.explorerUrl,
+                live: liveAtt.live,
+                matches: liveAtt.matches,
+                onchain,
+                subjectId: liveAtt.subjectId,
+                confirmationBlock: att?.confirmation_block || null,
+                publishedOnChain: Boolean(att?.tx_hash && liveAtt.live && onchain && !onchain.empty),
               }
             : null,
           linkStatus,
@@ -1051,6 +1052,23 @@ identityLinkRouter.post(
         identityLinked: true,
         trustTier: 'full_identity_link_verified',
       });
+
+      if (!attestation.publishedOnChain) {
+        return res.status(503).json({
+          status: 'error',
+          message:
+            attestation.chainError ||
+            'On-chain publish did not confirm. Configure Polygon RPC + KYCRegistry in Integrations Hub.',
+          data: {
+            ...subject,
+            link: linkResult,
+            attestation: {
+              ...attestation,
+              explorerUrl: kycAttestation.explorerTxUrl(attestation.tx_hash),
+            },
+          },
+        });
+      }
 
       res.json({
         status: 'success',

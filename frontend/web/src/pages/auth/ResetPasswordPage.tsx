@@ -2,16 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
-
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
+import api from '../../services/api';
 
 /** Set a new password after OTP verification. */
 const ResetPasswordPage: React.FC = () => {
   const location = useLocation() as {
     state?: { resetToken?: string; identifier?: string };
   };
-  const resetToken = location.state?.resetToken || '';
+  const params = new URLSearchParams(location.search);
+  const resetToken = location.state?.resetToken || params.get('token') || '';
   const identifier = location.state?.identifier || '';
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
@@ -38,7 +37,7 @@ const ResetPasswordPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      await axios.post(`${API}/auth/reset-password`, {
+      await api.post('/auth/reset-password', {
         resetToken,
         newPassword: password,
       });
@@ -73,6 +72,7 @@ const ResetPasswordPage: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl bg-surface-elevated border border-border pl-4 pr-12 py-3"
               minLength={8}
+              autoComplete="new-password"
               required
             />
             <button
@@ -93,6 +93,7 @@ const ResetPasswordPage: React.FC = () => {
             onChange={(e) => setConfirm(e.target.value)}
             className="w-full rounded-xl bg-surface-elevated border border-border px-4 py-3"
             minLength={8}
+            autoComplete="new-password"
             required
           />
         </div>

@@ -68,9 +68,17 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         try {
           const response = await api.post('/auth/register', data);
-          const { user, token } = response.data.data;
+          const { user, token, firebaseCustomToken } = response.data.data;
           if (user?.country) useLocaleStore.getState().setCountry(user.country, { manual: false });
           set({ user, token, isAuthenticated: true, isLoading: false });
+          if (firebaseCustomToken) {
+            try {
+              const { firebaseSendEmailVerification } = await import('../lib/firebase');
+              await firebaseSendEmailVerification(firebaseCustomToken);
+            } catch {
+              /* Firebase optional until configured */
+            }
+          }
         } catch (error: any) {
           set({
             error: error.response?.data?.message || 'Registration failed',

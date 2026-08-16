@@ -228,7 +228,7 @@ app.use('/api/v1/orders', ordersRouter);
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/merchant', merchantRouter);
 
-const { kycRouter } = require('./routes/kyc.routes');
+const { kycRouter, publicKycRouter } = require('./routes/kyc.routes');
 const { pointsRouter } = require('./routes/points.routes');
 const { referralsRouter } = require('./routes/referrals.routes');
 const { deliveriesRouter } = require('./routes/deliveries.routes');
@@ -242,6 +242,7 @@ const { tokenRouter } = require('./routes/token.routes');
 const { stakingRouter, publicStakingRouter } = require('./routes/staking.routes');
 
 app.use('/api/v1/kyc', kycRouter);
+app.use('/api/v1/public/kyc', publicKycRouter);
 app.use('/api/v1/token', tokenRouter);
 app.use('/api/v1/staking', stakingRouter);
 app.use('/api/v1/public/staking', publicStakingRouter);
@@ -266,6 +267,10 @@ app.use('/api/v1/activity', activityRouter);
 const { trustRouter, trustAdminRouter } = require('./routes/trust.routes');
 app.use('/api/v1/trust', trustRouter);
 app.use('/api/v1/admin/trust', trustAdminRouter);
+const { verifiedRouter } = require('./routes/verified.routes');
+app.use('/api/v1/verified', verifiedRouter);
+const { devicesRouter } = require('./routes/devices.routes');
+app.use('/api/v1/devices', devicesRouter);
 const {
   africaRailsRouter,
   africaRailsAdminRouter,
@@ -533,6 +538,7 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
       { expiresIn: '7d' }
     );
 
+    const firebaseCustomToken = await syncFirebaseUser(dbUser, password);
     const verification = await deliverOnboardingComms(dbUser);
 
     res.status(201).json({
@@ -543,6 +549,7 @@ app.post('/api/v1/auth/signup', async (req: ExpressRequest, res: ExpressResponse
         email: dbUser.email,
         phone: dbUser.phone,
         token,
+        firebaseCustomToken,
         verification,
         user: {
           id: dbUser.id,
@@ -669,12 +676,14 @@ app.post('/api/v1/auth/register', async (req: ExpressRequest, res: ExpressRespon
       { expiresIn: '7d' }
     );
 
+    const firebaseCustomToken = await syncFirebaseUser(dbUser, password);
     const verification = await deliverOnboardingComms(dbUser);
 
     res.status(201).json({
       status: 'success',
       data: {
         token,
+        firebaseCustomToken,
         verification,
         user: {
           id: dbUser.id,
@@ -745,7 +754,10 @@ app.post('/api/v1/auth/login', async (req: ExpressRequest, res: ExpressResponse)
 
     if (dbUser) {
       if (dbUser.is_active === false) {
-        return res.status(403).json({ status: 'error', message: 'Account disabled' });
+        return res.status(403).json({
+          status: 'error',
+          message: 'This account has been deleted or disabled',
+        });
       }
       const ok = await bcrypt.compare(password, dbUser.password || '');
       if (!ok) {
@@ -944,6 +956,18 @@ async function deliverAuthOtp(opts: {
   firstName?: string | null;
 }) {
   const id = String(opts.identifier || '').trim();
+  const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+  const firebaseAuth = getFirebaseAuthService(authDb);
+
+  try {
+    const fb = await firebaseAuth.deliverOtp({ identifier: id, purpose: opts.purpose });
+    if (fb.sent) {
+      return fb;
+    }
+  } catch (e: any) {
+    logger.warn(`Firebase auth OTP skipped: ${e.message}`);
+  }
+
   const { getEmailService } = require('./services/email.service');
   const { getOtpDeliveryService } = require('./services/otp-delivery.service');
   const emailSvc = getEmailService(authDb);
@@ -964,6 +988,24 @@ async function deliverAuthOtp(opts: {
     return otpDelivery.sendPasswordResetSms(id, opts.code);
   }
   return otpDelivery.sendPhoneVerificationOtp(id, opts.code);
+}
+
+async function syncFirebaseUser(user: any, password?: string | null) {
+  try {
+    const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+    const fb = getFirebaseAuthService(authDb);
+    await fb.ensureUser({
+      uid: user.id,
+      email: user.email,
+      phone: user.phone,
+      password: password || undefined,
+      displayName: `${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim(),
+    });
+    return await fb.createCustomToken(user.id);
+  } catch (e: any) {
+    logger.warn(`Firebase user sync skipped: ${e.message}`);
+    return null;
+  }
 }
 
 async function findUserForPasswordReset(identifier: string) {
@@ -1003,15 +1045,21 @@ app.post('/api/v1/auth/send-code', async (req: ExpressRequest, res: ExpressRespo
       purpose: 'signup',
     });
     logger.info(`Phone entry OTP for ${full}: ${code}`);
-    await deliverAuthOtp({ identifier: full, code, purpose: 'signup' }).catch((e: any) =>
-      logger.warn(`Phone OTP delivery failed: ${e.message}`)
-    );
+    const skipDelivery = Boolean(req.body.skipDelivery || req.body.firebaseHandled);
+    const delivery = skipDelivery
+      ? { provider: 'firebase', sent: true, delivery: 'client_phone_auth' }
+      : await deliverAuthOtp({ identifier: full, code, purpose: 'signup' }).catch((e: any) => {
+          logger.warn(`Phone OTP delivery failed: ${e.message}`);
+          return null;
+        });
     const data: any = {
       phone: full,
       countryCode,
       expiresInSeconds: 600,
       autoFillFromSim: Boolean(req.body.autoFillFromSim),
-      channels: ['sms', 'whatsapp'],
+      channels: ['sms', 'whatsapp', 'firebase'],
+      provider: delivery?.provider || 'legacy',
+      delivery: delivery?.delivery || 'otp',
     };
     if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
       data.devCode = code;
@@ -1389,21 +1437,37 @@ app.post('/api/v1/auth/forgot-password', async (req: ExpressRequest, res: Expres
     });
 
     logger.info(`Password reset OTP for ${identifier}: ${code}`);
-    if (user) {
-      await deliverAuthOtp({ identifier, code, purpose: 'reset' }).catch((e: any) =>
-        logger.warn(`Reset OTP delivery failed: ${e.message}`)
-      );
+    let delivery: any = null;
+    const skipDelivery = Boolean(req.body.skipDelivery || req.body.firebaseHandled);
+    if (user && skipDelivery) {
+      delivery = {
+        provider: 'firebase',
+        sent: true,
+        delivery: storeKey.includes('@') ? 'oob_email' : 'client_phone_auth',
+      };
+    } else if (user) {
+      const deliverTo = String(storeKey.includes('@') ? storeKey : user.phone || identifier).trim();
+      delivery = await deliverAuthOtp({ identifier: deliverTo, code, purpose: 'reset' }).catch((e: any) => {
+        logger.warn(`Reset OTP delivery failed: ${e.message}`);
+        return null;
+      });
     }
 
+    const firebaseConfigured = Boolean(delivery?.provider === 'firebase' && (delivery.sent || delivery.delivery === 'client_phone_auth'));
     const payload: any = {
       status: 'success',
       message: user
-        ? 'Reset code sent'
+        ? firebaseConfigured && delivery?.delivery === 'oob_email'
+          ? 'Reset email sent via Firebase. Check your inbox.'
+          : 'Reset code sent'
         : 'If an account exists for that email or phone, a reset code was sent',
       data: {
         identifier: storeKey,
         phone: storeKey,
         expiresInSeconds: 600,
+        provider: delivery?.provider || 'legacy',
+        channel: storeKey.includes('@') ? 'email' : 'phone',
+        delivery: delivery?.delivery || 'otp',
       },
     };
 
@@ -1438,10 +1502,30 @@ app.post('/api/v1/auth/resend-otp', async (req: ExpressRequest, res: ExpressResp
     await persistOtp({ identifier, code, purpose: purpose as 'reset' | 'signup', userId });
 
     logger.info(`Resend OTP (${purpose}) for ${identifier}: ${code}`);
-    await deliverAuthOtp({ identifier, code, purpose: purpose as 'reset' | 'signup' }).catch(
-      (e: any) => logger.warn(`Resend OTP delivery failed: ${e.message}`)
-    );
-    const data: any = { identifier: storeKey, phone: storeKey, expiresInSeconds: 600 };
+    const deliverTo = storeKey.includes('@') ? storeKey : identifier.replace(/[\s\-()]/g, '') || storeKey;
+    const skipDelivery = Boolean(req.body.skipDelivery || req.body.firebaseHandled);
+    const delivery = skipDelivery
+      ? {
+          provider: 'firebase',
+          sent: true,
+          delivery: storeKey.includes('@') ? 'oob_email' : 'client_phone_auth',
+        }
+      : await deliverAuthOtp({
+          identifier: deliverTo,
+          code,
+          purpose: purpose as 'reset' | 'signup',
+        }).catch((e: any) => {
+          logger.warn(`Resend OTP delivery failed: ${e.message}`);
+          return null;
+        });
+    const data: any = {
+      identifier: storeKey,
+      phone: storeKey,
+      expiresInSeconds: 600,
+      provider: delivery?.provider || 'legacy',
+      channel: storeKey.includes('@') ? 'email' : 'phone',
+      delivery: delivery?.delivery || 'otp',
+    };
     if (process.env.NODE_ENV !== 'production' || process.env.EXPOSE_OTP === 'true') {
       data.devCode = code;
     }
@@ -1456,6 +1540,66 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
     const identifier = String(req.body.phone || req.body.email || req.body.identifier || '').trim();
     const code = String(req.body.code || '').trim();
     const purpose = req.body.purpose === 'reset' ? 'reset' : String(req.body.purpose || 'signup');
+    const firebaseIdToken = String(req.body.firebaseIdToken || req.body.idToken || '').trim();
+
+    if (firebaseIdToken) {
+      try {
+        const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+        const decoded = await getFirebaseAuthService(authDb).verifyIdToken(firebaseIdToken);
+        const lookup = identifier || decoded.email || decoded.phone_number || '';
+        const user = lookup ? await findUserForPasswordReset(lookup).catch(() => null) : null;
+        if (purpose === 'reset') {
+          if (!user?.id) {
+            return res.status(400).json({
+              status: 'error',
+              message: 'No account found for that email or phone',
+            });
+          }
+          const resetToken = jwt.sign(
+            { id: user.id, purpose: 'password_reset' },
+            process.env.JWT_SECRET || 'secret',
+            { expiresIn: '15m' }
+          );
+          return res.json({
+            status: 'success',
+            message: 'Code verified',
+            data: { verified: true, resetToken, purpose: 'reset', provider: 'firebase' },
+          });
+        }
+        if (decoded.email) {
+          await authDb
+            .query(
+              `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()),
+                 is_verified = TRUE, updated_at = NOW()
+               WHERE lower(email) = lower($1)`,
+              [decoded.email]
+            )
+            .catch(() => undefined);
+        }
+        if (decoded.phone_number) {
+          await authDb
+            .query(
+              `UPDATE users SET phone_verified_at = COALESCE(phone_verified_at, NOW()),
+                 onboarding_step = GREATEST(COALESCE(onboarding_step, 1), 1),
+                 updated_at = NOW()
+               WHERE phone = $1 OR regexp_replace(COALESCE(phone,''), '\\D', '', 'g')
+                 = regexp_replace($2, '\\D', '', 'g')`,
+              [decoded.phone_number, decoded.phone_number]
+            )
+            .catch(() => undefined);
+        }
+        return res.json({
+          status: 'success',
+          message: 'Verified',
+          data: { verified: true, purpose: 'signup', provider: 'firebase' },
+        });
+      } catch (e: any) {
+        return res.status(400).json({
+          status: 'error',
+          message: e.message || 'Invalid Firebase credential',
+        });
+      }
+    }
 
     if (!identifier || !code) {
       return res.status(400).json({ status: 'error', message: 'Code and email/phone are required' });
@@ -1463,7 +1607,7 @@ app.post('/api/v1/auth/verify-otp', async (req: ExpressRequest, res: ExpressResp
 
     // Phase 20 — validate OTP format against country rules when phone-based
     try {
-      if (!identifier.includes('@')) {
+      if (!identifier.includes('@') && purpose !== 'reset') {
         const { LocalizationService } = require('./services/localization.service');
         const loc = new LocalizationService(authDb);
         const country = await loc.detectCountry({ phoneNumber: identifier });
@@ -1816,9 +1960,9 @@ app.post('/api/v1/auth/resend-verification', async (req: ExpressRequest, res: Ex
 
 app.post('/api/v1/auth/reset-password', async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { resetToken, password, newPassword } = req.body;
+    const { resetToken, password, newPassword, oobCode } = req.body;
     const nextPassword = String(newPassword || password || '');
-    if (!resetToken || !nextPassword) {
+    if ((!resetToken && !oobCode) || !nextPassword) {
       return res.status(400).json({
         status: 'error',
         message: 'Reset token and new password are required',
@@ -1831,25 +1975,59 @@ app.post('/api/v1/auth/reset-password', async (req: ExpressRequest, res: Express
       });
     }
 
-    let payload: any;
-    try {
-      payload = jwt.verify(resetToken, process.env.JWT_SECRET || 'secret');
-    } catch {
-      return res.status(401).json({ status: 'error', message: 'Reset link expired. Request a new code.' });
-    }
-
-    if (payload?.purpose !== 'password_reset' || !payload?.id) {
-      return res.status(401).json({ status: 'error', message: 'Invalid reset token' });
+    let userId: string | null = null;
+    if (oobCode) {
+      const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+      const confirmed = await getFirebaseAuthService(authDb).confirmPasswordReset(
+        String(oobCode),
+        nextPassword
+      );
+      const email = String(confirmed?.email || '').trim();
+      if (!email) {
+        return res.status(400).json({ status: 'error', message: 'Firebase reset did not return an email' });
+      }
+      const found = await findUserForPasswordReset(email).catch(() => null);
+      if (!found?.id) {
+        return res.status(404).json({ status: 'error', message: 'Account not found' });
+      }
+      userId = found.id;
+    } else {
+      let payload: any;
+      try {
+        payload = jwt.verify(resetToken, process.env.JWT_SECRET || 'secret');
+      } catch {
+        return res.status(401).json({ status: 'error', message: 'Reset link expired. Request a new code.' });
+      }
+      if (payload?.purpose !== 'password_reset' || !payload?.id) {
+        return res.status(401).json({ status: 'error', message: 'Invalid reset token' });
+      }
+      userId = payload.id;
     }
 
     const hash = await bcrypt.hash(nextPassword, 10);
     const updated = await authDb.query(
       `UPDATE users SET password = $1 WHERE id = $2 AND COALESCE(is_active, TRUE) = TRUE
        RETURNING id, email, phone`,
-      [hash, payload.id]
+      [hash, userId]
     );
     if (!updated.rows[0]) {
       return res.status(404).json({ status: 'error', message: 'Account not found' });
+    }
+
+    await syncFirebaseUser(updated.rows[0], nextPassword);
+
+    try {
+      const { InboxService } = require('./services/inbox.service');
+      const inbox = new InboxService(authDb);
+      await inbox.sendInboxMessage(
+        userId,
+        'security',
+        'Password changed',
+        "Your Movr password was updated. If this wasn't you, reset it again immediately.",
+        '/settings'
+      );
+    } catch (e: any) {
+      logger.warn(`Password-reset inbox skipped: ${e.message}`);
     }
 
     res.json({
@@ -1860,6 +2038,35 @@ app.post('/api/v1/auth/reset-password', async (req: ExpressRequest, res: Express
   } catch (error: any) {
     logger.error('Reset password error:', error);
     res.status(500).json({ status: 'error', message: error.message || 'Could not reset password' });
+  }
+});
+
+app.post('/api/v1/auth/confirm-email', async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const oobCode = String(req.body.oobCode || '').trim();
+    if (!oobCode) {
+      return res.status(400).json({ status: 'error', message: 'Verification code is required' });
+    }
+    const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+    const result = await getFirebaseAuthService(authDb).applyOobCode(oobCode);
+    const email = String(result?.email || '').trim();
+    if (email) {
+      await authDb
+        .query(
+          `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()),
+             is_verified = TRUE, updated_at = NOW()
+           WHERE lower(email) = lower($1)`,
+          [email]
+        )
+        .catch(() => undefined);
+    }
+    res.json({
+      status: 'success',
+      message: 'Email verified',
+      data: { email, emailVerified: true },
+    });
+  } catch (error: any) {
+    res.status(400).json({ status: 'error', message: error.message || 'Could not verify email' });
   }
 });
 
@@ -2730,6 +2937,19 @@ app.get('/api/v1/public/offline-capabilities', async (_req: ExpressRequest, res:
   }
 });
 
+app.get('/api/v1/public/firebase-config', async (_req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { getFirebaseAuthService } = require('./services/firebase-auth.service');
+    const config = await getFirebaseAuthService(authDb).getPublicConfig();
+    res.json({
+      status: 'success',
+      data: config || { configured: false },
+    });
+  } catch (error: any) {
+    res.json({ status: 'success', data: { configured: false } });
+  }
+});
+
 app.get('/api/v1/public/onboarding', async (_req: ExpressRequest, res: ExpressResponse) => {
   const fallback = [
     {
@@ -2868,7 +3088,7 @@ app.get('/api/v1/me/home-dashboard', authenticateToken, async (req: AuthRequest,
         initials,
         avatarUrl: u.avatar_url || null,
         location: {
-          label: u.home_address || [u.city, u.country].filter(Boolean).join(', ') || 'Set your location',
+          label: u.home_address || [u.city, u.country].filter(Boolean).join(', ') || 'Current location',
           lat: u.home_lat != null ? Number(u.home_lat) : null,
           lng: u.home_lng != null ? Number(u.home_lng) : null,
         },
@@ -3112,6 +3332,14 @@ io.on('connection', (socket) => {
   });
 
   // Phase 17 — admin ops live map (rides / deliveries / rentals)
+  socket.on('kyc:join', (userId: string) => {
+    const id = String(userId || '');
+    if (/^[0-9a-fA-F-]{36}$/.test(id)) socket.join(`kyc:${id}`);
+  });
+  socket.on('kyc:leave', (userId: string) => {
+    if (userId) socket.leave(`kyc:${userId}`);
+  });
+
   socket.on('admin:live:join', () => {
     socket.join('admin:live');
   });
@@ -3193,6 +3421,16 @@ async function startServer() {
       await integrationsBoot.warnRequiredOnBoot();
     } catch (e: any) {
       logger.warn(`Boot defaults skipped: ${e.message}`);
+    }
+
+    try {
+      const { attachKycIo } = require('./services/kyc-attestation.service');
+      const { startKycChainWatcher } = require('./services/kyc-chain-watcher.service');
+      attachKycIo(io);
+      startKycChainWatcher(authDb);
+      logger.info('KYCRegistry watcher started (Polygon Amoy / PoS, public RPC default)');
+    } catch (kycErr: any) {
+      logger.warn(`KYC chain watcher skipped: ${kycErr.message}`);
     }
 
     server.listen(PORT, () => {

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Linking } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 
+import { persistAuthToken } from '../../lib/token';
+
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
 /** Create account — name, phone, password (mockup). */
@@ -53,10 +55,14 @@ export default function SignupScreen({
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Signup failed');
       const token = json.data?.token;
-      if (token) {
-        (globalThis as any).__MOVR_TOKEN__ = token;
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('movr_token', token);
+      if (token) await persistAuthToken(token);
+      const custom = json.data?.firebaseCustomToken;
+      if (custom) {
+        try {
+          const { firebaseSendEmailVerification } = await import('../../lib/firebase');
+          await firebaseSendEmailVerification(custom);
+        } catch {
+          /* Firebase optional until configured */
         }
       }
       onSuccess?.(cleanPhone, token);

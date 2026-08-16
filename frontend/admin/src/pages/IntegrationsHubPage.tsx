@@ -32,7 +32,7 @@ const SECTIONS: { title: string; keys: string[] }[] = [
   },
   {
     title: 'IDENTITY',
-    keys: ['nia_ghana_card', 'dvla_ghana'],
+    keys: ['nia_ghana_card', 'dvla_ghana', 'firebase_auth', 'polygon_amoy', 'kyc_registry'],
   },
   {
     title: 'INFRASTRUCTURE',
@@ -55,6 +55,9 @@ const SUBTITLE: Record<string, string> = {
   openweathermap: 'Pricing weather signals',
   nia_ghana_card: 'Identity verification',
   dvla_ghana: 'Identity verification',
+  firebase_auth: 'Email + OTP verification (web & in-app)',
+  polygon_amoy: 'Polygon Amoy / PoS JSON-RPC (on-chain KYC)',
+  kyc_registry: 'Movr KYCRegistry contract (not Civic / Polygon ID / Worldcoin)',
   aws_s3: 'Asset storage',
   sentry: 'Error monitoring',
   firebase_fcm: 'Android push (Play)',
@@ -117,6 +120,25 @@ const CREDENTIAL_FIELDS: Record<string, { key: string; label: string }[]> = {
   firebase_fcm: [
     { key: 'project_id', label: 'project_id' },
     { key: 'server_key', label: 'server_key / service account JSON' },
+  ],
+  firebase_auth: [
+    { key: 'web_api_key', label: 'web_api_key' },
+    { key: 'project_id', label: 'project_id' },
+    { key: 'auth_domain', label: 'auth_domain' },
+    { key: 'app_id', label: 'app_id' },
+    { key: 'messaging_sender_id', label: 'messaging_sender_id' },
+    { key: 'recaptcha_site_key', label: 'recaptcha_site_key (phone OTP)' },
+    { key: 'service_account_json', label: 'service_account_json' },
+  ],
+  polygon_amoy: [
+    { key: 'rpc_url', label: 'rpc_url (default https://rpc-amoy.polygon.technology)' },
+    { key: 'wss_url', label: 'wss_url (optional websocket)' },
+  ],
+  kyc_registry: [
+    { key: 'contract_address', label: 'contract_address (KYCRegistry)' },
+    { key: 'verifier_private_key', label: 'verifier_private_key (needs POL for gas)' },
+    { key: 'chain', label: 'chain (polygon-amoy or polygon)' },
+    { key: 'subject_hmac_secret', label: 'subject_hmac_secret' },
   ],
   expo_push: [{ key: 'access_token', label: 'access_token' }],
   google_play: [

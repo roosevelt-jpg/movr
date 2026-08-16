@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import { getCurrentGps, postDriverLocation, startOnlineLocationUpdates, stopOnlineLocationUpdates } from '../../lib/location';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -15,11 +16,13 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-/** Driver Home — online map, surge, KPIs, Go Offline (mockup). */
+/** Driver Home — online status, surge, KPIs, Go Offline. */
 export default function DriverHomeScreen({
   onOffer,
   onEarnings,
   onWithdraw,
+  onAccount,
+  onSignOut,
 }: {
   onOffer?: (offerId: string) => void;
   onEarnings?: () => void;
@@ -28,6 +31,8 @@ export default function DriverHomeScreen({
   onVehicle?: () => void;
   onPerformance?: () => void;
   onSubscription?: () => void;
+  onAccount?: () => void;
+  onSignOut?: () => void;
 }) {
   const [online, setOnline] = useState(false);
   const [data, setData] = useState<any>({
@@ -45,7 +50,10 @@ export default function DriverHomeScreen({
       .then((j) => {
         if (j?.data) {
           setData((d: any) => ({ ...d, ...j.data }));
-          if (typeof j.data.online === 'boolean') setOnline(j.data.online);
+          if (typeof j.data.online === 'boolean') {
+            setOnline(j.data.online);
+            if (j.data.online) startOnlineLocationUpdates();
+          }
           if (openOffer && j.data.pendingOfferId) onOffer?.(j.data.pendingOfferId);
         }
       })
@@ -60,10 +68,23 @@ export default function DriverHomeScreen({
 
   const setPresence = async (next: boolean) => {
     setOnline(next);
+    let lat: number | undefined;
+    let lng: number | undefined;
+    if (next) {
+      const fix = await getCurrentGps();
+      if (fix) {
+        lat = fix.latitude;
+        lng = fix.longitude;
+        await postDriverLocation(fix);
+        await startOnlineLocationUpdates();
+      }
+    } else {
+      await stopOnlineLocationUpdates();
+    }
     await fetch(`${API}/driver/presence`, {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ isOnline: next }),
+      body: JSON.stringify({ isOnline: next, lat, lng }),
     }).catch(() => undefined);
     if (next) {
       fetch(`${API}/driver/offers/pending`, { headers: authHeaders() })
@@ -114,9 +135,9 @@ export default function DriverHomeScreen({
 
       <View style={styles.stats}>
         {[
-          { v: String(data.trips ?? 14), l: 'Trips', c: '#FFF' },
-          { v: `${data.onlineHours ?? 6.5}h`, l: 'Online', c: '#FFF' },
-          { v: `★ ${Number(data.rating || 4.9).toFixed(1)}`, l: 'Rating', c: '#4ADE80' },
+          { v: String(data.trips ?? 0), l: 'Trips', c: '#FFF' },
+          { v: `${Number(data.onlineHours || 0)}h`, l: 'Online', c: '#FFF' },
+          { v: `★ ${Number(data.rating || 0).toFixed(1)}`, l: 'Rating', c: '#4ADE80' },
         ].map((s) => (
           <View key={s.l} style={styles.stat}>
             <Text style={[styles.statVal, { color: s.c }]}>{s.v}</Text>
@@ -139,6 +160,16 @@ export default function DriverHomeScreen({
           {online ? 'Go Offline' : 'Go Online'}
         </Text>
       </Pressable>
+      {onAccount ? (
+        <Pressable onPress={onAccount} style={{ alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{ color: '#A1A1AA', fontWeight: '600' }}>Account · privacy · delete</Text>
+        </Pressable>
+      ) : null}
+      {onSignOut ? (
+        <Pressable onPress={onSignOut} style={{ alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
+          <Text style={{ color: '#F87171', fontWeight: '600' }}>Sign out</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

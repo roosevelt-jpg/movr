@@ -95,24 +95,25 @@ const HistoryPage: React.FC = () => {
           </p>
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/rides')}
             className="w-full rounded-xl py-3.5 font-extrabold bg-indigo-500 mb-2"
           >
             Book Your First Ride
           </button>
           <button
             type="button"
-            onClick={() => navigate('/marketplace')}
+            onClick={() => navigate('/shops')}
             className="w-full rounded-xl py-3.5 font-bold border border-zinc-700 bg-zinc-900 mb-8"
           >
             Browse Stores
           </button>
           <p className="self-start text-xs font-bold tracking-wider text-zinc-500 mb-2">TRY THESE</p>
-          <div className="grid grid-cols-3 gap-2 w-full">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
             {[
-              { label: 'Ride', icon: '🚗', to: '/dashboard' },
-              { label: 'shop', icon: '🛍', to: '/marketplace' },
-              { label: 'Deliver', icon: '📦', to: '/dashboard' },
+              { label: 'Ride', icon: '🚗', to: '/rides' },
+              { label: 'Shop', icon: '🛍', to: '/shops' },
+              { label: 'Parcel', icon: '📦', to: '/parcel' },
+              { label: 'Rentals', icon: '🔑', to: '/rentals/start' },
             ].map((t) => (
               <button
                 key={t.label}
@@ -174,7 +175,7 @@ const HistoryPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => navigate('/dashboard')}
+                      onClick={() => navigate('/rides')}
                       className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-semibold"
                     >
                       ↻ Rebook

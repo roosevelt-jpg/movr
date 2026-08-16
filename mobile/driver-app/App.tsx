@@ -8,6 +8,9 @@ if (!(globalThis as any).__MOVR_API_URL__ && extra.apiUrl) {
   (globalThis as any).__MOVR_API_URL__ = extra.apiUrl;
   process.env.EXPO_PUBLIC_API_URL = extra.apiUrl;
 }
+if (extra.webUrl) {
+  process.env.EXPO_PUBLIC_WEB_URL = extra.webUrl;
+}
 
 let AppRoot: React.ComponentType;
 try {

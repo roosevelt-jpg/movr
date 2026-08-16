@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { useThemeColors } from '@movr/design-system/ThemeProvider';
 import { formatCurrency } from '@movr/design-system/format';
 import { getAppLocale } from '../../services/locale';
+import { getCurrentGps } from '../../lib/location';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -26,6 +27,31 @@ function speak(text: string) {
     }
   } catch {
     /* optional */
+  }
+}
+
+async function recordNativeClip(ms = 6000): Promise<{ audioBase64: string; mimeType: string } | null> {
+  try {
+    const { Audio } = require('expo-av');
+    const perm = await Audio.requestPermissionsAsync();
+    if (perm.status !== 'granted') return null;
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+    const rec = new Audio.Recording();
+    await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    await rec.startAsync();
+    await new Promise((r) => setTimeout(r, ms));
+    await rec.stopAndUnloadAsync();
+    const uri = rec.getURI();
+    if (!uri) return null;
+    const res = await fetch(uri);
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const audioBase64 = globalThis.btoa ? globalThis.btoa(binary) : Buffer.from(bytes).toString('base64');
+    return { audioBase64, mimeType: 'audio/m4a' };
+  } catch {
+    return null;
   }
 }
 
@@ -70,20 +96,32 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [booking, setBooking] = useState(false);
+  const [gps, setGps] = useState({ lat: 5.6037, lng: -0.187 });
 
-  const parse = async (text: string) => {
+  useEffect(() => {
+    getCurrentGps()
+      .then((fix) => {
+        if (fix) setGps({ lat: fix.latitude, lng: fix.longitude });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const parse = async (text: string, audio?: { audioBase64: string; mimeType: string }) => {
     const res = await fetch(`${API}/voice/parse-intent`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
         text,
-        currentLat: 5.6037,
-        currentLng: -0.187,
+        audioBase64: audio?.audioBase64,
+        mimeType: audio?.mimeType,
+        currentLat: gps.lat,
+        currentLng: gps.lng,
         countryCode,
       }),
     });
     const json = await res.json();
     setResult(json.data);
+    if (json.data?.transcript) setTranscript(json.data.transcript);
     setSelected(json.data?.options?.[0]?.code || null);
     if (json.data?.needsClarification) {
       speak(json.data.prompt || 'Where are you going?');
@@ -109,18 +147,26 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
               : locale.languageCode === 'es'
                 ? 'es-ES'
                 : `en-${countryCode}`;
-      const heard = await listenOnce(stt);
-      const text = heard?.trim() || '';
-      if (!text) throw new Error('empty');
-      setTranscript(text);
+      let heard = '';
+      try {
+        heard = (await listenOnce(stt))?.trim() || '';
+      } catch {
+        heard = '';
+      }
+      if (heard) {
+        setTranscript(heard);
+        setListening(false);
+        await parse(heard);
+        return;
+      }
+      const clip = await recordNativeClip();
+      if (!clip) throw new Error('mic');
+      setTranscript('Transcribing…');
       setListening(false);
-      await parse(text);
+      await parse('', clip);
     } catch {
-      const sample = "I'm going from Osu to the airport";
-      setTranscript(sample);
       setListening(false);
-      setMessage('Demo utterance — enable mic for live STT');
-      await parse(sample);
+      setMessage('Could not hear that. Allow microphone access and try again.');
     }
   };
 
@@ -182,7 +228,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
         </Pressable>
         <Text style={styles.status}>{listening ? 'Listening...' : 'Tap mic to speak'}</Text>
         <Text style={styles.quote}>
-          {transcript ? `“${transcript}”` : '“I\'m going from Osu to the airport”'}
+          {transcript ? `“${transcript}”` : '“Take me to the airport”'}
         </Text>
         {message ? <Text style={styles.warn}>{message}</Text> : null}
         {result?.needsClarification ? <Text style={styles.warn}>{result.prompt}</Text> : null}
@@ -192,7 +238,7 @@ export default function VoiceBookingScreen({ onBack }: { onBack?: () => void }) 
         <View style={styles.card}>
           <Text style={styles.routeLabel}>PICKUP → DESTINATION</Text>
           <Text style={styles.route}>
-            {result.pickup?.address || 'Osu'} → {result.destination?.address || 'Kotoka Airport'}
+            {result.pickup?.address || 'Pickup'} → {result.destination?.address || 'Destination'}
           </Text>
 
           <FlatList

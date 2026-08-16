@@ -21,7 +21,7 @@ export default function IdentityLinkPage() {
   const [msg, setMsg] = useState('');
   const [overrideReason, setOverrideReason] = useState('Fleet vehicle / manual review');
 
-  const load = async (id = userId, syncUrl = false) => {
+  const load = async (id = userId, syncUrl = false, quiet = false) => {
     const trimmed = String(id || '').trim();
     if (!trimmed) {
       setData(null);
@@ -29,7 +29,7 @@ export default function IdentityLinkPage() {
       return;
     }
     setError('');
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       const res = await axios.get(`${API}/identity/${trimmed}`, { headers: headers() });
       setData(res.data.data);
@@ -38,10 +38,12 @@ export default function IdentityLinkPage() {
         navigate(`/identity?userId=${encodeURIComponent(trimmed)}`, { replace: true });
       }
     } catch (e: any) {
-      setData(null);
-      setError(e?.response?.data?.message || e.message || 'Failed to load identity');
+      if (!quiet) {
+        setData(null);
+        setError(e?.response?.data?.message || e.message || 'Failed to load identity');
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
@@ -54,6 +56,16 @@ export default function IdentityLinkPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryUserId]);
+
+  useEffect(() => {
+    const trimmed = String(userId || '').trim();
+    if (!trimmed) return undefined;
+    const timer = setInterval(() => {
+      load(trimmed, false, true).catch(() => undefined);
+    }, 8000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const statusBadge = (status?: string) => {
     const s = String(status || 'pending').toLowerCase();
@@ -120,11 +132,11 @@ export default function IdentityLinkPage() {
       );
       const att = res.data?.data?.attestation;
       setMsg(
-        att?.txHash
-          ? `Approved & attested on-chain · ${String(att.txHash).slice(0, 18)}…`
-          : 'Approved & attested on-chain'
+        att?.publishedOnChain && att?.txHash
+          ? `Approved & attested on Polygon · ${String(att.txHash).slice(0, 18)}…`
+          : 'Approved; waiting for on-chain confirmation'
       );
-      await load(userId);
+      await load(userId, false, true);
     } catch (e: any) {
       setError(e?.response?.data?.message || e.message || 'Approve failed');
     } finally {
@@ -160,9 +172,10 @@ export default function IdentityLinkPage() {
   const docs = data?.documentsSummary || [];
   const links = data?.linkStatus || [];
   const attestation = data?.attestation;
-  const attested =
-    String(attestation?.status || '').toLowerCase() === 'verified' ||
-    Boolean(data?.identityLinked && data?.kycStatus === 'approved');
+  const onchainVerified =
+    Boolean(attestation?.onchain && !attestation.onchain.empty) &&
+    String(attestation?.onchain?.statusLabel || attestation?.status || '').toLowerCase() === 'verified';
+  const attested = Boolean(onchainVerified && (attestation?.publishedOnChain || attestation?.live));
 
   return (
     <AdminShell activeLabel="Identity review" hidePageTitle>
@@ -210,7 +223,7 @@ export default function IdentityLinkPage() {
 
       {attested ? (
         <p style={styles.attestedBanner}>
-          Approved & attested on-chain
+          Live on Polygon KYCRegistry
           {attestation?.txHash ? (
             attestation.explorerUrl ? (
               <>
@@ -223,6 +236,17 @@ export default function IdentityLinkPage() {
               ` · ${String(attestation.txHash).slice(0, 16)}…`
             )
           ) : null}
+        </p>
+      ) : data ? (
+        <p style={styles.chainBanner}>
+          Chain {attestation?.live ? 'connected' : 'offline'}
+          {attestation?.onchain && !attestation.onchain.empty
+            ? ` · ${attestation.onchain.statusLabel}`
+            : ' · not yet attested on KYCRegistry'}
+          {attestation?.matches === false ? ' · local hash does not match chain' : ''}
+          {attestation?.live === false
+            ? ' · set Polygon Amoy RPC + KYCRegistry address in Integrations Hub'
+            : ''}
         </p>
       ) : null}
 
@@ -336,6 +360,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--success)',
     fontWeight: 700,
     margin: '0 0 16px',
+  },
+  chainBanner: {
+    color: 'var(--text-secondary)',
+    fontWeight: 600,
+    margin: '0 0 16px',
+    fontSize: 13,
   },
   link: { color: 'var(--motion-blue)' },
   grid: {

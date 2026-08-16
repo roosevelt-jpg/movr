@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
 import { getAppLocale } from '../../services/locale';
+import { getCurrentGps } from '../../lib/location';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const WEB_ORIGIN = (API || '').replace(/\/api\/v1\/?$/, '') || 'http://localhost:5180';
@@ -55,9 +56,11 @@ type FareOpt = {
 export default function CompareTravelScreen({
   onBack,
   onBooked,
+  onOpenVerified,
 }: {
   onBack?: () => void;
   onBooked?: (rideId: string) => void;
+  onOpenVerified?: () => void;
 }) {
   const locale = getAppLocale();
   const [cms, setCms] = useState<CmsPayload>({});
@@ -82,15 +85,13 @@ export default function CompareTravelScreen({
       })
       .catch(() => undefined);
 
-    try {
-      const geo = (globalThis as any).navigator?.geolocation;
-      geo?.getCurrentPosition?.((pos: any) => {
-        setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    getCurrentGps()
+      .then((fix) => {
+        if (!fix) return;
+        setPickupCoords({ lat: fix.latitude, lng: fix.longitude });
         setPickup('Current location');
-      });
-    } catch {
-      /* optional */
-    }
+      })
+      .catch(() => undefined);
   }, []);
 
   const geocode = async (q: string) => {
@@ -308,6 +309,14 @@ export default function CompareTravelScreen({
             </Text>
           </Pressable>
         </View>
+      ) : null}
+      {onOpenVerified ? (
+        <Pressable onPress={onOpenVerified} style={styles.card}>
+          <Text style={styles.cardTitle}>Choose a verified vehicle</Text>
+          <Text style={styles.optMeta}>
+            Photo, chauffeur passport, escrow until the booked car arrives.
+          </Text>
+        </Pressable>
       ) : null}
     </ScrollView>
   );

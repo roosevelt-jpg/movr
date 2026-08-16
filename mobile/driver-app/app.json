@@ -21,18 +21,23 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "ios": {
       "bundleIdentifier": "io.movr.driver",
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Movr Driver uses location while you are online and on trips to receive offers and navigate.",
-        "NSLocationWhenInUseUsageDescription": "Movr Driver uses location to match trips and navigate."
+        "NSLocationWhenInUseUsageDescription": "Movr Driver uses location while you are online and on trips to receive offers and navigate.",
+        "NSCameraUsageDescription": "Movr Driver uses the camera for vehicle photos and identity verification.",
+        "NSPhotoLibraryUsageDescription": "Movr Driver needs photo access for vehicle and KYC uploads."
       }
     },
     "extra": {
@@ -41,7 +46,34 @@
       "webUrl": "https://mymovr.io",
       "driverTermsUrl": "https://mymovr.io/driver-terms",
       "privacyUrl": "https://mymovr.io/privacy",
-      "deleteAccountUrl": "https://mymovr.io/delete-account"
-    }
+      "deleteAccountUrl": "https://mymovr.io/delete-account",
+      "supportUrl": "https://mymovr.io/support"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#042f2e",
+          "defaultChannel": "movr-driver"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Movr Driver uses location while you are online so we can send trip offers and share progress with riders.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Movr Driver needs photo access for vehicle and KYC uploads.",
+          "cameraPermission": "Movr Driver uses the camera for vehicle photos and identity verification."
+        }
+      ]
+    ]
   }
 }

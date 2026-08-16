@@ -61,6 +61,8 @@ export const CMS_SEED: Array<{
                 { label: 'Shop', href: '/shop' },
                 { label: 'Deliver', href: '/deliver' },
                 { label: 'Rentals', href: '/rent' },
+                { label: 'Verified cars', href: '/verified' },
+                { label: 'For business', href: '/business' },
               ],
             },
             {

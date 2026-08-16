@@ -116,6 +116,18 @@ export default function IncomingRideRequestScreen({
       <Text style={styles.heading}>New ride request</Text>
       <Text style={styles.away}>{Number(offer.pickupKm || 0.8)} km away</Text>
 
+      {offer.verified ? (
+        <View style={styles.route}>
+          <Text style={styles.routeText}>Verified vehicle</Text>
+          <Text style={[styles.routeText, { marginTop: 4 }]}>
+            {offer.verified.title} · {offer.verified.class_code}
+          </Text>
+          <Text style={{ color: '#A1A1AA', marginTop: 4, fontSize: 12 }}>
+            Bring the listed car. Rider confirms match before escrow releases.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.route}>
         <View style={styles.routeRow}>
           <View style={[styles.dot, { backgroundColor: '#A78BFA' }]} />

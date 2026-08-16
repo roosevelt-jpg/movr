@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import IdentityOnboardingScreen from './IdentityOnboardingScreen';
+import { authHeaders } from '../../lib/token';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -12,17 +13,7 @@ type Doc = {
   reason?: string;
 };
 
-function authHeaders(): Record<string, string> {
-  const token =
-    (globalThis as any).__MOVR_TOKEN__ ||
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('movr_token') : null);
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-/** KYC verification status — Verified / In review / Rejected (mockup). */
+/** KYC verification status — Polygon KYCRegistry + local documents. */
 export default function VerificationStatusScreen({
   onReupload,
 }: {
@@ -31,20 +22,17 @@ export default function VerificationStatusScreen({
 }) {
   const [showIdentity, setShowIdentity] = useState(false);
   const [docs, setDocs] = useState<Doc[]>([
-    { key: 'ghana_card', label: 'Ghana Card', status: 'verified' },
+    { key: 'ghana_card', label: 'Ghana Card', status: 'in_review' },
     { key: 'driving_license', label: 'Driving license', status: 'in_review' },
-    {
-      key: 'vehicle_registration',
-      label: 'Vehicle registration',
-      status: 'rejected',
-      reason: 'Vehicle registration photo was blurry. Please re-upload a clear photo.',
-    },
+    { key: 'vehicle_registration', label: 'Vehicle registration', status: 'in_review' },
   ]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [chain, setChain] = useState<any>(null);
 
   const load = () => {
-    fetch(`${API}/identity/my-documents`, { headers: authHeaders() })
+    const headers = authHeaders();
+    fetch(`${API}/identity/my-documents`, { headers })
       .then((r) => r.json())
       .then((j) => {
         if (Array.isArray(j.data) && j.data.length) {
@@ -63,18 +51,29 @@ export default function VerificationStatusScreen({
         }
       })
       .catch(() => undefined);
+    fetch(`${API}/kyc/me`, { headers })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.data) setChain(j.data);
+      })
+      .catch(() => undefined);
   };
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, 8000);
+    return () => clearInterval(timer);
   }, []);
 
   const rejected = docs.find((d) => d.status === 'rejected');
+  const onchain = chain?.onchain;
+  const onchainVerified =
+    Boolean(onchain && !onchain.empty) && String(onchain.statusLabel) === 'Verified';
+  const explorerUrl = chain?.explorerUrl as string | undefined;
 
   const reupload = async () => {
     if (!rejected) return;
     onReupload?.(rejected.key);
-    // Open Step 3 identity verification UI (mockup) for re-upload
     setShowIdentity(true);
     setBusy(true);
     setMsg('');
@@ -121,13 +120,34 @@ export default function VerificationStatusScreen({
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
         <View style={styles.clock}>
-          <Text style={{ fontSize: 28, color: '#FBBF24' }}>⏱</Text>
+          <Text style={{ fontSize: 28, color: onchainVerified ? '#4ADE80' : '#FBBF24' }}>
+            {onchainVerified ? '✓' : '⏱'}
+          </Text>
         </View>
-        <Text style={styles.title}>Verification in progress</Text>
+        <Text style={styles.title}>
+          {onchainVerified ? 'Verified on-chain' : 'Verification in progress'}
+        </Text>
         <Text style={styles.sub}>
-          We're reviewing your documents. This usually takes less than 24 hours.
+          {onchainVerified
+            ? 'Your KYC status is confirmed on Movr Polygon KYCRegistry.'
+            : "We're reviewing your documents, then attesting them on Polygon. This usually takes less than 24 hours."}
         </Text>
       </View>
+
+      {chain ? (
+        <Pressable
+          style={styles.chainRow}
+          onPress={() => explorerUrl && Linking.openURL(explorerUrl)}
+          disabled={!explorerUrl}
+        >
+          <Text style={styles.chainLabel}>
+            {chain.live ? 'Polygon live' : 'Chain offline'}
+            {onchain && !onchain.empty ? ` · ${onchain.statusLabel}` : ' · not attested yet'}
+            {chain.matches === false ? ' · mismatch' : ''}
+          </Text>
+          {explorerUrl ? <Text style={styles.chainLink}>Explorer</Text> : null}
+        </Pressable>
+      ) : null}
 
       {docs.map((d) => {
         const b = badge(d.status);
@@ -187,6 +207,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 12,
   },
+  chainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#111827',
+    borderRadius: 14,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+  },
+  chainLabel: { color: '#A1A1AA', fontSize: 13, flex: 1, paddingRight: 8 },
+  chainLink: { color: '#60A5FA', fontWeight: '700', fontSize: 12 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

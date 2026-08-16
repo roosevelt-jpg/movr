@@ -27,7 +27,17 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const { logout } = useAuthStore.getState();
     const url = error.config?.url || '';
-    const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/signup');
+    const isAuthAttempt =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/signup') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password') ||
+      url.includes('/auth/verify-otp') ||
+      url.includes('/auth/resend-otp') ||
+      url.includes('/auth/send-code') ||
+      url.includes('/auth/confirm-email') ||
+      url.includes('/public/firebase-config');
 
     // Don't bounce failed login/register attempts — only expire real sessions
     if (error.response?.status === 401 && !isAuthAttempt) {

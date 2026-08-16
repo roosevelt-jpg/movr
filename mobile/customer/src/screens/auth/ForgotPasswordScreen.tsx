@@ -1,38 +1,71 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
+import { apiBase, authIdBody, identifierLooksValid } from '../../lib/api-base';
+import { firebaseSendPasswordReset, startFirebasePhoneAuth } from '../../lib/firebase';
 
-const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API = () => apiBase();
 
-/** Reset password — send code to phone (mockup). */
+function toE164(value: string) {
+  const trimmed = value.replace(/[\s\-()]/g, '');
+  return trimmed.startsWith('+') ? trimmed : `+${trimmed.replace(/^\+/, '')}`;
+}
+
+/** Request a password reset via Firebase email or phone OTP. */
 export default function ForgotPasswordScreen({
   onSent,
+  onBack,
 }: {
-  onSent?: (phone: string, devCode?: string) => void;
+  onSent?: (identifier: string, devCode?: string, firebasePhone?: boolean) => void;
+  onBack?: () => void;
 }) {
-  const [phone, setPhone] = useState('+233 24 000 0000');
+  const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
   const send = async () => {
-    if (!phone.trim()) {
-      setError('Enter your phone number');
+    const value = identifier.trim();
+    if (!identifierLooksValid(value)) {
+      setError('Enter your email or phone number');
       return;
     }
     setLoading(true);
     setError('');
     setMsg('');
     try {
-      const res = await fetch(`${API}/auth/forgot-password`, {
+      const isEmail = value.includes('@');
+      let firebasePhone = false;
+      if (!isEmail) {
+        try {
+          firebasePhone = await startFirebasePhoneAuth(toE164(value));
+        } catch {
+          firebasePhone = false;
+        }
+      }
+
+      const res = await fetch(`${API()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.trim(), purpose: 'reset' }),
+        body: JSON.stringify({
+          ...authIdBody(value),
+          skipDelivery: firebasePhone,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Could not send code');
+      const id = json.data?.identifier || value;
+
+      if (isEmail && json.data?.delivery !== 'oob_email') {
+        try {
+          await firebaseSendPasswordReset(value);
+        } catch {
+          /* backend SendGrid / OTP still applied */
+        }
+      }
+
       setMsg(json.message || 'Reset code sent');
-      onSent?.(phone.trim(), json.data?.devCode);
+      onSent?.(id, json.data?.devCode, firebasePhone);
     } catch (e: any) {
       setError(e.message || 'Could not send code');
     } finally {
@@ -44,16 +77,19 @@ export default function ForgotPasswordScreen({
     <View style={styles.root}>
       <Text style={styles.lock}>🔒</Text>
       <Text style={styles.title}>Reset your password</Text>
-      <Text style={styles.sub}>Enter your phone number and we’ll send a reset code</Text>
+      <Text style={styles.sub}>
+        Enter your email or phone. We verify through Firebase (email link or SMS OTP).
+      </Text>
 
-      <Text style={styles.label}>Phone number</Text>
+      <Text style={styles.label}>Email or phone</Text>
       <TextInput
         style={styles.input}
-        placeholder="+233 24 000 0000"
+        placeholder="you@email.com or +233…"
         placeholderTextColor="#71717A"
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
+        autoCapitalize="none"
+        keyboardType="default"
+        value={identifier}
+        onChangeText={setIdentifier}
       />
 
       {error ? <Text style={styles.err}>{error}</Text> : null}
@@ -64,6 +100,12 @@ export default function ForgotPasswordScreen({
         <View style={styles.ctaRight} />
         <Text style={styles.ctaText}>{loading ? 'Sending…' : 'Send reset code'}</Text>
       </Pressable>
+
+      {onBack ? (
+        <Pressable onPress={onBack} style={styles.back}>
+          <Text style={styles.backText}>Back to sign in</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -118,4 +160,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   ctaText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, zIndex: 1 },
+  back: { marginTop: 20, alignItems: 'center' },
+  backText: { color: '#5B8AFF', fontWeight: '600' },
 });

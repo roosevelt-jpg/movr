@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
+import api from '../../services/api';
+import { firebaseSendPasswordReset, startFirebasePhoneAuth } from '../../lib/firebase';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
+function toE164(value: string) {
+  const trimmed = value.replace(/[\s\-()]/g, '');
+  return trimmed.startsWith('+') ? trimmed : `+${trimmed.replace(/^\+/, '')}`;
+}
 
-/** Request a password reset code via email or phone. */
+/** Request a password reset via Firebase email or phone OTP. */
 const ForgotPasswordPage: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,24 +25,51 @@ const ForgotPasswordPage: React.FC = () => {
     }
     setIsLoading(true);
     try {
-      const body = value.includes('@') ? { email: value } : { phone: value };
-      const res = await axios.post(`${API}/auth/forgot-password`, body);
+      const isEmail = value.includes('@');
+      let firebasePhone = false;
+      if (!isEmail) {
+        try {
+          await startFirebasePhoneAuth(toE164(value));
+          firebasePhone = true;
+        } catch {
+          firebasePhone = false;
+        }
+      }
+
+      const body = isEmail
+        ? { email: value }
+        : { phone: value, skipDelivery: firebasePhone };
+      const res = await api.post('/auth/forgot-password', body);
       const data = res.data?.data || {};
+
+      if (isEmail && data.delivery !== 'oob_email') {
+        try {
+          await firebaseSendPasswordReset(value);
+        } catch {
+          /* SendGrid / legacy OTP still applied */
+        }
+      }
+
       if (data.devCode) {
         toast.success(`Reset code: ${data.devCode}`, { duration: 12000 });
+      } else if (isEmail && (data.delivery === 'oob_email' || data.provider === 'firebase')) {
+        toast.success('Firebase reset email sent — check your inbox (and spam)');
       } else {
         toast.success(res.data?.message || 'Reset code sent');
       }
+
       navigate('/verify-otp', {
         state: {
           phone: data.identifier || value,
           identifier: data.identifier || value,
           mode: 'reset',
           devCode: data.devCode,
+          firebasePhone,
+          firebaseEmail: isEmail && (data.provider === 'firebase' || data.delivery === 'oob_email'),
         },
       });
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Could not send reset code');
+      toast.error(err?.response?.data?.message || err?.message || 'Could not send reset code');
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +82,7 @@ const ForgotPasswordPage: React.FC = () => {
       </div>
       <h1 className="text-2xl font-bold">Reset your password</h1>
       <p className="text-text-secondary mt-3 mb-8">
-        Enter your email or phone and we&apos;ll send a reset code
+        Enter your email or phone. We verify through Firebase (email link or SMS OTP).
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5 text-left">

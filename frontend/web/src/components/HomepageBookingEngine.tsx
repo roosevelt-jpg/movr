@@ -385,6 +385,12 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
                 </Link>
               )}
             </div>
+            <Link
+              to="/verified"
+              className="mt-3 inline-flex text-sm font-semibold text-black/80 underline underline-offset-2"
+            >
+              Choose a verified vehicle instead
+            </Link>
           </div>
 
           <div className="relative min-h-[300px] lg:min-h-full rounded-2xl overflow-hidden bg-[#e8eef2] border border-black/5">

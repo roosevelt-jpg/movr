@@ -16,7 +16,25 @@ export class InboxService {
        RETURNING *`,
       [userId, category, title, body, deepLink || null]
     );
-    return row.rows[0];
+    const created = row.rows[0];
+    try {
+      const { getPushService } = require('./push.service');
+      getPushService(this.db)
+        .sendToUser(userId, {
+          title,
+          body,
+          deepLink,
+          data: {
+            category: String(category || ''),
+            inboxId: String(created?.id || ''),
+            deepLink: deepLink || '',
+          },
+        })
+        .catch(() => undefined);
+    } catch {
+      /* push is optional */
+    }
+    return created;
   }
 
   async list(userId: string, opts: { category?: string; limit?: number; offset?: number } = {}) {
