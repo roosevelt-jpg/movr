@@ -62,6 +62,9 @@ export class PaystackService implements PaymentProvider {
           reference,
           callback_url: input.redirectUrl,
           metadata: input.metadata || {},
+          ...(Array.isArray(input.channels) && input.channels.length
+            ? { channels: input.channels }
+            : {}),
         },
         { headers: this.headers() }
       );

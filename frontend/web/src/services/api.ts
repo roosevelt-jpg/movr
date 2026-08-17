@@ -132,7 +132,8 @@ export const walletApi = {
 export const subscriptionsApi = {
   getPlans: () => api.get('/subscriptions/plans'),
   getActive: () => api.get('/subscriptions/active'),
-  activate: (planId: string) => api.post('/subscriptions/activate', { planId }),
+  activate: (planId: string, paymentMethod = 'wallet', paymentMethodId?: string) =>
+    api.post('/subscriptions/activate', { planId, paymentMethod, paymentMethodId }),
   cancel: () => api.put('/subscriptions/cancel'),
 };
 

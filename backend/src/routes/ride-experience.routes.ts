@@ -47,6 +47,13 @@ rideExperienceRouter.post(
       if (ride.rows[0].driver_id) {
         await performance.recalculateMetrics(ride.rows[0].driver_id);
       }
+      try {
+        const { WalletLedgerService } = require('../services/wallet-ledger.service');
+        const ledger = new WalletLedgerService(db);
+        await ledger.settleCompletedRide(ride.rows[0]);
+      } catch (e) {
+        console.warn('ride wallet settle failed', e);
+      }
 
       try {
         const { verified } = require('./verified.routes');

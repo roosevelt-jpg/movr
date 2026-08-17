@@ -1,15 +1,18 @@
 import { DatabaseService } from './database.service';
 import { PaymentService } from './payment.service';
 import { InboxService } from './inbox.service';
+import { WalletLedgerService } from './wallet-ledger.service';
 
 export class MarketplaceService {
   private inbox: InboxService;
+  private ledger: WalletLedgerService;
 
   constructor(
     private db: DatabaseService,
     private payments: PaymentService
   ) {
     this.inbox = new InboxService(db);
+    this.ledger = new WalletLedgerService(db);
   }
 
   /** Notify customer of order status changes (Phase 19 inbox). */
@@ -665,20 +668,13 @@ export class MarketplaceService {
     };
 
     if (paymentMethod === 'wallet') {
-      const wallet = await this.db.query(
-        `SELECT id, COALESCE(balance_fiat, 0)::float AS balance, COALESCE(currency, 'GHS') AS currency
-         FROM wallets WHERE user_id = $1`,
-        [userId]
-      );
-      if (!wallet.rows[0]) throw new Error('Wallet not found — top up first');
-      if (Number(wallet.rows[0].balance) < total) {
-        throw new Error('Insufficient wallet balance');
-      }
-      await this.db.query(
-        `UPDATE wallets SET balance_fiat = balance_fiat - $1, last_updated = NOW() WHERE id = $2`,
-        [total, wallet.rows[0].id]
-      );
-      const reference = `WALLET-${order.rows[0].id.slice(0, 8)}`;
+      await this.ledger.debitFiat(userId, total, {
+        type: 'shop',
+        reference: `SHOP-${order.rows[0].id}`,
+        title: 'Shop order',
+        icon: 'shop',
+      });
+      const reference = `WALLET-${String(order.rows[0].id).slice(0, 8)}`;
       await this.db.query(
         `UPDATE marketplace_orders
          SET payment_reference = $1, status = 'preparing', payment_method = 'wallet', updated_at = NOW()
@@ -736,6 +732,7 @@ export class MarketplaceService {
           orderId: order.rows[0].id,
           storeId: data.storeId,
           paymentMethod,
+          channel: paymentMethod === 'mobile_money' ? 'momo' : 'card',
         },
       });
       if (payment.success && payment.reference) {

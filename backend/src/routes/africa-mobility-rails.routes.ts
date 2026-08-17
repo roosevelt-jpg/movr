@@ -62,7 +62,10 @@ africaRailsRouter.post('/book', authenticateToken, requireCustomer, async (req: 
       fareMode: req.body.fareMode || 'now',
       sourceChannel: req.body.sourceChannel || 'app',
       countryCode: req.body.countryCode,
-      payWithMobilityCredit: Boolean(req.body.payWithMobilityCredit),
+      paymentMethod: req.body.paymentMethod,
+      paymentMethodId: req.body.paymentMethodId,
+      payWithMobilityCredit: req.body.payWithMobilityCredit,
+      email: req.user!.email,
     });
     res.status(201).json({ status: 'success', data });
   } catch (error: any) {
@@ -124,7 +127,10 @@ africaRailsRouter.post('/share/join', authenticateToken, requireCustomer, async 
       pickupAddress: req.body.pickupAddress,
       dropoffAddress: req.body.dropoffAddress,
       countryCode: req.body.countryCode,
-      payWithMobilityCredit: Boolean(req.body.payWithMobilityCredit),
+      paymentMethod: req.body.paymentMethod,
+      paymentMethodId: req.body.paymentMethodId,
+      payWithMobilityCredit: req.body.payWithMobilityCredit,
+      email: req.user!.email,
     });
     res.status(201).json({ status: 'success', data });
   } catch (error: any) {

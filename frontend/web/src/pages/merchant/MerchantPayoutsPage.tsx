@@ -3,6 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import MerchantShell from '../../layouts/MerchantShell';
 import { useLocalCurrency } from '../../hooks/useLocalCurrency';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:3000/api/v1';
 const headers = () => ({
@@ -32,12 +33,20 @@ export default function MerchantPayoutsPage() {
   });
   const [kycMsg, setKycMsg] = useState('');
   const [promise, setPromise] = useState<any>(null);
+  const [wallet, setWallet] = useState({ balance: 0, currency: 'NGN' });
+  const [topupAmt, setTopupAmt] = useState(100);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [planId, setPlanId] = useState('');
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
 
   const load = () => {
     Promise.all([
       axios.get(`${API}/merchant/earnings/summary`, { headers: headers() }).catch(() => null),
       axios.get(`${API}/merchant/payouts`, { headers: headers() }).catch(() => null),
-    ]).then(([s, p]) => {
+      axios.get(`${API}/wallet/portfolio`, { headers: headers() }).catch(() => null),
+      axios.get(`${API}/subscriptions/plans`).catch(() => null),
+    ]).then(([s, p, w, plansRes]) => {
       const d = s?.data?.data;
       if (d) {
         setSummary((prev) => ({
@@ -75,6 +84,18 @@ export default function MerchantPayoutsPage() {
             amount: Number(row.amount || 0),
           }))
         );
+      }
+      const wd = w?.data?.data;
+      if (wd) {
+        setWallet({
+          balance: Number(wd.fiatBalance ?? wd.balance ?? 0),
+          currency: wd.currency || 'NGN',
+        });
+      }
+      const planRows = plansRes?.data?.data || [];
+      if (Array.isArray(planRows) && planRows.length) {
+        setPlans(planRows);
+        if (!planId) setPlanId(String(planRows[0].id));
       }
     });
   };
@@ -180,6 +201,92 @@ export default function MerchantPayoutsPage() {
               <p className="mt-1 text-sm font-bold">{formatMoney(summary.net)}</p>
             </div>
           </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-xs font-bold tracking-widest text-zinc-500">MOVR WALLET</p>
+          <p className="mt-1 text-2xl font-extrabold">{formatMoney(wallet.balance)}</p>
+          <div className="mt-3 flex gap-2">
+            <input
+              className="flex-1 rounded-xl border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+              type="number"
+              min={1}
+              value={topupAmt}
+              onChange={(e) => setTopupAmt(Number(e.target.value))}
+            />
+            <button
+              type="button"
+              className="rounded-full bg-violet-600 px-4 font-bold text-sm"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await axios.post(
+                    `${API}/wallet/topup`,
+                    { amount: topupAmt, currency: wallet.currency, source: payMethod },
+                    { headers: headers() }
+                  );
+                  toast.success('Wallet topped up');
+                  load();
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.message || 'Top-up failed');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Top up
+            </button>
+          </div>
+          <p className="mt-4 text-xs font-bold tracking-widest text-zinc-500">RENEW PLAN</p>
+          <select
+            className="mt-2 w-full rounded-xl border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+          >
+            {plans.map((pl) => (
+              <option key={pl.id} value={pl.id}>
+                {pl.headline || pl.name} · {pl.amount} {pl.currency || ''}
+              </option>
+            ))}
+          </select>
+          <PayMethodChoice
+            className="mt-3"
+            token={localStorage.getItem('movr_merchant_token')}
+            value={payMethod}
+            onChange={(id, o) => {
+              setPayMethod(id);
+              setPayMethodId(o?.methodId || undefined);
+            }}
+          />
+          <button
+            type="button"
+            className="mt-3 w-full rounded-full bg-white py-2.5 text-sm font-bold text-black"
+            disabled={busy || !planId}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const res = await axios.post(
+                  `${API}/subscriptions/activate`,
+                  { planId, paymentMethod: payMethod, paymentMethodId: payMethodId },
+                  { headers: headers() }
+                );
+                const link =
+                  res.data?.data?.payment?.paymentLink || res.data?.data?.payment?.authorization_url;
+                if (link) window.open(link, '_blank');
+                toast.success(
+                  link ? 'Complete card or MoMo payment' : 'Plan paid from wallet'
+                );
+                load();
+              } catch (err: any) {
+                toast.error(err?.response?.data?.message || 'Could not renew plan');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Pay for plan
+          </button>
         </div>
 
         <p className="mb-3 text-xs font-bold tracking-widest text-zinc-500">PAYOUT ACCOUNT</p>

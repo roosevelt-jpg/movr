@@ -6,6 +6,7 @@ import { Home, Briefcase, Clock } from 'lucide-react';
 import { ridesApi, walletApi } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
 import { useLocaleStore } from '../../store/locale.store';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const SHORTCUTS = [
   { id: 'Home', icon: Home },
@@ -30,7 +31,8 @@ const DashboardPage: React.FC = () => {
   const [isRequesting, setIsRequesting] = useState(false);
   const [promise, setPromise] = useState<any>(null);
   const [fareMode, setFareMode] = useState<'now' | 'share'>('now');
-  const [payWithCredit, setPayWithCredit] = useState(false);
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
   const [mobilityCredit, setMobilityCredit] = useState(0);
   const [catalogHint, setCatalogHint] = useState('');
 
@@ -139,7 +141,9 @@ const DashboardPage: React.FC = () => {
             pickupAddress,
             dropoffAddress,
             countryCode,
-            payWithMobilityCredit: payWithCredit,
+            payWithMobilityCredit: payMethod === 'wallet',
+            paymentMethod: payMethod,
+            paymentMethodId: payMethodId,
           }),
         });
         const json = await res.json();
@@ -172,14 +176,24 @@ const DashboardPage: React.FC = () => {
           dropoffAddress,
           vehicleTypeCode: 'economy',
           fareMode: 'now',
-          payWithMobilityCredit: payWithCredit,
+          payWithMobilityCredit: payMethod === 'wallet',
+          paymentMethod: payMethod,
+          paymentMethodId: payMethodId,
           sourceChannel: 'app',
           countryCode,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Booking failed');
-      toast.success(payWithCredit ? 'Ride booked with ride credit' : 'Ride requested! Finding a driver...');
+      const payLink = json.data?.payment?.paymentLink || json.data?.payment?.authorization_url;
+      if (payLink) window.open(payLink, '_blank');
+      toast.success(
+        payMethod === 'wallet'
+          ? 'Ride booked with wallet'
+          : payMethod === 'momo'
+            ? 'Complete MoMo payment to confirm'
+            : 'Complete card payment to confirm'
+      );
       navigate(`/ride/active/${json.data?.rideId || json.data?.id}`);
     } catch (error: any) {
       toast.error(error.response?.data?.message || error.message || 'Failed to request ride');
@@ -296,15 +310,13 @@ const DashboardPage: React.FC = () => {
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-xs text-zinc-400 px-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={payWithCredit}
-                onChange={(e) => setPayWithCredit(e.target.checked)}
-              />
-              Pay with ride credit ({mobilityCredit.toLocaleString()})
-              {fareMode === 'share' ? ' · charged when pool dispatches' : ''}
-            </label>
+            <PayMethodChoice
+              value={payMethod}
+              onChange={(id, o) => {
+                setPayMethod(id);
+                setPayMethodId(o?.methodId || undefined);
+              }}
+            />
             {catalogHint ? (
               <p className="text-[10px] text-zinc-600 px-1">Rails: {catalogHint}</p>
             ) : null}

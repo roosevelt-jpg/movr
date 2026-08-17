@@ -105,6 +105,14 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     const result = await db.updateRideStatus(id, 'cancelled');
 
     try {
+      const { WalletLedgerService } = require('../services/wallet-ledger.service');
+      const ledger = new WalletLedgerService(db);
+      await ledger.refundIfPaid(result.rows[0]);
+    } catch {
+      /* non-blocking */
+    }
+
+    try {
       const driverId = result.rows[0]?.driver_id;
       if (driverId) {
         const { DriverPerformanceService } = require('../services/driver-performance.service');
@@ -378,6 +386,14 @@ router.put('/:id/complete', authenticateToken, requireDriver, async (req, res) =
     `;
 
     const result = await db.query(query, [actualFare, id]);
+
+    try {
+      const { WalletLedgerService } = require('../services/wallet-ledger.service');
+      const ledger = new WalletLedgerService(db);
+      await ledger.settleCompletedRide(result.rows[0]);
+    } catch (e) {
+      console.warn('ride wallet settle failed', e);
+    }
 
     // Update driver earnings
     await db.query(

@@ -9,6 +9,7 @@ import { bookingCopy } from '../lib/bookingCopy';
 import { AFRICA_LOCALES } from '../lib/africaLocales';
 import { mediaUrl } from '../lib/media';
 import PlacesAutocompleteField, { PickedPlace } from './PlacesAutocompleteField';
+import PayMethodChoice from './PayMethodChoice';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -70,6 +71,8 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
   const [options, setOptions] = useState<FareOpt[]>([]);
   const [quoteCurrency, setQuoteCurrency] = useState(currency);
   const [selected, setSelected] = useState<string | null>(null);
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
 
   useEffect(() => {
     setQuoteCurrency(currency);
@@ -224,6 +227,9 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
             pickupAddress: p.formattedAddress || p.name,
             dropoffAddress: dropoff.formattedAddress || dropoff.name,
             countryCode,
+            paymentMethod: payMethod,
+            paymentMethodId: payMethodId,
+            payWithMobilityCredit: payMethod === 'wallet',
           }),
         });
         const j = await res.json();
@@ -248,10 +254,15 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
           fareMode: 'now',
           countryCode,
           sourceChannel: 'web',
+          paymentMethod: payMethod,
+          paymentMethodId: payMethodId,
+          payWithMobilityCredit: payMethod === 'wallet',
         }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || t.quoteFailed);
+      const payLink = j.data?.payment?.paymentLink || j.data?.payment?.authorization_url;
+      if (payLink) window.open(payLink, '_blank');
       toast.success(t.booked);
       navigate(`/ride/active/${j.data?.rideId || j.data?.id}`);
     } catch (e: any) {
@@ -448,6 +459,14 @@ export default function HomepageBookingEngine({ payload = {} }: Props) {
                 </button>
               );
             })}
+            <PayMethodChoice
+              value={payMethod}
+              onChange={(id, o) => {
+                setPayMethod(id);
+                setPayMethodId(o?.methodId || undefined);
+              }}
+              className="mt-3"
+            />
             <button
               type="button"
               disabled={booking || !selectedOpt}

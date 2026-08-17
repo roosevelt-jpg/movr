@@ -67,7 +67,7 @@ export default function CartScreen({
   const [loadingCart, setLoadingCart] = useState(true);
   const [promise, setPromise] = useState<any>(null);
   const [fulfillment, setFulfillment] = useState<'delivery' | 'pickup'>('delivery');
-  const [paymentMethod, setPaymentMethod] = useState<string>('card');
+  const [paymentMethod, setPaymentMethod] = useState<string>('wallet');
   const [addresses, setAddresses] = useState<Addr[]>([]);
   const [addressId, setAddressId] = useState<string>('');
   const [newAddress, setNewAddress] = useState('');

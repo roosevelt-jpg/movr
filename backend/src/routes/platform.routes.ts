@@ -1454,14 +1454,15 @@ subscriptionsRouter.post(
 subscriptionsRouter.post(
   '/activate',
   authenticateToken,
-  requireDriver,
   async (req: AuthRequest, res: Response) => {
     try {
       const result = await subscriptions.activate(req.user!.id, {
         planId: req.body.planId,
-        paymentMethod: req.body.paymentMethod || 'fiat',
+        paymentMethod: req.body.paymentMethod || 'wallet',
+        paymentMethodId: req.body.paymentMethodId,
         email: req.body.email || req.user!.email,
         fullName: req.body.fullName || 'MOVR Driver',
+        phone: req.body.phone,
         countryCode: req.body.countryCode || 'GH',
       });
       res.status(201).json({ status: 'success', data: result });

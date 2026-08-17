@@ -6,9 +6,11 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
 import { getAppLocale } from '../../services/locale';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -104,7 +106,8 @@ export default function HomeScreen({
   const [options, setOptions] = useState<VehicleOption[]>([]);
   const [fareModes, setFareModes] = useState<FareModeOption[]>([]);
   const [fareMode, setFareMode] = useState('now');
-  const [payWithCredit, setPayWithCredit] = useState(false);
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
   const [mobilityCredit, setMobilityCredit] = useState(0);
   const [selected, setSelected] = useState<string>('economy');
   const [currency, setCurrency] = useState(locale.currencyCode || 'GHS');
@@ -284,7 +287,9 @@ export default function HomeScreen({
           pickupAddress: pickup,
           dropoffAddress: destination,
           countryCode: region,
-          payWithMobilityCredit: payWithCredit,
+          payWithMobilityCredit: payMethod === 'wallet',
+          paymentMethod: payMethod,
+          paymentMethodId: payMethodId,
         };
       } else {
         // All bookings go through rails (corridor caps + optional credit)
@@ -299,7 +304,9 @@ export default function HomeScreen({
           vehicleTypeCode: selected,
           fareMode,
           countryCode: region,
-          payWithMobilityCredit: payWithCredit,
+          payWithMobilityCredit: payMethod === 'wallet',
+          paymentMethod: payMethod,
+          paymentMethodId: payMethodId,
           sourceChannel: 'app',
         };
       }
@@ -322,7 +329,16 @@ export default function HomeScreen({
                 : 'Shared vehicle matched'
           );
         } else {
-          setMsg(payWithCredit ? 'Booked with ride credit' : 'Ride requested');
+          setMsg(
+            payMethod === 'wallet'
+              ? 'Booked with wallet'
+              : payMethod === 'momo'
+                ? 'Complete MoMo payment'
+                : 'Complete card payment'
+          );
+        }
+        const payLink = json.data?.payment?.paymentLink || json.data?.payment?.authorization_url;
+        if (payLink) Linking.openURL(payLink).catch(() => undefined);
         }
         if (rideId) {
           try {
@@ -474,20 +490,13 @@ export default function HomeScreen({
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <Pressable
-        onPress={() => setPayWithCredit((v) => !v)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}
-      >
-        <Text style={{ color: payWithCredit ? '#A855F7' : '#71717A', fontSize: 18 }}>
-          {payWithCredit ? '☑' : '☐'}
-        </Text>
-        <Text style={{ color: '#A1A1AA', fontSize: 13, flex: 1 }}>
-          Pay with ride credit ({formatCurrency(mobilityCredit, currency)})
-          {fareMode === 'share' || selected === 'shared'
-            ? ' · charged when pool dispatches'
-            : ''}
-        </Text>
-      </Pressable>
+      <PayMethodChoice
+        value={payMethod}
+        onChange={(id, o) => {
+          setPayMethod(id);
+          setPayMethodId(o?.methodId || undefined);
+        }}
+      />
 
       <Pressable style={styles.cta} onPress={confirm} disabled={confirming}>
         <View style={styles.ctaA} />
@@ -497,9 +506,11 @@ export default function HomeScreen({
             ? 'Confirming…'
             : fareMode === 'share' || selected === 'shared'
               ? 'Join share pool'
-              : payWithCredit
-                ? 'Book with credit'
-                : 'Confirm Ride'}
+              : payMethod === 'wallet'
+                ? 'Pay with wallet'
+                : payMethod === 'momo'
+                ? 'Pay with MoMo'
+                : 'Pay with card'}
         </Text>
       </Pressable>
     </ScrollView>

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Linking } from 'react-native';
 import { spacing } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -31,6 +32,12 @@ export default function MerchantPayoutScreen({
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [walletBal, setWalletBal] = useState(0);
+  const [topupAmt, setTopupAmt] = useState('100');
+  const [plans, setPlans] = useState<any[]>([]);
+  const [planId, setPlanId] = useState('');
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
   const [bankForm, setBankForm] = useState({
     bankName: '',
     accountNumber: '',
@@ -52,6 +59,14 @@ export default function MerchantPayoutScreen({
         if (d.payoutAccount) setAccount(d.payoutAccount);
         else if (d.accounts?.[0]) setAccount(d.accounts[0]);
         else setAccount(null);
+      }
+      const w = await fetch(`${API}/wallet/portfolio`, { headers: authHeaders() }).then((r) => r.json()).catch(() => null);
+      if (w?.data) setWalletBal(Number(w.data.fiatBalance ?? w.data.balance ?? 0));
+      const pl = await fetch(`${API}/subscriptions/plans`).then((r) => r.json()).catch(() => null);
+      const rows = pl?.data || [];
+      if (Array.isArray(rows) && rows.length) {
+        setPlans(rows);
+        setPlanId((id) => id || String(rows[0].id));
       }
     } catch (e: any) {
       setMsg(e.message || 'Could not load payouts');
@@ -147,6 +162,72 @@ export default function MerchantPayoutScreen({
       <Text style={styles.muted}>
         Available · this week {formatCurrency(summary.thisWeek, summary.currency)}
       </Text>
+      <Text style={styles.muted}>Wallet {formatCurrency(walletBal, summary.currency)}</Text>
+      <TextInput
+        style={styles.input}
+        value={topupAmt}
+        onChangeText={setTopupAmt}
+        keyboardType="numeric"
+        placeholder="Top up amount"
+        placeholderTextColor="#71717A"
+      />
+      <Pressable
+        style={styles.secondary}
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          try {
+            const res = await fetch(`${API}/wallet/topup`, {
+              method: 'POST',
+              headers: authHeaders(),
+              body: JSON.stringify({ amount: Number(topupAmt), currency: summary.currency, source: payMethod }),
+            });
+            const j = await res.json();
+            setMsg(res.ok ? 'Wallet topped up' : j.message || 'Top-up failed');
+            await load();
+          } catch (e: any) {
+            setMsg(e.message || 'Top-up failed');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Text style={styles.secondaryText}>Top up wallet</Text>
+      </Pressable>
+      <PayMethodChoice
+        value={payMethod}
+        onChange={(id, o) => {
+          setPayMethod(id);
+          setPayMethodId(o?.methodId || undefined);
+        }}
+      />
+      {plans.length ? (
+        <Pressable
+          style={styles.secondary}
+          disabled={busy || !planId}
+          onPress={async () => {
+            setBusy(true);
+            try {
+              const res = await fetch(`${API}/subscriptions/activate`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ planId, paymentMethod: payMethod, paymentMethodId: payMethodId }),
+              });
+              const j = await res.json();
+              const link = j.data?.payment?.paymentLink;
+              if (link) Linking.openURL(link).catch(() => undefined);
+              setMsg(res.ok ? (link ? 'Complete card or MoMo payment' : 'Plan paid from wallet') : j.message);
+              await load();
+            } catch (e: any) {
+              setMsg(e.message || 'Plan payment failed');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Text style={styles.secondaryText}>Renew plan ({payMethod})</Text>
+        </Pressable>
+      ) : null}
       {account ? (
         <Text style={styles.account}>
           {account.bankName || account.bank_name} · {account.accountNumber || account.account_number}
@@ -243,10 +324,19 @@ const styles = StyleSheet.create({
     borderColor: '#3f3f46',
     borderRadius: 12,
     color: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginTop: 8,
   },
+  secondary: {
+    marginTop: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryText: { color: '#E9D5FF', fontWeight: '700' },
   btn: {
     marginTop: 20,
     backgroundColor: '#4f46e5',

@@ -5,6 +5,8 @@ import { RideBookingService } from './ride-booking.service';
 import { TrustSettlementService } from './trust-settlement.service';
 import { PricingEngineService } from './pricing-engine.service';
 import { WalletTransferService } from './wallet-transfer.service';
+import { WalletLedgerService, normalizePayMethod, PayMethod } from './wallet-ledger.service';
+import { PaymentService } from './payment.service';
 import getLogger from '../utils/logger';
 
 /**
@@ -16,6 +18,8 @@ export class AfricaMobilityRailsService {
   private trust: TrustSettlementService;
   private pricing: PricingEngineService;
   private transfers: WalletTransferService;
+  private ledger: WalletLedgerService;
+  private payments: PaymentService;
 
   constructor(
     private db: DatabaseService,
@@ -25,6 +29,8 @@ export class AfricaMobilityRailsService {
     this.trust = new TrustSettlementService(db);
     this.pricing = new PricingEngineService(db);
     this.transfers = new WalletTransferService(db);
+    this.ledger = new WalletLedgerService(db);
+    this.payments = new PaymentService(db);
   }
 
   async isEnabled(): Promise<boolean> {
@@ -166,9 +172,12 @@ export class AfricaMobilityRailsService {
       [userId]
     );
     const row = w.rows[0] || { balance_fiat: 0, mobility_credit: 0, currency: 'GHS' };
+    const walletBalance = Number(row.balance_fiat || 0);
+    const mobilityCredit = Number(row.mobility_credit || 0);
     return {
-      walletBalance: Number(row.balance_fiat || 0),
-      mobilityCredit: Number(row.mobility_credit || 0),
+      walletBalance,
+      mobilityCredit,
+      spendable: walletBalance + mobilityCredit,
       currency: row.currency || 'GHS',
     };
   }
@@ -216,62 +225,14 @@ export class AfricaMobilityRailsService {
   }
 
   async spendMobilityCredit(userId: string, amount: number, reference: string) {
-    const resolved = await this.resolveRidePayer(userId, amount);
-    const payerId = resolved.payerId;
-    const bal = await this.getMobilityBalance(payerId);
-    if (bal.mobilityCredit + bal.walletBalance < amount) {
-      throw new Error('Insufficient mobility credit');
-    }
-    const fromCredit = Math.min(bal.mobilityCredit, amount);
-    const fromWallet = amount - fromCredit;
-    await this.db.query(
-      `UPDATE wallets SET
-         mobility_credit = GREATEST(0, COALESCE(mobility_credit,0) - $2),
-         balance_fiat = balance_fiat - $3,
-         last_updated = NOW()
-       WHERE user_id = $1`,
-      [payerId, fromCredit, fromWallet]
-    );
-    await this.db
-      .query(
-        `INSERT INTO mobility_credit_ledger (user_id, amount, currency, source, reference)
-         VALUES ($1,$2,$3,'ride_spend',$4)`,
-        [payerId, -amount, bal.currency, reference]
-      )
-      .catch(() => undefined);
-
-    if (resolved.viaFamily && resolved.membership) {
-      const today = new Date().toISOString().slice(0, 10);
-      const prevSpent =
-        resolved.membership.spent_on &&
-        String(resolved.membership.spent_on).slice(0, 10) === today
-          ? Number(resolved.membership.spent_today || 0)
-          : 0;
-      await this.db
-        .query(
-          `UPDATE wallet_share_members SET
-             spent_today = $2,
-             spent_on = $3::date
-           WHERE id = $1`,
-          [resolved.membership.id, prevSpent + amount, today]
-        )
-        .catch(() => undefined);
-      await this.db
-        .query(
-          `INSERT INTO mobility_credit_ledger (user_id, amount, currency, source, reference)
-           VALUES ($1,$2,$3,'family_spend',$4)`,
-          [userId, -amount, bal.currency, `${reference}:circle:${resolved.membership.circle_id}`]
-        )
-        .catch(() => undefined);
-    }
-
+    const spend = await this.ledger.spendForRide(userId, amount, reference);
     return {
-      spent: amount,
-      fromCredit,
-      fromWallet,
-      payerId,
-      viaFamily: resolved.viaFamily,
-      circleId: resolved.membership?.circle_id || null,
+      spent: spend.amount,
+      fromCredit: spend.fromCredit,
+      fromWallet: spend.fromWallet,
+      payerId: spend.payerId,
+      viaFamily: spend.viaFamily,
+      circleId: spend.circleId,
     };
   }
 
@@ -429,6 +390,11 @@ export class AfricaMobilityRailsService {
     sourceChannel?: string;
     countryCode?: string;
     payWithMobilityCredit?: boolean;
+    paymentMethod?: string;
+    paymentMethodId?: string;
+    email?: string;
+    phone?: string;
+    fullName?: string;
     /** Hold ride until share pool dispatches one vehicle. */
     skipAutoAssign?: boolean;
   }) {
@@ -442,7 +408,11 @@ export class AfricaMobilityRailsService {
       vehicleCode: input.vehicleTypeCode,
     });
 
-    if (input.payWithMobilityCredit) {
+    const method = normalizePayMethod(input.paymentMethod, input.payWithMobilityCredit);
+    const chargeNow = !input.skipAutoAssign && input.fareMode !== 'share';
+    const payWallet = chargeNow && method === 'wallet';
+
+    if (payWallet) {
       const fare = Number(
         (quote.options || []).find((o: any) => o.code === (input.vehicleTypeCode || o.code))
           ?.riderFare ??
@@ -499,24 +469,29 @@ export class AfricaMobilityRailsService {
         .catch(() => undefined);
     }
 
-    if (input.payWithMobilityCredit && result.rideId) {
+    if (payWallet && result.rideId) {
       const fare = Number(opt?.riderFare ?? result.estimatedFare ?? 0);
       try {
         const spend = await this.spendMobilityCredit(input.userId, fare, `RIDE-${result.rideId}`);
         await this.db
           .query(
             `UPDATE rides SET
-               payment_method = 'mobility_credit',
+               payment_method = 'wallet',
+               payment_status = 'paid',
                pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
              WHERE id = $1`,
             [
               result.rideId,
               JSON.stringify({
-                paidWithMobilityCredit: true,
+                paidWithWallet: true,
+                paidWithMobilityCredit: Number(spend.fromCredit || 0) > 0,
                 fare,
                 payerId: spend.payerId,
                 viaFamily: spend.viaFamily,
                 circleId: spend.circleId,
+                fromCredit: spend.fromCredit,
+                fromWallet: spend.fromWallet,
+                paymentMethodId: input.paymentMethodId || null,
               }),
             ]
           )
@@ -525,7 +500,7 @@ export class AfricaMobilityRailsService {
         await this.db
           .query(
             `UPDATE rides SET status = 'cancelled',
-               cancellation_reason = 'mobility_credit_failed',
+               cancellation_reason = 'wallet_pay_failed',
                updated_at = NOW()
              WHERE id = $1`,
             [result.rideId]
@@ -533,6 +508,30 @@ export class AfricaMobilityRailsService {
           .catch(() => undefined);
         throw e;
       }
+    }
+
+    let checkout: any = null;
+    if (chargeNow && (method === 'card' || method === 'momo') && result.rideId) {
+      const fare = Number(opt?.riderFare ?? result.estimatedFare ?? 0);
+      checkout = await this.startFareCheckout({
+        userId: input.userId,
+        amount: fare,
+        rideId: result.rideId,
+        method,
+        paymentMethodId: input.paymentMethodId,
+        countryCode: input.countryCode,
+        email: input.email,
+        phone: input.phone,
+        fullName: input.fullName,
+        currency: quote.currency,
+      });
+    } else if (!chargeNow && result.rideId) {
+      await this.db
+        .query(
+          `UPDATE rides SET payment_method = $2, payment_status = 'pending' WHERE id = $1`,
+          [result.rideId, method]
+        )
+        .catch(() => undefined);
     }
 
     await this.logChannelEvent({
@@ -543,13 +542,88 @@ export class AfricaMobilityRailsService {
       payload: {
         fareMode: input.fareMode,
         vehicle: input.vehicleTypeCode,
-        payWithMobilityCredit: Boolean(input.payWithMobilityCredit),
+        paymentMethod: method,
       },
     });
 
     await this.recomputeTrustScore(input.userId).catch(() => undefined);
 
-    return { ...result, quote, corridor: quote.corridor };
+    return {
+      ...result,
+      quote,
+      corridor: quote.corridor,
+      paymentMethod: method,
+      payment: checkout,
+    };
+  }
+
+  private async startFareCheckout(input: {
+    userId: string;
+    amount: number;
+    rideId: string;
+    method: PayMethod;
+    paymentMethodId?: string;
+    countryCode?: string;
+    email?: string;
+    phone?: string;
+    fullName?: string;
+    currency?: string;
+  }) {
+    const fare = Number(input.amount);
+    const user = await this.db.query(
+      `SELECT email, phone,
+              TRIM(CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,''))) AS full_name
+       FROM users WHERE id = $1`,
+      [input.userId]
+    );
+    const profile = user.rows[0] || {};
+    const payment = await this.payments.initializePayment({
+      userId: input.userId,
+      amount: fare,
+      currency: input.currency || 'GHS',
+      paymentType: 'ride',
+      email: input.email || profile.email,
+      fullName: input.fullName || profile.full_name || 'Movr rider',
+      phone: input.phone || profile.phone,
+      countryCode: input.countryCode,
+      metadata: {
+        rideId: input.rideId,
+        channel: input.method,
+        paymentMethodId: input.paymentMethodId || null,
+      },
+    });
+    if (!payment?.success) {
+      await this.db
+        .query(
+          `UPDATE rides SET status = 'cancelled', cancellation_reason = 'gateway_init_failed', updated_at = NOW()
+           WHERE id = $1`,
+          [input.rideId]
+        )
+        .catch(() => undefined);
+      throw new Error(
+        payment?.error ||
+          `Could not start ${input.method === 'momo' ? 'MoMo' : 'card'} payment. Pay with wallet or add a method.`
+      );
+    }
+    await this.db
+      .query(
+        `UPDATE rides SET
+           payment_method = $2,
+           payment_status = 'pending',
+           pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $3::jsonb
+         WHERE id = $1`,
+        [
+          input.rideId,
+          input.method,
+          JSON.stringify({
+            paymentReference: payment.reference,
+            paymentMethodId: input.paymentMethodId || null,
+            awaitingGateway: true,
+          }),
+        ]
+      )
+      .catch(() => undefined);
+    return payment;
   }
 
   async logChannelEvent(input: {
@@ -1093,6 +1167,11 @@ export class AfricaMobilityRailsService {
     dropoffAddress?: string;
     countryCode?: string;
     payWithMobilityCredit?: boolean;
+    paymentMethod?: string;
+    paymentMethodId?: string;
+    email?: string;
+    phone?: string;
+    fullName?: string;
   }) {
     const country = input.countryCode || 'GH';
     const settings = await this.sharePoolSettings();
@@ -1141,7 +1220,7 @@ export class AfricaMobilityRailsService {
       pool = created.rows[0];
     }
 
-    // Hold auto-assign; debit happens at pool dispatch with split fare
+    const method = normalizePayMethod(input.paymentMethod, input.payWithMobilityCredit);
     const booked = await this.book({
       userId: input.userId,
       pickupLat: input.pickupLat,
@@ -1154,8 +1233,12 @@ export class AfricaMobilityRailsService {
       fareMode: 'share',
       sourceChannel: 'app',
       countryCode: country,
-      payWithMobilityCredit: false,
+      paymentMethod: method,
+      payWithMobilityCredit: method === 'wallet',
       skipAutoAssign: true,
+      email: input.email,
+      phone: input.phone,
+      fullName: input.fullName,
     });
 
     const rideId = booked.rideId || booked.id;
@@ -1174,7 +1257,7 @@ export class AfricaMobilityRailsService {
         input.pickupLng,
         input.dropoffLat,
         input.dropoffLng,
-        Boolean(input.payWithMobilityCredit),
+        method === 'wallet',
       ]
     );
 
@@ -1220,7 +1303,7 @@ export class AfricaMobilityRailsService {
 
     const members = await this.db.query(
       `SELECT m.*, r.estimated_fare, r.driver_earnings, r.user_id AS rider_user_id,
-              r.pickup_latitude, r.pickup_longitude
+              r.pickup_latitude, r.pickup_longitude, r.payment_method, r.payment_status
        FROM share_pool_members m
        LEFT JOIN rides r ON r.id = m.ride_id
        WHERE m.pool_id = $1
@@ -1321,7 +1404,10 @@ export class AfricaMobilityRailsService {
 
       await this.matching.assignRideToDriver(m.ride_id, driverId);
 
-      if (m.pay_with_credit && fareShare > 0) {
+      const payWallet =
+        m.pay_with_credit !== false &&
+        normalizePayMethod(m.payment_method, m.pay_with_credit !== false) === 'wallet';
+      if (payWallet && fareShare > 0) {
         try {
           const spend = await this.spendMobilityCredit(
             m.user_id || m.rider_user_id,
@@ -1331,22 +1417,26 @@ export class AfricaMobilityRailsService {
           await this.db
             .query(
               `UPDATE rides SET
-                 payment_method = 'mobility_credit',
+                 payment_method = 'wallet',
+                 payment_status = 'paid',
                  pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $2::jsonb
                WHERE id = $1`,
               [
                 m.ride_id,
                 JSON.stringify({
-                  paidWithMobilityCredit: true,
+                  paidWithWallet: true,
                   fare: fareShare,
                   payerId: spend.payerId,
                   viaFamily: spend.viaFamily,
+                  fromCredit: spend.fromCredit,
+                  fromWallet: spend.fromWallet,
                 }),
               ]
             )
             .catch(() => undefined);
         } catch (e: any) {
-          this.logger.warn(`pool credit fail ${m.ride_id}: ${e?.message || e}`);
+          this.logger.warn(`pool wallet pay fail ${m.ride_id}: ${e?.message || e}`);
+          throw e;
         }
       }
     }

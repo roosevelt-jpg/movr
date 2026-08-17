@@ -234,6 +234,67 @@ customerExtrasRouter.get('/explore', authenticateToken, async (req: AuthRequest,
   }
 });
 
+/** Card, MoMo, or wallet for trips / subscriptions / shop */
+customerExtrasRouter.get('/checkout-methods', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const uid = req.user!.id;
+    const { WalletLedgerService } = require('../services/wallet-ledger.service');
+    const ledger = new WalletLedgerService(db);
+    const bal = await ledger.getSpendable(uid);
+    const rows = await db
+      .query(
+        `SELECT * FROM customer_payment_methods
+         WHERE user_id = $1
+         ORDER BY is_default DESC, created_at DESC`,
+        [uid]
+      )
+      .catch(() => ({ rows: [] as any[] }));
+    const card =
+      rows.rows.find((r: any) => String(r.method_type || '').toLowerCase() === 'card') ||
+      rows.rows.find((r: any) =>
+        ['visa', 'mastercard', 'card'].includes(String(r.brand || r.provider || '').toLowerCase())
+      );
+    const momo =
+      rows.rows.find((r: any) => String(r.method_type || '').toLowerCase() === 'momo') ||
+      rows.rows.find((r: any) =>
+        String(r.provider || r.label || '').toLowerCase().includes('momo')
+      );
+    const fmt = (n: number, c: string) => `${c} ${Number(n || 0).toFixed(2)}`;
+    res.json({
+      status: 'success',
+      data: {
+        walletBalance: bal.walletBalance,
+        mobilityCredit: bal.mobilityCredit,
+        spendable: bal.spendable,
+        currency: bal.currency,
+        options: [
+          {
+            id: 'wallet',
+            label: 'Wallet balance',
+            subtitle: fmt(bal.spendable, bal.currency),
+          },
+          {
+            id: 'card',
+            label: 'Card',
+            subtitle: card?.last_four
+              ? `${card.label || card.brand || 'Card'} •••• ${card.last_four}`
+              : 'Visa / Mastercard',
+            methodId: card?.id || null,
+          },
+          {
+            id: 'momo',
+            label: 'Mobile Money',
+            subtitle: momo?.phone_number || momo?.label || 'MTN / Airtel / Vodafone',
+            methodId: momo?.id || null,
+          },
+        ],
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 /** Saved payment instruments (vault) */
 customerExtrasRouter.get('/payment-instruments', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {

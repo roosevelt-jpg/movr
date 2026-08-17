@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from 'react-native';
 import { spacing, radius } from '@movr/design-system/theme';
 import { formatCurrency } from '@movr/design-system/format';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
@@ -24,6 +25,8 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
 
   useEffect(() => {
     fetch(`${API}/subscriptions/plans`)
@@ -62,11 +65,19 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
       const res = await fetch(`${API}/subscriptions/activate`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ planId: choice.id, paymentMethod: 'wallet' }),
+        body: JSON.stringify({
+          planId: choice.id,
+          paymentMethod: payMethod,
+          paymentMethodId: payMethodId,
+        }),
       });
       const json = await res.json();
       if (!res.ok || json.status === 'error') {
         setMsg(json.message || 'Activation failed');
+      } else if (json.data?.requiresPayment || json.data?.payment?.paymentLink) {
+        const link = json.data?.payment?.paymentLink || json.data?.payment?.authorization_url;
+        if (link) Linking.openURL(link).catch(() => undefined);
+        setMsg(payMethod === 'momo' ? 'Complete MoMo payment to activate' : 'Complete card payment to activate');
       } else {
         setMsg('Subscribed — you keep 100% of every fare');
         setTrial({
@@ -183,6 +194,14 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
         </View>
       ) : null}
 
+      <PayMethodChoice
+        value={payMethod}
+        onChange={(id, o) => {
+          setPayMethod(id);
+          setPayMethodId(o?.methodId || undefined);
+        }}
+      />
+
       {plans.map((p) => {
         const on = String(p.id) === selected;
         const features: string[] = Array.isArray(p.features)
@@ -236,7 +255,7 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
 
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
       <Text style={styles.foot}>Cancel anytime from your profile settings.</Text>
-      <Text style={styles.footMuted}>No hidden fees. Pay with MoMo or card.</Text>
+      <Text style={styles.footMuted}>Pay with wallet, saved card, or MoMo.</Text>
     </ScrollView>
   );
 }

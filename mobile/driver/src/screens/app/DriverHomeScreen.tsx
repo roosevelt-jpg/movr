@@ -22,6 +22,8 @@ export default function DriverHomeScreen({
   onEarnings,
   onWithdraw,
   onAccount,
+  onSubscription,
+  onWallet,
   onSignOut,
 }: {
   onOffer?: (offerId: string) => void;
@@ -31,6 +33,7 @@ export default function DriverHomeScreen({
   onVehicle?: () => void;
   onPerformance?: () => void;
   onSubscription?: () => void;
+  onWallet?: () => void;
   onAccount?: () => void;
   onSignOut?: () => void;
 }) {
@@ -149,6 +152,16 @@ export default function DriverHomeScreen({
       {onWithdraw ? (
         <Pressable onPress={onWithdraw}>
           <Text style={styles.withdraw}>Withdraw →</Text>
+        </Pressable>
+      ) : null}
+      {onWallet ? (
+        <Pressable onPress={onWallet}>
+          <Text style={styles.withdraw}>Top up wallet →</Text>
+        </Pressable>
+      ) : null}
+      {onSubscription ? (
+        <Pressable onPress={onSubscription}>
+          <Text style={styles.withdraw}>Driver plans →</Text>
         </Pressable>
       ) : null}
 

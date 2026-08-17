@@ -11,6 +11,8 @@ export interface InitializePaymentInput {
   metadata?: Record<string, unknown>;
   redirectUrl?: string;
   reference?: string;
+  /** Paystack checkout filter: card and/or mobile_money */
+  channels?: string[];
 }
 
 export interface InitializePaymentResult {

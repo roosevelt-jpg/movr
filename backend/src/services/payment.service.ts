@@ -205,10 +205,19 @@ export class PaymentService {
     countryCode?: string;
     metadata?: Record<string, unknown>;
     redirectUrl?: string;
+    channels?: string[];
   }) {
     const provider = await this.getProvider(data.countryCode);
     const currency = (data.currency || 'GHS').toUpperCase();
     this.validateCurrency(provider.name, currency);
+    const channel = String(data.metadata?.channel || data.channels?.[0] || '').toLowerCase();
+    const channels =
+      data.channels ||
+      (channel === 'momo' || channel === 'mobile_money'
+        ? ['mobile_money']
+        : channel === 'card'
+          ? ['card']
+          : undefined);
 
     const input: InitializePaymentInput = {
       amount: data.amount,
@@ -217,6 +226,7 @@ export class PaymentService {
       fullName: data.fullName,
       phone: data.phone,
       redirectUrl: data.redirectUrl,
+      channels,
       metadata: {
         paymentType: data.paymentType,
         userId: data.userId,
@@ -330,7 +340,6 @@ export class PaymentService {
     const wantsMobility =
       paymentType === 'mobility' ||
       metadata?.mobility === true ||
-      metadata?.source === 'momo' ||
       metadata?.creditType === 'mobility';
 
     if (wantsMobility) {
@@ -364,6 +373,35 @@ export class PaymentService {
       await this.creditWallet(userId, Number(amount));
     } else if (paymentType === 'subscription') {
       await this.activateSubscription(userId, metadata);
+    } else if (paymentType === 'ride' && metadata?.rideId) {
+      await this.db
+        .query(
+          `UPDATE rides SET
+             payment_method = COALESCE($2, payment_method, 'card'),
+             payment_status = 'paid',
+             pricing_meta = COALESCE(pricing_meta, '{}'::jsonb) || $3::jsonb,
+             updated_at = NOW()
+           WHERE id = $1`,
+          [
+            metadata.rideId,
+            metadata.channel || 'card',
+            JSON.stringify({
+              paidWithGateway: true,
+              fare: Number(amount),
+              paymentReference: reference,
+            }),
+          ]
+        )
+        .catch(() => undefined);
+    } else if (paymentType === 'marketplace' && metadata?.orderId) {
+      await this.db
+        .query(
+          `UPDATE marketplace_orders
+           SET status = 'preparing', payment_reference = $2, updated_at = NOW()
+           WHERE id = $1`,
+          [metadata.orderId, reference]
+        )
+        .catch(() => undefined);
     }
   }
 

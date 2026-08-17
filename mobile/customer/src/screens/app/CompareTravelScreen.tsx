@@ -8,10 +8,12 @@ import {
   Image,
   ActivityIndicator,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { formatCurrency } from '@movr/design-system/format';
 import { getAppLocale } from '../../services/locale';
 import { getCurrentGps } from '../../lib/location';
+import PayMethodChoice from '../../components/PayMethodChoice';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const WEB_ORIGIN = (API || '').replace(/\/api\/v1\/?$/, '') || 'http://localhost:5180';
@@ -74,6 +76,8 @@ export default function CompareTravelScreen({
   const [selected, setSelected] = useState<string | null>(null);
   const [currency, setCurrency] = useState(locale.currencyCode || 'GHS');
   const [message, setMessage] = useState('');
+  const [payMethod, setPayMethod] = useState('wallet');
+  const [payMethodId, setPayMethodId] = useState<string | undefined>();
   const countryCode = (cms.countryCode || locale.countryCode || 'GH').toUpperCase();
 
   useEffect(() => {
@@ -176,6 +180,9 @@ export default function CompareTravelScreen({
               pickupAddress: pickup,
               dropoffAddress: dropoff,
               countryCode,
+              paymentMethod: payMethod,
+              paymentMethodId: payMethodId,
+              payWithMobilityCredit: payMethod === 'wallet',
             }
           : {
               pickupLat: pickupCoords.lat,
@@ -188,6 +195,9 @@ export default function CompareTravelScreen({
               fareMode: 'now',
               countryCode,
               sourceChannel: 'app',
+              paymentMethod: payMethod,
+              paymentMethodId: payMethodId,
+              payWithMobilityCredit: payMethod === 'wallet',
             };
       const res = await fetch(`${API}${path}`, {
         method: 'POST',
@@ -196,6 +206,8 @@ export default function CompareTravelScreen({
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || 'Booking failed');
+      const payLink = j.data?.payment?.paymentLink || j.data?.payment?.authorization_url;
+      if (payLink) Linking.openURL(payLink).catch(() => undefined);
       const rideId =
         j.data?.rideId || j.data?.id || j.data?.booking?.rideId || j.data?.booking?.id;
       setMessage(j.data?.confirmationMessage || 'Ride requested');
@@ -302,6 +314,14 @@ export default function CompareTravelScreen({
               <Text style={styles.optPrice}>{formatCurrency(o.price, currency)}</Text>
             </Pressable>
           ))}
+          <PayMethodChoice
+            dark={false}
+            value={payMethod}
+            onChange={(id, o) => {
+              setPayMethod(id);
+              setPayMethodId(o?.methodId || undefined);
+            }}
+          />
           <Pressable style={styles.book} onPress={confirm}>
             <Text style={styles.ctaText}>
               Request {selectedOpt?.name || 'ride'} ·{' '}

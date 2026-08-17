@@ -10,6 +10,8 @@ import WithdrawEarningsScreen from './WithdrawEarningsScreen';
 import DestinationPrefScreen from './DestinationPrefScreen';
 import EarningsGuaranteeScreen from './EarningsGuaranteeScreen';
 import DriverAccountScreen from './DriverAccountScreen';
+import SubscriptionScreen from './SubscriptionScreen';
+import WalletTopUpScreen from './WalletTopUpScreen';
 
 /**
  * Driver dashboard host — Home map, offer, nav, earnings, destination, guarantees.
@@ -33,6 +35,8 @@ export default function DashboardScreen(props: {
     | 'destination'
     | 'guarantee'
     | 'account'
+    | 'plans'
+    | 'wallet'
   >('home');
   const [offerId, setOfferId] = useState<string | undefined>();
   const [rideId, setRideId] = useState<string | undefined>();
@@ -116,6 +120,22 @@ export default function DashboardScreen(props: {
     );
   }
 
+  if (mode === 'plans') {
+    return (
+      <View style={styles.root}>
+        <SubscriptionScreen onBack={() => setMode('earnings')} />
+      </View>
+    );
+  }
+
+  if (mode === 'wallet') {
+    return (
+      <View style={styles.root}>
+        <WalletTopUpScreen onBack={() => setMode('home')} onDone={() => setMode('home')} />
+      </View>
+    );
+  }
+
   if (mode === 'earnings') {
     return (
       <View style={styles.root}>
@@ -127,7 +147,7 @@ export default function DashboardScreen(props: {
           onDemand={props.onDemand}
           onVehicle={props.onVehicle}
           onPerformance={props.onPerformance}
-          onSubscription={props.onSubscription}
+          onSubscription={() => setMode('plans')}
         />
       </View>
     );
@@ -139,6 +159,8 @@ export default function DashboardScreen(props: {
       onWithdraw={() => setMode('withdraw')}
       onEarnings={() => setMode('earnings')}
       onAccount={() => setMode('account')}
+      onSubscription={() => setMode('plans')}
+      onWallet={() => setMode('wallet')}
       onSignOut={props.onSignOut}
       onOffer={(id) => {
         setOfferId(id);

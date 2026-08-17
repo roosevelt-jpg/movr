@@ -3,6 +3,7 @@ import { PaymentService } from './payment.service';
 import { DriverPerformanceService } from './driver-performance.service';
 import { StakingService } from './staking.service';
 import { TokenService } from './token.service';
+import { WalletLedgerService, normalizePayMethod } from './wallet-ledger.service';
 
 export type BillingInterval = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
@@ -10,6 +11,7 @@ export class SubscriptionService {
   private performance: DriverPerformanceService;
   private staking: StakingService;
   private tokens: TokenService;
+  private ledger: WalletLedgerService;
 
   constructor(
     private db: DatabaseService,
@@ -18,6 +20,7 @@ export class SubscriptionService {
     this.performance = new DriverPerformanceService(db);
     this.staking = new StakingService(db);
     this.tokens = new TokenService(db);
+    this.ledger = new WalletLedgerService(db);
   }
 
   /** Normalize plan interval / id hint → billing cadence. */
@@ -98,17 +101,20 @@ export class SubscriptionService {
     userId: string,
     data: {
       planId: string;
-      paymentMethod?: 'fiat' | 'dvt' | 'wallet';
+      paymentMethod?: 'fiat' | 'dvt' | 'wallet' | 'card' | 'momo' | 'mobile_money';
+      paymentMethodId?: string;
       email: string;
       fullName: string;
+      phone?: string;
       countryCode?: string;
     }
   ) {
-    const method = data.paymentMethod === 'dvt' ? 'dvt' : 'fiat';
-    const quote = await this.quote(userId, data.planId, method);
+    const requestMethod = String(data.paymentMethod || 'wallet').toLowerCase();
+    const method = requestMethod === 'dvt' ? 'dvt' : normalizePayMethod(requestMethod);
+    const quote = await this.quote(userId, data.planId, requestMethod === 'dvt' ? 'dvt' : 'fiat');
 
     let payment: any = null;
-    if (method === 'dvt') {
+    if (requestMethod === 'dvt') {
       if (!this.tokens.isEnabled()) {
         throw new Error('DVT payments disabled (TOKEN_SYSTEM_ENABLED)');
       }
@@ -116,28 +122,42 @@ export class SubscriptionService {
       const dvtNeeded = quote.finalPrice * Number(rate.dvt_per_fiat_unit);
       await this.tokens.redeem(userId, dvtNeeded);
       payment = { method: 'dvt', dvtSpent: dvtNeeded, fiatEquivalent: quote.finalPrice };
-    } else {
-      // Wallet (fiat) — debit driver wallet balance immediately
-      const wallet = await this.db.query(
-        `SELECT id, balance_fiat FROM wallets WHERE user_id = $1 LIMIT 1`,
-        [userId]
-      );
-      let walletId = wallet.rows[0]?.id;
-      if (!walletId) {
-        const created = await this.db.query(
-          `INSERT INTO wallets (user_id, balance_fiat, currency) VALUES ($1, 0, 'GHS') RETURNING id, balance_fiat`,
-          [userId]
+    } else if (method === 'card' || method === 'momo') {
+      const checkout = await this.payments.initializePayment({
+        userId,
+        amount: quote.finalPrice,
+        currency: quote.plan.currency || 'GHS',
+        paymentType: 'subscription',
+        email: data.email,
+        fullName: data.fullName || 'MOVR',
+        phone: data.phone,
+        countryCode: data.countryCode || 'GH',
+        metadata: {
+          planId: data.planId,
+          channel: method,
+          paymentMethodId: data.paymentMethodId || null,
+          amount: quote.finalPrice,
+        },
+      });
+      if (!checkout?.success) {
+        throw new Error(
+          checkout?.error ||
+            `Could not start ${method === 'momo' ? 'MoMo' : 'card'} payment. Try wallet balance instead.`
         );
-        walletId = created.rows[0].id;
       }
-      const bal = Number(wallet.rows[0]?.balance_fiat ?? 0);
-      if (bal < quote.finalPrice) {
-        throw new Error(`Insufficient wallet balance (need GH₵${quote.finalPrice.toFixed(2)})`);
-      }
-      await this.db.query(
-        `UPDATE wallets SET balance_fiat = balance_fiat - $1, last_updated = NOW() WHERE id = $2`,
-        [quote.finalPrice, walletId]
-      );
+      return {
+        requiresPayment: true,
+        payment: checkout,
+        quote,
+        subscription: null,
+      };
+    } else {
+      await this.ledger.debitFiat(userId, quote.finalPrice, {
+        type: 'subscription',
+        reference: `SUB-${data.planId}-${Date.now()}`,
+        title: 'Plan subscription',
+        icon: 'plan',
+      });
       payment = { method: 'wallet', amount: quote.finalPrice, currency: quote.plan.currency || 'GHS' };
     }
 
@@ -177,7 +197,7 @@ export class SubscriptionService {
         quote.discountReason,
         quote.listPrice,
         quote.finalPrice,
-        method,
+        requestMethod === 'dvt' ? 'dvt' : 'fiat',
         status,
       ]
     );
