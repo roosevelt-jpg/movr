@@ -93,7 +93,7 @@ export class VehicleCatalogService {
          CASE WHEN name_norm = $1 THEN 0 WHEN name_norm LIKE $1 || '%' THEN 1 ELSE 2 END,
          length(name), name
        LIMIT $2`,
-      [query, Math.min(50, Math.max(1, limit))]
+      [query, Math.min(120, Math.max(1, limit))]
     );
     return rows.rows;
   }
@@ -378,14 +378,72 @@ export class VehicleCatalogService {
 
   mapBodyToVehicleType(body?: string | null): string {
     const b = String(body || '').toLowerCase();
-    if (/motor|bike|cycle/.test(b)) return 'Motorcycle';
-    if (/tricycle|keke|tuk/.test(b)) return 'Tricycle';
-    if (/pickup|truck|cargo/.test(b)) return 'Pickup';
-    if (/van|minivan|bus/.test(b)) return 'Van';
-    if (/suv|crossover|mpv|utility/.test(b)) return 'SUV';
+    if (/okada|boda|kabaza|moto-?taxi|piki|achaba|zémi|olem?yia|phen-?phen|motor|bike|cycle/.test(b))
+      return 'Motorcycle';
+    if (/keke|pragia|tricycle|tuk/.test(b)) return 'Tricycle';
+    if (/bakkie|pickup|truck|cargo|ute/.test(b)) return 'Pickup';
+    if (/danfo|trotro|matatu|dala|gbaka|sotrama|kombi|candongueiro|minivan|bus|van/.test(b))
+      return 'Van';
+    if (/suv|crossover|mpv|utility|jeep/.test(b)) return 'SUV';
     if (/hatch/.test(b)) return 'Hatchback';
-    if (/coupe|convertible|roadster/.test(b)) return 'Luxury';
-    if (/sedan|saloon|passenger/.test(b)) return 'Sedan';
+    if (/coupe|convertible|roadster|luxury|premium|executive/.test(b)) return 'Luxury';
+    if (/sedan|saloon|salon|passenger/.test(b)) return 'Sedan';
     return 'Sedan';
+  }
+
+  /**
+   * Pan-Africa listing categories for every market.
+   * Local display names win when the driver’s country has one; every African
+   * name (Okada, Boda, Bakkie, Danfo, Trotro, Matatu, …) stays selectable.
+   */
+  async listListingOptions(countryCode = 'GH') {
+    const cc = String(countryCode || 'GH').toUpperCase().slice(0, 8);
+    const rows = await this.db.query(
+      `WITH ranked AS (
+         SELECT DISTINCT ON (code)
+           code,
+           display_name,
+           category,
+           body_style,
+           vehicle_type_code,
+           aliases,
+           sort_order,
+           country_code
+         FROM vehicle_listing_names
+         WHERE is_active
+           AND country_code IN ($1, '*')
+         ORDER BY
+           code,
+           CASE WHEN country_code = $1 THEN 0 ELSE 1 END,
+           sort_order
+       )
+       SELECT
+         code,
+         display_name,
+         category,
+         body_style,
+         vehicle_type_code,
+         aliases,
+         sort_order,
+         country_code,
+         (country_code = $1) AS is_local
+       FROM ranked
+       ORDER BY
+         CASE WHEN country_code = $1 THEN 0 ELSE 1 END,
+         sort_order,
+         display_name`,
+      [cc]
+    ).catch(() => ({ rows: [] as any[] }));
+
+    return (rows.rows || []).map((r: any) => ({
+      code: r.code as string,
+      displayName: r.display_name as string,
+      category: r.category as string,
+      bodyStyle: r.body_style as string,
+      vehicleTypeCode: (r.vehicle_type_code || r.code) as string,
+      aliases: Array.isArray(r.aliases) ? r.aliases : [],
+      sortOrder: Number(r.sort_order) || 100,
+      isLocal: Boolean(r.is_local),
+    }));
   }
 }

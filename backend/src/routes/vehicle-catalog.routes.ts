@@ -78,6 +78,27 @@ publicVehicleCatalogRouter.get('/vehicles/suggest', async (req: Request, res: Re
 });
 
 /**
+ * Country-aware vehicle category names for driver / rental listing dropdowns.
+ * e.g. NG → Okada, Keke, Danfo; UG → Boda boda, Matatu; ZA → Bakkie, Kombi.
+ */
+publicVehicleCatalogRouter.get('/vehicles/listing-options', async (req: Request, res: Response) => {
+  try {
+    const country = String(req.query.country || req.query.region || 'GH').toUpperCase();
+    const data = await catalog.listListingOptions(country);
+    res.json({
+      status: 'success',
+      data: {
+        country,
+        options: data,
+        allowCustom: true,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+/**
  * Decode VIN / chassis number via NHTSA global automobile database.
  * Autocompletes make, model, year, body, fuel, transmission.
  */

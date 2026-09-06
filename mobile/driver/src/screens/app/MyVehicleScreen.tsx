@@ -70,6 +70,11 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [years, setYears] = useState<number[]>([]);
   const [decoding, setDecoding] = useState(false);
+  const [listingOptions, setListingOptions] = useState<
+    { code: string; displayName: string; bodyStyle: string }[]
+  >([]);
+  const [customType, setCustomType] = useState(false);
+  const [countryCode, setCountryCode] = useState('GH');
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -108,7 +113,38 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
       })
       .catch(() => setVehicle(EMPTY))
       .finally(() => setLoaded(true));
+
+    fetch(`${API}/kyc/me`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((j) => {
+        const cc = String(
+          j?.data?.country || j?.data?.user?.country || j?.country || ''
+        ).toUpperCase();
+        if (cc.length === 2) setCountryCode(cc);
+      })
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    fetch(`${API}/public/vehicles/listing-options?country=${encodeURIComponent(countryCode)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const opts = j?.data?.options || [];
+        setListingOptions(opts);
+      })
+      .catch(() => setListingOptions([]));
+  }, [countryCode]);
+
+  useEffect(() => {
+    if (!vehicle.type || !listingOptions.length) return;
+    const hit = listingOptions.find(
+      (o) =>
+        o.displayName === vehicle.type ||
+        o.code === vehicle.type ||
+        o.bodyStyle === vehicle.type
+    );
+    if (!hit) setCustomType(true);
+  }, [listingOptions, vehicle.type]);
 
   useEffect(() => {
     if (!vehicle.make) {
@@ -260,7 +296,7 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
       ) : null}
       <Text style={styles.title}>My vehicle</Text>
       <Text style={styles.sub}>
-        Make, model, year & chassis autofill from the global automobile database
+        Choose make, model, and the local category name for your market (Okada, Boda, Bakkie…)
       </Text>
 
       {!loaded ? (
@@ -357,14 +393,72 @@ export default function MyVehicleScreen({ onBack }: { onBack?: () => void }) {
                 placeholderTextColor={colors.textSecondary}
               />
 
-              <Text style={styles.fieldLabel}>Vehicle type</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={vehicle.type}
-                onChangeText={(t) => setVehicle((v) => ({ ...v, type: t }))}
-                placeholder="Sedan / SUV"
-                placeholderTextColor={colors.textSecondary}
-              />
+              <Text style={styles.fieldLabel}>Vehicle category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                {listingOptions.map((o) => {
+                  const on =
+                    !customType &&
+                    (vehicle.type === o.displayName ||
+                      vehicle.type === o.code ||
+                      vehicle.type === o.bodyStyle);
+                  return (
+                    <Pressable
+                      key={o.code}
+                      style={[styles.chip, on && styles.chipOn]}
+                      onPress={() => {
+                        setCustomType(false);
+                        setVehicle((v) => ({
+                          ...v,
+                          type: o.displayName,
+                        }));
+                      }}
+                    >
+                      <Text style={styles.chipText}>{o.displayName}</Text>
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  style={[styles.chip, customType && styles.chipOn]}
+                  onPress={() => setCustomType(true)}
+                >
+                  <Text style={styles.chipText}>Other</Text>
+                </Pressable>
+              </ScrollView>
+              {customType ? (
+                <TextInput
+                  style={styles.fieldInput}
+                  value={vehicle.type}
+                  onChangeText={(t) => setVehicle((v) => ({ ...v, type: t }))}
+                  placeholder="Type category if not listed"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : null}
+
+              <Text style={styles.fieldLabel}>Transmission</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {['Automatic', 'Manual', 'CVT'].map((t) => (
+                  <Pressable
+                    key={t}
+                    style={[styles.chip, vehicle.transmission === t && styles.chipOn]}
+                    onPress={() => setVehicle((v) => ({ ...v, transmission: t }))}
+                  >
+                    <Text style={styles.chipText}>{t}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.fieldLabel}>Fuel</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG'].map((t) => (
+                  <Pressable
+                    key={t}
+                    style={[styles.chip, vehicle.fuelType === t && styles.chipOn]}
+                    onPress={() => setVehicle((v) => ({ ...v, fuelType: t }))}
+                  >
+                    <Text style={styles.chipText}>{t}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
           ) : (
             <>

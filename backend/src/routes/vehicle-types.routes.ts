@@ -24,6 +24,23 @@ publicVehicleTypesRouter.get('/', async (req: any, res: Response) => {
 
     const types = await db.query(
       `SELECT vt.*,
+         COALESCE(
+           (
+             SELECT n.display_name FROM vehicle_listing_names n
+             WHERE n.is_active AND n.country_code = $1
+               AND (n.vehicle_type_code = vt.code OR n.code = vt.code)
+             ORDER BY CASE WHEN n.vehicle_type_code = vt.code THEN 0 ELSE 1 END
+             LIMIT 1
+           ),
+           (
+             SELECT n.display_name FROM vehicle_listing_names n
+             WHERE n.is_active AND n.country_code = '*'
+               AND (n.vehicle_type_code = vt.code OR n.code = vt.code)
+             ORDER BY CASE WHEN n.vehicle_type_code = vt.code THEN 0 ELSE 1 END
+             LIMIT 1
+           ),
+           vt.name
+         ) AS display_name,
          (
            SELECT json_build_object(
              'base_fare', p.base_fare,

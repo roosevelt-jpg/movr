@@ -6,6 +6,7 @@ import VehicleCatalogFields, {
 } from '../../components/forms/VehicleCatalogFields';
 import { TextField, fieldClassName, FormField } from '../../components/forms';
 import { useAuthStore } from '../../store/auth.store';
+import { useLocaleStore } from '../../store/locale.store';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -38,6 +39,7 @@ const EMPTY: VehicleCatalogValue = {
 /** Rental owner — list a car using the global automobile catalog. */
 export default function RentalOwnerListPage() {
   const token = useAuthStore((s) => s.token);
+  const countryCode = useLocaleStore((s) => s.country) || 'GH';
   const [form, setForm] = useState<VehicleCatalogValue>(EMPTY);
   const [dailyRate, setDailyRate] = useState('');
   const [seats, setSeats] = useState('5');
@@ -119,7 +121,7 @@ export default function RentalOwnerListPage() {
         <div>
           <h1 className="text-2xl font-bold">List your car</h1>
           <p className="text-text-secondary text-sm mt-1">
-            Make, model, year, and chassis autofill from the global automobile database
+            Pick make, model, and the local vehicle category for your market
           </p>
         </div>
         <Link to="/rentals" className="text-sm text-text-secondary hover:underline">
@@ -128,7 +130,7 @@ export default function RentalOwnerListPage() {
       </div>
 
       <form onSubmit={submit} className="space-y-6 rounded-2xl border border-black/10 p-5 sm:p-6">
-        <VehicleCatalogFields value={form} onChange={setForm} />
+        <VehicleCatalogFields value={form} onChange={setForm} countryCode={countryCode} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TextField

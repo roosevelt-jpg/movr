@@ -27,7 +27,18 @@ type Props = {
   onChange: (next: VehicleCatalogValue) => void;
   /** Show plate / color / type fields (driver + owner). */
   showExtras?: boolean;
+  /** ISO country for local category names (Okada, Boda, Bakkie…). */
+  countryCode?: string;
   className?: string;
+};
+
+type ListingOption = {
+  code: string;
+  displayName: string;
+  category: string;
+  bodyStyle: string;
+  vehicleTypeCode: string;
+  aliases?: string[];
 };
 
 type SuggestRow = {
@@ -42,12 +53,13 @@ type SuggestRow = {
 
 /**
  * Global automobile catalog autocomplete — make, model, year, chassis/VIN decode.
- * Backed by GET /public/vehicles/* (NHTSA + local cache).
+ * Vehicle type uses country-aware local names (Okada / Boda / Bakkie / Trotro…).
  */
 export default function VehicleCatalogFields({
   value,
   onChange,
   showExtras = true,
+  countryCode = 'GH',
   className = '',
 }: Props) {
   const [makeQ, setMakeQ] = useState(value.make || '');
@@ -59,6 +71,8 @@ export default function VehicleCatalogFields({
   const [years, setYears] = useState<number[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestRow[]>([]);
+  const [listingOptions, setListingOptions] = useState<ListingOption[]>([]);
+  const [customType, setCustomType] = useState(false);
   const [vinMsg, setVinMsg] = useState('');
   const [decoding, setDecoding] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,11 +83,35 @@ export default function VehicleCatalogFields({
   }, [value.make, value.model]);
 
   useEffect(() => {
-    fetch(`${API}/public/vehicles/makes?limit=30`)
+    fetch(`${API}/public/vehicles/makes?limit=80`)
       .then((r) => r.json())
       .then((j) => setMakes(j.data || []))
       .catch(() => setMakes([]));
   }, []);
+
+  useEffect(() => {
+    const cc = (countryCode || 'GH').toUpperCase();
+    fetch(`${API}/public/vehicles/listing-options?country=${encodeURIComponent(cc)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const opts: ListingOption[] = j?.data?.options || [];
+        setListingOptions(opts);
+        const current = String(value.vehicleType || value.bodyStyle || '');
+        if (
+          current &&
+          !opts.some(
+            (o) =>
+              o.displayName === current ||
+              o.code === current ||
+              o.bodyStyle === current ||
+              o.vehicleTypeCode === current
+          )
+        ) {
+          setCustomType(true);
+        }
+      })
+      .catch(() => setListingOptions([]));
+  }, [countryCode]);
 
   useEffect(() => {
     if (!value.make) {
@@ -81,7 +119,7 @@ export default function VehicleCatalogFields({
       setYears([]);
       return;
     }
-    const q = new URLSearchParams({ make: value.make, limit: '50' });
+    const q = new URLSearchParams({ make: value.make, limit: '80' });
     if (value.year) q.set('year', String(value.year));
     fetch(`${API}/public/vehicles/models?${q}`)
       .then((r) => r.json())
@@ -118,12 +156,40 @@ export default function VehicleCatalogFields({
       makeId: s.makeId,
       modelId: s.modelId,
       bodyStyle: s.bodyStyle || value.bodyStyle,
-      vehicleType: s.bodyStyle || value.vehicleType,
+      vehicleType: value.vehicleType || s.bodyStyle || value.vehicleType,
     });
     setMakeQ(s.make);
     setModelQ(s.model || '');
     setSuggestOpen(false);
   };
+
+  const selectListingOption = (code: string) => {
+    if (code === '__other__') {
+      setCustomType(true);
+      return;
+    }
+    setCustomType(false);
+    const hit = listingOptions.find((o) => o.code === code);
+    if (!hit) return;
+    onChange({
+      ...value,
+      vehicleType: hit.displayName,
+      bodyStyle: hit.bodyStyle,
+    });
+  };
+
+  const selectedListingCode = (() => {
+    if (customType) return '__other__';
+    const current = String(value.vehicleType || value.bodyStyle || '');
+    const hit = listingOptions.find(
+      (o) =>
+        o.displayName === current ||
+        o.code === current ||
+        o.bodyStyle === current ||
+        o.vehicleTypeCode === current
+    );
+    return hit?.code || '';
+  })();
 
   const decodeVin = async () => {
     const vin = (value.chassisNumber || value.vin || '').trim();
@@ -151,7 +217,7 @@ export default function VehicleCatalogFields({
         modelId: d.modelId || value.modelId,
         year: d.year || value.year,
         bodyStyle: d.bodyStyle || value.bodyStyle,
-        vehicleType: d.vehicleTypeHint || value.vehicleType,
+        vehicleType: value.vehicleType || d.vehicleTypeHint || value.vehicleType,
         transmission: d.transmission || value.transmission,
         fuelType: d.fuelType || value.fuelType,
         vin: d.vin || vin,
@@ -175,7 +241,7 @@ export default function VehicleCatalogFields({
     <div className={`space-y-4 ${className}`}>
       <FormField
         label="Search make & model"
-        hint="Type to search the global automobile database"
+        hint="Pick from the list when you can — type only if your vehicle is missing"
       >
         <div className="relative">
           <input
@@ -190,7 +256,7 @@ export default function VehicleCatalogFields({
             }}
             onFocus={() => searchSuggest(makeQ || '')}
             onBlur={() => setTimeout(() => setSuggestOpen(false), 180)}
-            placeholder="e.g. Toyota Corolla"
+            placeholder="e.g. Toyota Corolla or Bajaj Boxer"
             autoComplete="off"
           />
           {suggestOpen && suggestions.length > 0 ? (
@@ -261,7 +327,7 @@ export default function VehicleCatalogFields({
                 model: name,
                 modelId: hit?.id || null,
                 bodyStyle: hit?.bodyStyle || value.bodyStyle,
-                vehicleType: hit?.bodyStyle || value.vehicleType,
+                vehicleType: value.vehicleType || hit?.bodyStyle || value.vehicleType,
               });
               setModelQ(name);
             }}
@@ -352,42 +418,69 @@ export default function VehicleCatalogFields({
             onChange={(e) => onChange({ ...value, plateNumber: e.target.value })}
             placeholder="GR-1234-26"
           />
-          <FormField label="Vehicle type">
+          <FormField
+            label="Vehicle category"
+            hint="Local names for your market — pick from the list"
+          >
             <select
               className={fieldClassName}
-              value={value.vehicleType || value.bodyStyle || ''}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  vehicleType: e.target.value,
-                  bodyStyle: e.target.value,
-                })
-              }
+              value={selectedListingCode}
+              onChange={(e) => selectListingOption(e.target.value)}
             >
-              <option value="">Auto from catalog</option>
-              {['Sedan', 'SUV', 'Hatchback', 'Pickup', 'Van', 'Luxury', 'Motorcycle', 'Tricycle'].map(
-                (t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                )
-              )}
+              <option value="">Select category</option>
+              {listingOptions.map((o) => (
+                <option key={o.code} value={o.code}>
+                  {o.displayName}
+                </option>
+              ))}
+              <option value="__other__">Other (type your own)</option>
+            </select>
+            {customType ? (
+              <input
+                className={`${fieldClassName} mt-2`}
+                value={value.vehicleType || value.bodyStyle || ''}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    vehicleType: e.target.value,
+                    bodyStyle: e.target.value,
+                  })
+                }
+                placeholder="Type category if not listed"
+              />
+            ) : null}
+          </FormField>
+          <FormField label="Transmission">
+            <select
+              className={fieldClassName}
+              value={value.transmission || ''}
+              onChange={(e) => onChange({ ...value, transmission: e.target.value })}
+            >
+              <option value="">Select</option>
+              {['Automatic', 'Manual', 'CVT'].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
             </select>
           </FormField>
-          <TextField
-            label="Transmission"
-            value={value.transmission || ''}
-            onChange={(e) => onChange({ ...value, transmission: e.target.value })}
-            placeholder="Auto / Manual"
-          />
-          <TextField
-            label="Fuel"
-            value={value.fuelType || ''}
-            onChange={(e) => onChange({ ...value, fuelType: e.target.value })}
-            placeholder="Petrol / Diesel / Electric"
-          />
+          <FormField label="Fuel">
+            <select
+              className={fieldClassName}
+              value={value.fuelType || ''}
+              onChange={(e) => onChange({ ...value, fuelType: e.target.value })}
+            >
+              <option value="">Select</option>
+              {['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG', 'LPG'].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </FormField>
         </div>
       ) : null}
     </div>
   );
 }
+
