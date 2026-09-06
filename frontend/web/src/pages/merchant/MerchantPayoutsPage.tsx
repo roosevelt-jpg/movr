@@ -45,7 +45,13 @@ export default function MerchantPayoutsPage() {
       axios.get(`${API}/merchant/earnings/summary`, { headers: headers() }).catch(() => null),
       axios.get(`${API}/merchant/payouts`, { headers: headers() }).catch(() => null),
       axios.get(`${API}/wallet/portfolio`, { headers: headers() }).catch(() => null),
-      axios.get(`${API}/subscriptions/plans`).catch(() => null),
+      axios.get(
+        `${API}/subscriptions/plans?audience=merchant${
+          typeof localStorage !== 'undefined' && localStorage.getItem('movr_country')
+            ? `&country=${encodeURIComponent(localStorage.getItem('movr_country') || '')}`
+            : ''
+        }`
+      ).catch(() => null),
     ]).then(([s, p, w, plansRes]) => {
       const d = s?.data?.data;
       if (d) {
@@ -275,7 +281,11 @@ export default function MerchantPayoutsPage() {
                   res.data?.data?.payment?.paymentLink || res.data?.data?.payment?.authorization_url;
                 if (link) window.open(link, '_blank');
                 toast.success(
-                  link ? 'Complete card or MoMo payment' : 'Plan paid from wallet'
+                  link
+                    ? payMethod === 'momo'
+                      ? 'Complete Flutterwave MoMo to renew'
+                      : 'Complete Flutterwave card payment'
+                    : 'Plan paid from wallet'
                 );
                 load();
               } catch (err: any) {

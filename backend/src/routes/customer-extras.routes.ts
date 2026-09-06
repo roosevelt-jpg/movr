@@ -281,7 +281,10 @@ customerExtrasRouter.get('/checkout-methods', authenticateToken, async (req: Aut
       {
         id: 'momo',
         label: 'Mobile Money',
-        subtitle: momo?.phone_number || momo?.label || 'MTN / Airtel / Vodafone',
+        subtitle:
+          momo?.phone_number ||
+          momo?.label ||
+          'Flutterwave MoMo · MTN / Airtel / Vodafone',
         methodId: momo?.id || null,
       },
       {
@@ -289,7 +292,7 @@ customerExtrasRouter.get('/checkout-methods', authenticateToken, async (req: Aut
         label: 'Card',
         subtitle: card?.last_four
           ? `${card.label || card.brand || 'Card'} •••• ${card.last_four}`
-          : 'Visa / Mastercard',
+          : 'Flutterwave · Visa / Mastercard',
         methodId: card?.id || null,
       },
     ];

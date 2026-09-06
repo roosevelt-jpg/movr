@@ -1,5 +1,21 @@
 import winston from 'winston';
 import { DatabaseService } from './database.service';
+import { FLUTTERWAVE_CURRENCIES } from './payment-provider.interface';
+
+const FLW_SET = new Set<string>(FLUTTERWAVE_CURRENCIES as readonly string[]);
+
+/** West African CFA franc zone */
+const XOF_COUNTRIES = new Set([
+  'BJ', 'BF', 'CI', 'GW', 'ML', 'NE', 'SN', 'TG',
+]);
+/** Central African CFA franc zone */
+const XAF_COUNTRIES = new Set([
+  'CM', 'CF', 'TD', 'CG', 'GQ', 'GA',
+]);
+/** Southern markets that commonly settle in ZAR when native currency isn't on Flutterwave */
+const ZAR_SETTLE = new Set([
+  'BW', 'NA', 'SZ', 'LS', 'ZM', 'MW', 'MZ', 'AO', 'ZW',
+]);
 
 export class LocalizationService {
   private logger = winston.createLogger({
@@ -76,23 +92,25 @@ export class LocalizationService {
   }
 
   async convert(amount: number, fromCurrency: string, toCurrency: string) {
-    if (fromCurrency === toCurrency) return amount;
+    const from = String(fromCurrency || '').toUpperCase();
+    const to = String(toCurrency || '').toUpperCase();
+    if (!from || !to || from === to) return Number(amount) || 0;
     const direct = await this.db.query(
       `SELECT rate FROM fx_rates WHERE from_currency = $1 AND to_currency = $2`,
-      [fromCurrency, toCurrency]
+      [from, to]
     );
-    if (direct.rows[0]) return amount * Number(direct.rows[0].rate);
+    if (direct.rows[0]) return Number(amount) * Number(direct.rows[0].rate);
 
     const viaUsd = await this.db.query(
       `SELECT
          (SELECT rate FROM fx_rates WHERE from_currency = $1 AND to_currency = 'USD') AS to_usd,
          (SELECT rate FROM fx_rates WHERE from_currency = 'USD' AND to_currency = $2) AS from_usd`,
-      [fromCurrency, toCurrency]
+      [from, to]
     );
     const toUsd = Number(viaUsd.rows[0]?.to_usd);
     const fromUsd = Number(viaUsd.rows[0]?.from_usd);
-    if (toUsd && fromUsd) return amount * toUsd * fromUsd;
-    return amount;
+    if (toUsd && fromUsd) return Number(amount) * toUsd * fromUsd;
+    return Number(amount) || 0;
   }
 
   async refreshFxRates() {
@@ -115,6 +133,66 @@ export class LocalizationService {
       [countryCode.toUpperCase()]
     );
     return row.rows[0]?.currency_code || 'GHS';
+  }
+
+  /**
+   * Map any African market currency → a currency Flutterwave can charge.
+   * Google Location detects the country; this picks the charge currency.
+   */
+  toFlutterwaveCurrency(currency: string, countryCode?: string): string {
+    const cur = String(currency || '').toUpperCase();
+    const cc = String(countryCode || '').toUpperCase();
+    if (FLW_SET.has(cur)) return cur;
+    if (XOF_COUNTRIES.has(cc) || cur === 'XOF') return 'XOF';
+    if (XAF_COUNTRIES.has(cc) || cur === 'XAF') return 'XAF';
+    if (ZAR_SETTLE.has(cc) || ['BWP', 'NAD', 'SZL', 'LSL', 'ZMW', 'MWK', 'MZN', 'AOA'].includes(cur)) {
+      return 'ZAR';
+    }
+    if (['MAD', 'DZD', 'TND', 'LYD', 'MRU'].includes(cur) || ['MA', 'DZ', 'TN', 'LY', 'MR'].includes(cc)) {
+      return FLW_SET.has('MAD') && (cur === 'MAD' || cc === 'MA') ? 'MAD' : 'USD';
+    }
+    if (cur === 'EGP' || cc === 'EG') return 'EGP';
+    return 'USD';
+  }
+
+  /**
+   * Convert a catalog/plan amount into the user's local display + Flutterwave charge currencies.
+   * Detection path: Google geocode / IP / phone → country → currency.
+   */
+  async localizeMoney(
+    amount: number,
+    fromCurrency: string,
+    countryCode = 'GH'
+  ): Promise<{
+    countryCode: string;
+    fromCurrency: string;
+    displayCurrency: string;
+    displayAmount: number;
+    chargeCurrency: string;
+    chargeAmount: number;
+  }> {
+    const cc = String(countryCode || 'GH').toUpperCase();
+    const from = String(fromCurrency || 'GHS').toUpperCase();
+    const displayCurrency = await this.currencyForCountry(cc);
+    const chargeCurrency = this.toFlutterwaveCurrency(displayCurrency, cc);
+    const rawDisplay = await this.convert(amount, from, displayCurrency);
+    const rawCharge =
+      chargeCurrency === displayCurrency
+        ? rawDisplay
+        : await this.convert(amount, from, chargeCurrency);
+    const round = (n: number, cur: string) => {
+      const digits = ['UGX', 'TZS', 'RWF', 'XOF', 'XAF', 'GNF', 'MGA'].includes(cur) ? 0 : 2;
+      const f = 10 ** digits;
+      return Math.round((Number(n) || 0) * f) / f;
+    };
+    return {
+      countryCode: cc,
+      fromCurrency: from,
+      displayCurrency,
+      displayAmount: round(rawDisplay, displayCurrency),
+      chargeCurrency,
+      chargeAmount: round(rawCharge, chargeCurrency),
+    };
   }
 
   /** African-friendly symbols (Intl often mis-renders GHS / XOF / KES). */

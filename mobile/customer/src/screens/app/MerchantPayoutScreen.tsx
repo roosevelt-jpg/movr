@@ -62,7 +62,15 @@ export default function MerchantPayoutScreen({
       }
       const w = await fetch(`${API}/wallet/portfolio`, { headers: authHeaders() }).then((r) => r.json()).catch(() => null);
       if (w?.data) setWalletBal(Number(w.data.fiatBalance ?? w.data.balance ?? 0));
-      const pl = await fetch(`${API}/subscriptions/plans`).then((r) => r.json()).catch(() => null);
+      const pl = await fetch(
+        `${API}/subscriptions/plans?audience=merchant${
+          typeof localStorage !== 'undefined' && localStorage.getItem('movr_country')
+            ? `&country=${encodeURIComponent(localStorage.getItem('movr_country') || '')}`
+            : ''
+        }`
+      )
+        .then((r) => r.json())
+        .catch(() => null);
       const rows = pl?.data || [];
       if (Array.isArray(rows) && rows.length) {
         setPlans(rows);

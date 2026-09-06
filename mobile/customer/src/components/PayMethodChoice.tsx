@@ -23,8 +23,8 @@ function authHeaders(): Record<string, string> {
 export function useCheckoutMethods() {
   const [options, setOptions] = useState<PayChoice[]>([
     { id: 'wallet', label: 'Wallet balance', subtitle: 'Pay from balance' },
-    { id: 'momo', label: 'Mobile Money', subtitle: 'MTN / Airtel / Vodafone' },
-    { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
+    { id: 'momo', label: 'Mobile Money', subtitle: 'Flutterwave MoMo · MTN / Airtel / Vodafone' },
+    { id: 'card', label: 'Card', subtitle: 'Flutterwave · Visa / Mastercard' },
   ]);
   const [suggestedId, setSuggestedId] = useState<string>('wallet');
   useEffect(() => {

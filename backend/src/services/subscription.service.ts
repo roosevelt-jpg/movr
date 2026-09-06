@@ -4,6 +4,7 @@ import { DriverPerformanceService } from './driver-performance.service';
 import { StakingService } from './staking.service';
 import { TokenService } from './token.service';
 import { WalletLedgerService, normalizePayMethod } from './wallet-ledger.service';
+import { LocalizationService } from './localization.service';
 
 export type BillingInterval = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
@@ -12,6 +13,7 @@ export class SubscriptionService {
   private staking: StakingService;
   private tokens: TokenService;
   private ledger: WalletLedgerService;
+  private localization: LocalizationService;
 
   constructor(
     private db: DatabaseService,
@@ -21,6 +23,7 @@ export class SubscriptionService {
     this.staking = new StakingService(db);
     this.tokens = new TokenService(db);
     this.ledger = new WalletLedgerService(db);
+    this.localization = new LocalizationService(db);
   }
 
   /** Normalize plan interval / id hint → billing cadence. */
@@ -52,11 +55,17 @@ export class SubscriptionService {
     return next;
   }
 
-  async quote(userId: string, planId: string, paymentMethod: 'fiat' | 'dvt' = 'fiat') {
+  async quote(
+    userId: string,
+    planId: string,
+    paymentMethod: 'fiat' | 'dvt' = 'fiat',
+    countryCode?: string
+  ) {
     const plan = await this.db.query(`SELECT * FROM plans WHERE id = $1`, [planId]);
     if (!plan.rows[0]) throw new Error('Plan not found');
 
     const listPrice = Number(plan.rows[0].amount);
+    const planCurrency = String(plan.rows[0].currency || 'GHS').toUpperCase();
     const perfDiscount = await this.performance.getTierDiscountPct(userId);
 
     const cfg = await this.db.query(`SELECT * FROM subscription_discount_config WHERE id = 1`);
@@ -67,7 +76,7 @@ export class SubscriptionService {
 
     const raw = perfDiscount + stakingDiscount;
     const discountPct = Math.min(raw, maxTotal);
-    const finalPrice = Math.round(listPrice * (1 - discountPct / 100) * 100) / 100;
+    const finalPricePlan = Math.round(listPrice * (1 - discountPct / 100) * 100) / 100;
 
     const reasons: string[] = [];
     if (perfDiscount) reasons.push(`performance_tier:${perfDiscount}%`);
@@ -82,18 +91,50 @@ export class SubscriptionService {
         : []),
     ];
 
-    return {
-      plan: plan.rows[0],
-      paymentMethod,
+    let country = String(countryCode || '').toUpperCase();
+    if (!country) {
+      const u = await this.db
+        .query(`SELECT country FROM users WHERE id = $1`, [userId])
+        .catch(() => ({ rows: [] as any[] }));
+      country = String(u.rows[0]?.country || 'GH').toUpperCase();
+    }
+
+    const localized = await this.localization.localizeMoney(
+      finalPricePlan,
+      planCurrency,
+      country
+    );
+    const localizedList = await this.localization.localizeMoney(
       listPrice,
+      planCurrency,
+      country
+    );
+
+    return {
+      plan: {
+        ...plan.rows[0],
+        amount: localized.chargeAmount,
+        currency: localized.chargeCurrency,
+      },
+      paymentMethod,
+      listPrice: localizedList.chargeAmount,
       discountAppliedPct: discountPct,
       discountReason: reasons.join('+') || null,
       discounts,
-      finalPrice,
+      finalPrice: localized.chargeAmount,
+      currency: localized.chargeCurrency,
+      displayCurrency: localized.displayCurrency,
+      displayAmount: localized.displayAmount,
+      countryCode: country,
+      base: {
+        listPrice,
+        finalPrice: finalPricePlan,
+        currency: planCurrency,
+      },
       note:
         paymentMethod === 'dvt' && !this.tokens.isEnabled()
           ? 'Set TOKEN_SYSTEM_ENABLED=true to pay subscriptions in DVT'
-          : null,
+          : `Priced for ${country} · pay via Flutterwave in ${localized.chargeCurrency}`,
     };
   }
 
@@ -111,7 +152,13 @@ export class SubscriptionService {
   ) {
     const requestMethod = String(data.paymentMethod || 'wallet').toLowerCase();
     const method = requestMethod === 'dvt' ? 'dvt' : normalizePayMethod(requestMethod);
-    const quote = await this.quote(userId, data.planId, requestMethod === 'dvt' ? 'dvt' : 'fiat');
+    const quote = await this.quote(
+      userId,
+      data.planId,
+      requestMethod === 'dvt' ? 'dvt' : 'fiat',
+      data.countryCode
+    );
+    const chargeCurrency = quote.currency || quote.plan.currency || 'GHS';
 
     let payment: any = null;
     if (requestMethod === 'dvt') {
@@ -126,23 +173,32 @@ export class SubscriptionService {
       const checkout = await this.payments.initializePayment({
         userId,
         amount: quote.finalPrice,
-        currency: quote.plan.currency || 'GHS',
+        currency: chargeCurrency,
         paymentType: 'subscription',
         email: data.email,
         fullName: data.fullName || 'MOVR',
         phone: data.phone,
-        countryCode: data.countryCode || 'GH',
+        countryCode: data.countryCode || quote.countryCode || 'GH',
+        preferredProvider: 'flutterwave',
+        channels: method === 'momo' ? ['mobile_money'] : ['card'],
         metadata: {
           planId: data.planId,
           channel: method,
+          paymentMethod: method,
           paymentMethodId: data.paymentMethodId || null,
           amount: quote.finalPrice,
+          currency: chargeCurrency,
+          displayCurrency: quote.displayCurrency,
+          displayAmount: quote.displayAmount,
+          interval: quote.plan?.interval || null,
+          listPrice: quote.listPrice,
+          finalPrice: quote.finalPrice,
         },
       });
       if (!checkout?.success) {
         throw new Error(
           checkout?.error ||
-            `Could not start ${method === 'momo' ? 'MoMo' : 'card'} payment. Try wallet balance instead.`
+            `Could not start Flutterwave ${method === 'momo' ? 'MoMo' : 'card'} checkout. Try wallet balance instead.`
         );
       }
       return {
@@ -158,7 +214,11 @@ export class SubscriptionService {
         title: 'Plan subscription',
         icon: 'plan',
       });
-      payment = { method: 'wallet', amount: quote.finalPrice, currency: quote.plan.currency || 'GHS' };
+      payment = {
+        method: 'wallet',
+        amount: quote.finalPrice,
+        currency: chargeCurrency,
+      };
     }
 
     const nextBilling = SubscriptionService.nextBillingDate(
@@ -176,6 +236,7 @@ export class SubscriptionService {
          plan_id = EXCLUDED.plan_id,
          status = EXCLUDED.status,
          amount = EXCLUDED.amount,
+         currency = EXCLUDED.currency,
          payment_method = EXCLUDED.payment_method,
          discount_applied_pct = EXCLUDED.discount_applied_pct,
          discount_reason = EXCLUDED.discount_reason,
@@ -191,13 +252,13 @@ export class SubscriptionService {
         userId,
         data.planId,
         quote.finalPrice,
-        quote.plan.currency || 'GHS',
+        chargeCurrency,
         nextBilling,
         quote.discountAppliedPct,
         quote.discountReason,
         quote.listPrice,
         quote.finalPrice,
-        requestMethod === 'dvt' ? 'dvt' : 'fiat',
+        requestMethod === 'dvt' ? 'dvt' : method === 'momo' ? 'momo' : method === 'card' ? 'card' : 'fiat',
         status,
       ]
     );

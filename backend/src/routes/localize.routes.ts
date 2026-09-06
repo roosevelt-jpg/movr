@@ -220,12 +220,15 @@ publicLocalizeRouter.get('/resolve', async (req: Request, res: Response) => {
     );
     const code = String(country?.code || 'GH').toUpperCase();
     const lang = langFor(code);
+    const currencyCode = country?.currency_code || pricing.currency_code || 'GHS';
+    const chargeCurrency = localization.toFlutterwaveCurrency(currencyCode, code);
     res.json({
       status: 'success',
       data: {
         countryCode: code,
         countryName: country?.name || 'Ghana',
-        currencyCode: country?.currency_code || pricing.currency_code || 'GHS',
+        currencyCode,
+        chargeCurrency,
         dialCode: country?.dial_code || '+233',
         city: pricing.city,
         timezone: pricing.timezone,
@@ -322,6 +325,10 @@ publicLocalizeRouter.get('/detect', async (req: Request, res: Response) => {
         countryCode: finalCode,
         countryName: country?.name || finalCode,
         currencyCode: country?.currency_code || pricing.currency_code || 'GHS',
+        chargeCurrency: localization.toFlutterwaveCurrency(
+          country?.currency_code || pricing.currency_code || 'GHS',
+          finalCode
+        ),
         dialCode: country?.dial_code || '+233',
         city: pricing.city,
         timezone: pricing.timezone || tz || 'Africa/Accra',
@@ -330,6 +337,8 @@ publicLocalizeRouter.get('/detect', async (req: Request, res: Response) => {
         dir: lang.dir || 'ltr',
         source,
         detectedAt: new Date().toISOString(),
+        note:
+          'Prices show in local currency; Flutterwave charges in chargeCurrency (MoMo/card).',
       },
     });
   } catch (error: any) {

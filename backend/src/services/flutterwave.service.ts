@@ -59,13 +59,14 @@ export class FlutterwaveService implements PaymentProvider {
       };
     }
     try {
+      const paymentOptions = this.paymentOptionsFromChannels(input.channels);
       const response = await axios.post(
         `${this.baseUrl}/payments`,
         {
           tx_ref: reference,
           amount: input.amount,
           currency: input.currency,
-          payment_options: 'card,ussd,bank_account,mobile_money',
+          payment_options: paymentOptions,
           customer: {
             email: input.email,
             phonenumber: input.phone,
@@ -73,7 +74,10 @@ export class FlutterwaveService implements PaymentProvider {
           },
           customizations: {
             title: 'MOVR Platform',
-            description: 'MOVR payment',
+            description:
+              String(input.metadata?.paymentType || '') === 'subscription'
+                ? 'MOVR subscription'
+                : 'MOVR payment',
             logo: 'https://mymovr.io/logo.png',
           },
           redirect_url: input.redirectUrl || `${process.env.APP_URL}/payments/callback?tx_ref=${reference}`,
@@ -95,6 +99,19 @@ export class FlutterwaveService implements PaymentProvider {
       this.logger.error('Flutterwave initializePayment failed', { error: error?.message });
       return { success: false, reference, error: error?.message };
     }
+  }
+
+  /** Map Movr channels → Flutterwave hosted checkout payment_options. */
+  private paymentOptionsFromChannels(channels?: string[]): string {
+    if (!channels?.length) return 'card,ussd,bank_account,mobile_money';
+    const set = new Set(channels.map((c) => String(c || '').toLowerCase()));
+    const opts: string[] = [];
+    if (set.has('card')) opts.push('card');
+    if (set.has('mobile_money') || set.has('momo')) opts.push('mobile_money');
+    if (set.has('ussd')) opts.push('ussd');
+    if (set.has('bank') || set.has('bank_account')) opts.push('bank_account');
+    // MoMo-first Africa: if only an unknown channel was passed, still open MoMo+card
+    return opts.length ? opts.join(',') : 'mobile_money,card';
   }
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResult> {

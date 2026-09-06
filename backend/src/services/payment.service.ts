@@ -206,9 +206,25 @@ export class PaymentService {
     metadata?: Record<string, unknown>;
     redirectUrl?: string;
     channels?: string[];
+    /** Force a provider — subscriptions collect via Flutterwave (MoMo + card). */
+    preferredProvider?: ProviderName;
   }) {
-    const provider = await this.getProvider(data.countryCode);
-    const currency = (data.currency || 'GHS').toUpperCase();
+    if (!this.credentialsLoaded) {
+      await this.refreshProviderCredentials();
+    }
+    // Driver + merchant subscription fees always collect through Flutterwave so MoMo is available
+    const provider =
+      data.preferredProvider === 'flutterwave' ||
+      (!data.preferredProvider && data.paymentType === 'subscription')
+        ? this.flutterwave
+        : data.preferredProvider
+          ? this.resolve(data.preferredProvider)
+          : await this.getProvider(data.countryCode);
+    // Google Location → country currency; remap to Flutterwave-chargeable currency
+    const { LocalizationService } = require('./localization.service');
+    const localization = new LocalizationService(this.db);
+    const nativeCurrency = (data.currency || 'GHS').toUpperCase();
+    const currency = localization.toFlutterwaveCurrency(nativeCurrency, data.countryCode);
     this.validateCurrency(provider.name, currency);
     const channel = String(data.metadata?.channel || data.channels?.[0] || '').toLowerCase();
     const channels =
@@ -217,7 +233,9 @@ export class PaymentService {
         ? ['mobile_money']
         : channel === 'card'
           ? ['card']
-          : undefined);
+          : data.paymentType === 'subscription'
+            ? ['mobile_money', 'card']
+            : undefined);
 
     const input: InitializePaymentInput = {
       amount: data.amount,
@@ -250,6 +268,7 @@ export class PaymentService {
         paymentType: data.paymentType,
         provider: provider.name,
         providerReference: result.providerReference,
+        channel: channel || null,
         ...data.metadata,
       },
     });
@@ -260,6 +279,7 @@ export class PaymentService {
       txRef: result.reference,
       reference: result.reference,
       provider: provider.name,
+      channels,
     };
   }
 
@@ -406,24 +426,41 @@ export class PaymentService {
   }
 
   async activateSubscription(userId: string, metadata: any): Promise<void> {
-    const nextBillingDate = new Date();
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+    const amount = Number(metadata.amount || metadata.finalPrice || 0) || 0;
+    const currency = String(metadata.currency || 'GHS').toUpperCase();
+    const planId = metadata.planId || 'basic_driver';
+    const payMethod = String(metadata.channel || metadata.paymentMethod || 'momo').toLowerCase();
+    const nextBilling = (() => {
+      try {
+        const { SubscriptionService } = require('./subscription.service');
+        return SubscriptionService.nextBillingDate(metadata.interval || planId);
+      } catch {
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        return d;
+      }
+    })();
+
     await this.db.query(
       `INSERT INTO subscriptions (
         user_id, plan_id, status, amount, currency,
-        next_billing_date, auto_renew, created_at
-      ) VALUES ($1, $2, 'active', $3, $4, $5, true, NOW())
+        next_billing_date, auto_renew, payment_method,
+        list_price, final_price, created_at
+      ) VALUES ($1, $2, 'active', $3, $4, $5, true, $6, $3, $3, NOW())
       ON CONFLICT (user_id) DO UPDATE SET
+        plan_id = EXCLUDED.plan_id,
         status = 'active',
-        next_billing_date = $5,
+        amount = EXCLUDED.amount,
+        currency = EXCLUDED.currency,
+        payment_method = EXCLUDED.payment_method,
+        list_price = EXCLUDED.list_price,
+        final_price = EXCLUDED.final_price,
+        next_billing_date = EXCLUDED.next_billing_date,
+        paused_at = NULL,
+        paused_until = NULL,
+        pause_reason = NULL,
         updated_at = NOW()`,
-      [
-        userId,
-        metadata.planId || 'basic_driver',
-        metadata.amount || 99,
-        'GHS',
-        nextBillingDate,
-      ]
+      [userId, planId, amount, currency, nextBilling, payMethod === 'card' ? 'card' : 'momo']
     );
   }
 

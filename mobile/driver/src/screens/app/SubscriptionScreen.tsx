@@ -29,7 +29,12 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
   const [payMethodId, setPayMethodId] = useState<string | undefined>();
 
   useEffect(() => {
-    fetch(`${API}/subscriptions/plans`)
+    const country =
+      (typeof localStorage !== 'undefined' &&
+        (localStorage.getItem('movr_country') || localStorage.getItem('movr_region'))) ||
+      '';
+    const q = country ? `?country=${encodeURIComponent(country)}` : '';
+    fetch(`${API}/subscriptions/plans${q}`)
       .then((r) => r.json())
       .then((j) => {
         const use = j?.data || [];
@@ -77,7 +82,11 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
       } else if (json.data?.requiresPayment || json.data?.payment?.paymentLink) {
         const link = json.data?.payment?.paymentLink || json.data?.payment?.authorization_url;
         if (link) Linking.openURL(link).catch(() => undefined);
-        setMsg(payMethod === 'momo' ? 'Complete MoMo payment to activate' : 'Complete card payment to activate');
+        setMsg(
+          payMethod === 'momo'
+            ? 'Complete Flutterwave MoMo to activate'
+            : 'Complete Flutterwave card payment to activate'
+        );
       } else {
         setMsg('Subscribed — you keep 100% of every fare');
         setTrial({

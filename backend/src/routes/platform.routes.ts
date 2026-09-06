@@ -1344,7 +1344,7 @@ driverRouter.patch(
 subscriptionsRouter.get('/plans', async (req, res: Response) => {
   try {
     const audience = String(req.query.audience || 'driver');
-    const country = (req.query.country as string) || undefined;
+    const country = String(req.query.country || '').toUpperCase() || undefined;
     let rows = await subscriptionFees.listPlans({
       audience,
       countryCode: country,
@@ -1379,20 +1379,50 @@ subscriptionsRouter.get('/plans', async (req, res: Response) => {
       return p.interval || 'monthly';
     };
 
+    // Localize plan amounts to visitor country (Google Location / locale → currency)
+    const localization = new (require('../services/localization.service').LocalizationService)(db);
+    const localized = await Promise.all(
+      rows.map(async (p: any) => {
+        const baseCur = String(p.currency || 'GHS').toUpperCase();
+        const baseAmt = Number(p.amount) || 0;
+        if (!country) {
+          return {
+            ...p,
+            interval: intervalOf(p),
+            headline: p.headline || p.name,
+            subtitle: p.subtitle || null,
+            badgeLabel: p.badge_label || null,
+            isFeatured: Boolean(p.is_featured),
+            chargeCurrency: localization.toFlutterwaveCurrency(baseCur),
+          };
+        }
+        const loc = await localization.localizeMoney(baseAmt, baseCur, country);
+        return {
+          ...p,
+          interval: intervalOf(p),
+          headline: p.headline || p.name,
+          subtitle: p.subtitle || null,
+          badgeLabel: p.badge_label || null,
+          isFeatured: Boolean(p.is_featured),
+          amount: loc.chargeAmount,
+          currency: loc.chargeCurrency,
+          displayCurrency: loc.displayCurrency,
+          displayAmount: loc.displayAmount,
+          chargeCurrency: loc.chargeCurrency,
+          baseAmount: baseAmt,
+          baseCurrency: baseCur,
+        };
+      })
+    );
+
     res.json({
       status: 'success',
-      data: rows.map((p: any) => ({
-        ...p,
-        interval: intervalOf(p),
-        headline: p.headline || p.name,
-        subtitle: p.subtitle || null,
-        badgeLabel: p.badge_label || null,
-        isFeatured: Boolean(p.is_featured),
-      })),
+      data: localized,
       meta: {
+        country: country || null,
         tagline: 'Keep 100% of earnings — no commission, ever',
         description:
-          'When take-rate apps leave, you still need to earn. One subscription — keep 100% of every fare. Pay with wallet or MoMo.',
+          'When take-rate apps leave, you still need to earn. One subscription — keep 100% of every fare. Pay with wallet or Flutterwave MoMo in your local currency.',
         intervals: ['weekly', 'monthly', 'quarterly', 'yearly'],
         audiences: ['driver', 'bike_listing', 'rental_owner', 'merchant'],
       },
@@ -1442,7 +1472,8 @@ subscriptionsRouter.post(
       const quote = await subscriptions.quote(
         req.user!.id,
         planId,
-        req.body.paymentMethod || 'fiat'
+        req.body.paymentMethod || 'fiat',
+        req.body.countryCode || undefined
       );
       res.json({ status: 'success', data: quote });
     } catch (error: any) {
@@ -1456,14 +1487,28 @@ subscriptionsRouter.post(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
+      const userRow = await db
+        .query(`SELECT email, phone, country, first_name, last_name FROM users WHERE id = $1`, [
+          req.user!.id,
+        ])
+        .catch(() => ({ rows: [] as any[] }));
+      const u = userRow.rows[0] || {};
+      const countryCode = String(
+        req.body.countryCode || u.country || req.user?.country || 'GH'
+      )
+        .toUpperCase()
+        .slice(0, 8);
       const result = await subscriptions.activate(req.user!.id, {
         planId: req.body.planId,
         paymentMethod: req.body.paymentMethod || 'wallet',
         paymentMethodId: req.body.paymentMethodId,
-        email: req.body.email || req.user!.email,
-        fullName: req.body.fullName || 'MOVR Driver',
-        phone: req.body.phone,
-        countryCode: req.body.countryCode || 'GH',
+        email: req.body.email || u.email || req.user!.email,
+        fullName:
+          req.body.fullName ||
+          [u.first_name, u.last_name].filter(Boolean).join(' ') ||
+          'MOVR',
+        phone: req.body.phone || u.phone || undefined,
+        countryCode,
       });
       res.status(201).json({ status: 'success', data: result });
     } catch (error: any) {
