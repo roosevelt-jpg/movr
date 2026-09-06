@@ -1202,7 +1202,12 @@ export async function seedCms(db?: DatabaseService, opts: { overwrite?: boolean 
     const adminLocked = Boolean(existing?.meta?.adminLocked);
     const shouldRefreshPack =
       Boolean(wantPack) && !adminLocked && existing && havePack !== wantPack;
-    if (existing && !overwrite && !shouldRefreshPack) {
+    // Restore empty / unpublished defaults so public routes aren't blank shells
+    const needsDefaultContent =
+      !adminLocked &&
+      existing &&
+      (existing.status !== 'published' || !existing.sections?.length);
+    if (existing && !overwrite && !shouldRefreshPack && !needsDefaultContent) {
       continue;
     }
     await service.upsertPage({

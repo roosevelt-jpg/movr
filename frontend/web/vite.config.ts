@@ -74,7 +74,8 @@ export default defineConfig({
   server: {
     port: 5180,
     strictPort: true,
-    host: '127.0.0.1',
+    // 0.0.0.0 so Cursor Simple Browser / IPv4 localhost can connect
+    host: true,
     fs: {
       allow: [path.resolve(__dirname, '../..')],
     },
