@@ -152,10 +152,10 @@ export default function SubscriptionScreen({ onBack }: { onBack?: () => void }) 
         <View style={{ width: 24 }} />
       </View>
 
-      <Text style={styles.hero}>{meta.tagline || 'Keep 100% of earnings'}</Text>
+      <Text style={styles.hero}>{meta.tagline || 'Keep 100% of earnings — no commission, ever'}</Text>
       <Text style={styles.sub}>
         {meta.description ||
-          'No commissions ever. Pay a small subscription — weekly, monthly, quarterly, or yearly.'}
+          'When take-rate apps leave, you still need to earn. Pay a small subscription — keep 100% of every fare.'}
       </Text>
       <View style={styles.keepBadge}>
         <Text style={styles.keepBadgeText}>You keep 100% of every fare</Text>

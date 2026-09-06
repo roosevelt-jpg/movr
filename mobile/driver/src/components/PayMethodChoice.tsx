@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 
 const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
@@ -23,9 +23,10 @@ function authHeaders(): Record<string, string> {
 export function useCheckoutMethods() {
   const [options, setOptions] = useState<PayChoice[]>([
     { id: 'wallet', label: 'Wallet balance', subtitle: 'Pay from balance' },
-    { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
     { id: 'momo', label: 'Mobile Money', subtitle: 'MTN / Airtel / Vodafone' },
+    { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
   ]);
+  const [suggestedId, setSuggestedId] = useState('wallet');
   useEffect(() => {
     fetch(`${API}/me/checkout-methods`, { headers: authHeaders() })
       .then((r) => r.json())
@@ -33,13 +34,14 @@ export function useCheckoutMethods() {
         if (Array.isArray(j?.data?.options) && j.data.options.length) {
           setOptions(j.data.options);
         }
+        if (j?.data?.suggestedId) setSuggestedId(String(j.data.suggestedId));
       })
       .catch(() => undefined);
   }, []);
-  return options;
+  return { options, suggestedId };
 }
 
-/** Wallet / saved card / MoMo picker. */
+/** Wallet / MoMo / card — wallet when funded, else MoMo. */
 export default function PayMethodChoice({
   value,
   onChange,
@@ -47,7 +49,19 @@ export default function PayMethodChoice({
   value: string;
   onChange: (id: string, option?: PayChoice) => void;
 }) {
-  const list = useCheckoutMethods();
+  const { options: list, suggestedId } = useCheckoutMethods();
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current || !suggestedId) return;
+    const opt = list.find((o) => o.id === suggestedId);
+    if (opt && value !== opt.id) {
+      applied.current = true;
+      onChange(opt.id, opt);
+    } else if (opt) {
+      applied.current = true;
+    }
+  }, [suggestedId, list, value, onChange]);
+
   return (
     <View style={styles.wrap}>
       <Text style={styles.caption}>Pay with</Text>

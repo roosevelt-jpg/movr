@@ -55,7 +55,10 @@ export class TrustSettlementService {
       kycUnlockPath: '/safety',
       kycUnlockDriver: '/driver/verification',
       kycUnlockMerchant: '/merchant/onboarding',
-      keep100Note: 'Drivers keep 100% of the fare — Movr takes zero from the trip.',
+      keep100Note:
+        countryCode === 'NG' || countryCode === 'UG'
+          ? 'Drivers keep 100% of the fare — no commission, built for markets where take-rate apps struggle.'
+          : 'Drivers keep 100% of the fare — Movr takes zero from the trip.',
       buyerProtectionNote: buyerNote.replace(/^"|"$/g, ''),
       rails: ['wallet', 'momo', 'bank', 'cash_agent', 'ussd'],
     };

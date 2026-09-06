@@ -6,7 +6,9 @@ import { countryFlagEmoji } from '@movr/format';
 const DIAL_FLAG: Record<string, string> = {
   '+234': countryFlagEmoji('NG'),
   '+233': countryFlagEmoji('GH'),
+  '+256': countryFlagEmoji('UG'),
 };
+const DIAL_CYCLE = ['+234', '+256', '+233'] as const;
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -86,7 +88,10 @@ export default function PhoneEntryPage() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setCountryCode(countryCode === '+234' ? '+233' : '+234')}
+            onClick={() => {
+              const i = DIAL_CYCLE.indexOf(countryCode as (typeof DIAL_CYCLE)[number]);
+              setCountryCode(DIAL_CYCLE[(i + 1) % DIAL_CYCLE.length]);
+            }}
             className="flex items-center gap-2 rounded-xl bg-zinc-900 px-3 py-3.5 text-white"
           >
             <span>{DIAL_FLAG[countryCode] || countryFlagEmoji('NG')}</span>

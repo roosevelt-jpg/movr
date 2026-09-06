@@ -117,8 +117,8 @@ const Home: React.FC = () => {
                 Earn with MOVR
               </h2>
               <p className="text-xl text-gray-600 mb-6">
-                Drivers keep 100% of every fare. Pay only a small subscription — weekly, monthly,
-                quarterly, or yearly. No commission. No hidden fees.
+                Drivers keep 100% of every fare. When commission apps leave, Movr stays —
+                wallet and MoMo native, no per-ride cut. One small subscription.
               </p>
               <ul className="space-y-3 text-gray-600 mb-8">
                 <li>✅ Keep 100% of every fare you earn</li>

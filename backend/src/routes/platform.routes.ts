@@ -1390,9 +1390,9 @@ subscriptionsRouter.get('/plans', async (req, res: Response) => {
         isFeatured: Boolean(p.is_featured),
       })),
       meta: {
-        tagline: 'Keep 100% of earnings',
+        tagline: 'Keep 100% of earnings — no commission, ever',
         description:
-          'No commissions ever. Choose weekly, monthly, quarterly, or yearly — keep 100% of what you earn.',
+          'When take-rate apps leave, you still need to earn. One subscription — keep 100% of every fare. Pay with wallet or MoMo.',
         intervals: ['weekly', 'monthly', 'quarterly', 'yearly'],
         audiences: ['driver', 'bike_listing', 'rental_owner', 'merchant'],
       },

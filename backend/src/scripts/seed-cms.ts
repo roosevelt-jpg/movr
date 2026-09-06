@@ -302,6 +302,11 @@ export const CMS_SEED: Array<{
               title: 'Built for Africa',
               body: 'Local payments, multi-country ready, designed for real city mobility.',
             },
+            {
+              iconKey: 'map',
+              title: 'Stays when others leave',
+              body: 'Commission-free economics for African cities — not Silicon Valley take rates.',
+            },
           ],
         },
       },
@@ -327,10 +332,24 @@ export const CMS_SEED: Array<{
             },
             {
               quote:
+                'After the commission apps left, Movr still paid me 100% of every trip. Wallet and MoMo just work.',
+              name: 'Tunde',
+              role: 'Driver · Lagos',
+              avatarUrl: '/brand/testimonials/enoch.jpg',
+            },
+            {
+              quote:
                 'Orders come straight to my phone. Delivery is handled — I just focus on the shop.',
               name: 'Boutique 22',
               role: 'Merchant · Osu',
               avatarUrl: '/brand/testimonials/boutique22.jpg',
+            },
+            {
+              quote:
+                'Kampala riders want fair fares. Drivers want fair pay. Movr is the first app that does both.',
+              name: 'Aisha',
+              role: 'Rider · Kampala',
+              avatarUrl: '/brand/testimonials/ama.jpg',
             },
           ],
         },
@@ -339,7 +358,7 @@ export const CMS_SEED: Array<{
         type: 'cta_banner',
         payload: {
           headline: 'Drive and keep 100% of every fare',
-          body: 'No per-ride commission. Just one flexible monthly subscription — cancel any time.',
+          body: 'No per-ride commission. Wallet and MoMo native. Built for cities where riders and drivers both need a fair deal.',
           button: { label: 'Become a driver', href: '/drivers' },
           anchor: 'drivers',
         },
@@ -452,10 +471,10 @@ export const CMS_SEED: Array<{
       {
         type: 'choice_hero',
         payload: {
-          eyebrow: 'Movr for drivers',
+          eyebrow: 'Built for African drivers',
           headline: 'Keep 100% of\nevery fare.',
           subhead:
-            'No commission. One flexible subscription, cancel any time. Drive Sedan, SUV, Motorcycle, Tricycle, or Van.',
+            'No commission. Ever. When global apps leave, local drivers still need to earn — Movr lets you keep 100% of every fare with one flexible subscription.',
           backgroundImage: '/brand/movr-bike-in-motion.jpg',
           choices: [
             {
@@ -510,17 +529,17 @@ export const CMS_SEED: Array<{
             {
               iconKey: 'wallet',
               title: '100% earnings',
-              body: 'Every fare, yours. No per-ride cut, ever.',
+              body: 'Every fare, yours. No per-ride cut — unlike commission apps.',
             },
             {
               iconKey: 'sparkles',
-              title: 'Tiered rewards',
-              body: 'Lite, Pro, Premium — unlock priority matching.',
+              title: 'Pay how Africa pays',
+              body: 'Wallet, MoMo, or card. Top up and renew in local currency.',
             },
             {
               iconKey: 'shield',
               title: 'Verified identity',
-              body: 'Ghana Card-linked, on-chain attested trust.',
+              body: 'National ID–linked onboarding with attested trust.',
             },
           ],
         },
@@ -528,8 +547,8 @@ export const CMS_SEED: Array<{
       {
         type: 'final_cta',
         payload: {
-          heading: 'Ready to drive with Movr?',
-          body: 'Join drivers keeping 100% of every fare.',
+          heading: 'Ready when other apps leave?',
+          body: 'Join drivers in Nigeria, Uganda, Ghana and beyond who keep 100% of every fare.',
           primaryCta: { label: 'Become a driver', href: '/register?role=driver' },
           secondaryCta: { label: 'Get the app', href: '/download' },
         },

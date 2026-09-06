@@ -506,7 +506,7 @@ export class SubscriptionFeeService {
       'luxury',
       null,
     ];
-    const countries = ['NG', 'GH'];
+    const countries = ['NG', 'GH', 'UG'];
     const samples: any[] = [];
     for (const audience of audiences) {
       for (const country of countries) {

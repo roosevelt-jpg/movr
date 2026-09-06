@@ -8,7 +8,9 @@ const API = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const DIAL_FLAG: Record<string, string> = {
   '+234': countryFlagEmoji('NG'),
   '+233': countryFlagEmoji('GH'),
+  '+256': countryFlagEmoji('UG'),
 };
+const DIAL_CYCLE = ['+234', '+256', '+233'] as const;
 
 /** Phone entry — country picker + Send Code OTP (mockup). */
 export default function PhoneEntryScreen({
@@ -69,7 +71,10 @@ export default function PhoneEntryScreen({
       <View style={styles.phoneRow}>
         <Pressable
           style={styles.country}
-          onPress={() => setCountryCode(countryCode === '+234' ? '+233' : '+234')}
+          onPress={() => {
+            const i = DIAL_CYCLE.indexOf(countryCode as (typeof DIAL_CYCLE)[number]);
+            setCountryCode(DIAL_CYCLE[(i + 1) % DIAL_CYCLE.length]);
+          }}
         >
           <Text style={styles.flag}>{DIAL_FLAG[countryCode] || countryFlagEmoji('NG')}</Text>
           <Text style={styles.cc}>{countryCode}</Text>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const API =
   (import.meta as any).env?.VITE_API_URL ||
@@ -26,11 +26,11 @@ function authHeaders(extraToken?: string | null) {
 
 const FALLBACK: PayChoice[] = [
   { id: 'wallet', label: 'Wallet balance', subtitle: 'Pay from balance' },
-  { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
   { id: 'momo', label: 'Mobile Money', subtitle: 'MTN / Airtel / Vodafone' },
+  { id: 'card', label: 'Card', subtitle: 'Visa / Mastercard' },
 ];
 
-/** Wallet / saved card / MoMo picker for web. */
+/** Wallet / MoMo / card — wallet when funded, else MoMo (not card-first). */
 export default function PayMethodChoice({
   value,
   onChange,
@@ -43,14 +43,29 @@ export default function PayMethodChoice({
   className?: string;
 }) {
   const [options, setOptions] = useState<PayChoice[]>(FALLBACK);
+  const [suggestedId, setSuggestedId] = useState('wallet');
+  const applied = useRef(false);
+
   useEffect(() => {
     fetch(`${API}/me/checkout-methods`, { headers: authHeaders(token) })
       .then((r) => r.json())
       .then((j) => {
         if (Array.isArray(j?.data?.options) && j.data.options.length) setOptions(j.data.options);
+        if (j?.data?.suggestedId) setSuggestedId(String(j.data.suggestedId));
       })
       .catch(() => undefined);
   }, [token]);
+
+  useEffect(() => {
+    if (applied.current || !suggestedId) return;
+    const opt = options.find((o) => o.id === suggestedId);
+    if (opt && value !== opt.id) {
+      applied.current = true;
+      onChange(opt.id, opt);
+    } else if (opt) {
+      applied.current = true;
+    }
+  }, [suggestedId, options, value, onChange]);
 
   return (
     <div className={`space-y-2 ${className}`}>

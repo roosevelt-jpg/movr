@@ -33,7 +33,12 @@ customerExtrasRouter.get('/settings', authenticateToken, async (req: AuthRequest
       data: {
         language: s.language || 'English',
         currency: s.currency_code || 'NGN',
-        currencyLabel: s.currency_code === 'GHS' ? 'GHS (GH₵)' : 'NGN (₦)',
+        currencyLabel:
+          s.currency_code === 'GHS'
+            ? 'GHS (GH₵)'
+            : s.currency_code === 'UGX'
+              ? 'UGX (USh)'
+              : 'NGN (₦)',
         darkMode: s.dark_mode !== false,
         locationEnabled: s.location_enabled !== false,
         rideNotifications: s.ride_notifications !== false,
@@ -100,7 +105,12 @@ customerExtrasRouter.patch('/settings', authenticateToken, async (req: AuthReque
       data: {
         language: s.language,
         currency: s.currency_code,
-        currencyLabel: s.currency_code === 'GHS' ? 'GHS (GH₵)' : `NGN (₦)`,
+        currencyLabel:
+          s.currency_code === 'GHS'
+            ? 'GHS (GH₵)'
+            : s.currency_code === 'UGX'
+              ? 'UGX (USh)'
+              : `NGN (₦)`,
         darkMode: s.dark_mode,
         locationEnabled: s.location_enabled,
         rideNotifications: s.ride_notifications,
@@ -260,6 +270,32 @@ customerExtrasRouter.get('/checkout-methods', authenticateToken, async (req: Aut
         String(r.provider || r.label || '').toLowerCase().includes('momo')
       );
     const fmt = (n: number, c: string) => `${c} ${Number(n || 0).toFixed(2)}`;
+    // Prefer wallet when funded; otherwise MoMo (Africa default) — not card-first.
+    const suggestedId = bal.spendable > 0 ? 'wallet' : 'momo';
+    const options = [
+      {
+        id: 'wallet',
+        label: 'Wallet balance',
+        subtitle: fmt(bal.spendable, bal.currency),
+      },
+      {
+        id: 'momo',
+        label: 'Mobile Money',
+        subtitle: momo?.phone_number || momo?.label || 'MTN / Airtel / Vodafone',
+        methodId: momo?.id || null,
+      },
+      {
+        id: 'card',
+        label: 'Card',
+        subtitle: card?.last_four
+          ? `${card.label || card.brand || 'Card'} •••• ${card.last_four}`
+          : 'Visa / Mastercard',
+        methodId: card?.id || null,
+      },
+    ];
+    if (suggestedId === 'momo') {
+      options.sort((a, b) => (a.id === 'momo' ? -1 : b.id === 'momo' ? 1 : 0));
+    }
     res.json({
       status: 'success',
       data: {
@@ -267,27 +303,8 @@ customerExtrasRouter.get('/checkout-methods', authenticateToken, async (req: Aut
         mobilityCredit: bal.mobilityCredit,
         spendable: bal.spendable,
         currency: bal.currency,
-        options: [
-          {
-            id: 'wallet',
-            label: 'Wallet balance',
-            subtitle: fmt(bal.spendable, bal.currency),
-          },
-          {
-            id: 'card',
-            label: 'Card',
-            subtitle: card?.last_four
-              ? `${card.label || card.brand || 'Card'} •••• ${card.last_four}`
-              : 'Visa / Mastercard',
-            methodId: card?.id || null,
-          },
-          {
-            id: 'momo',
-            label: 'Mobile Money',
-            subtitle: momo?.phone_number || momo?.label || 'MTN / Airtel / Vodafone',
-            methodId: momo?.id || null,
-          },
-        ],
+        suggestedId,
+        options,
       },
     });
   } catch (error: any) {
