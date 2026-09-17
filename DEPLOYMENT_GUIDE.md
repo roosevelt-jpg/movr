@@ -1,5 +1,8 @@
 # MOVR Platform - Deployment Guide
 
+> **Hosting on AWS with mymovr.io?** Use the full walkthrough: **[AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md)**  
+> (Route 53, CloudFront/S3, ECS, RDS, ElastiCache, GitHub Actions.)
+
 ## 🚀 Quick Start (Development)
 
 ### Prerequisites

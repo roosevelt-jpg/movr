@@ -1,5 +1,7 @@
 # Deployment checklist — staking webapp (Phase 9)
 
+> Full AWS stack (API + web + admin + RDS): **[AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md)**
+
 ## stake.mymovr.io (or equivalent subdomain)
 
 Deploy `frontend/staking-webapp` as a **separate static site** (Vercel / Netlify / Cloudflare Pages).

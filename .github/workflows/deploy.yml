@@ -1,0 +1,187 @@
+# Auto-deploy Movr to AWS whenever code is pushed to main.
+# Manual run: Actions → "Deploy to AWS" → Run workflow
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   CF_WEB_DISTRIBUTION_ID
+#   CF_ADMIN_DISTRIBUTION_ID
+#
+# Optional GitHub Variables (Settings → Variables):
+#   AWS_REGION              (default: eu-west-1)
+#   ECR_REPOSITORY          (default: movr-api)
+#   ECS_CLUSTER             (default: movr-prod)
+#   ECS_SERVICE             (default: movr-api)
+#   S3_WEB_BUCKET           (default: mymovr-web-prod)
+#   S3_ADMIN_BUCKET         (default: mymovr-admin-prod)
+#   VITE_API_URL            (default: https://api.mymovr.io/api/v1)
+#   REACT_APP_API_URL       (default: https://api.mymovr.io/api/v1)
+#
+# See AWS_DEPLOYMENT.md for one-time AWS setup (ECR, ECS, S3, CloudFront, RDS).
+
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-aws-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'movr-api' }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'movr-prod' }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE || 'movr-api' }}
+  S3_WEB_BUCKET: ${{ vars.S3_WEB_BUCKET || 'mymovr-web-prod' }}
+  S3_ADMIN_BUCKET: ${{ vars.S3_ADMIN_BUCKET || 'mymovr-admin-prod' }}
+  VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.mymovr.io/api/v1' }}
+  REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL || 'https://api.mymovr.io/api/v1' }}
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  deploy-api:
+    name: Deploy API (ECR → ECS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}"
+          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" -t "${IMAGE_URI}:latest" ./backend
+          docker push "${IMAGE_URI}:${IMAGE_TAG}"
+          docker push "${IMAGE_URI}:latest"
+          echo "Pushed ${IMAGE_URI}:${IMAGE_TAG}"
+
+      - name: Force new ECS deployment
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --force-new-deployment \
+            --no-cli-pager
+          echo "ECS service ${ECS_SERVICE} rolling update started."
+
+  deploy-web:
+    name: Deploy Web (S3 + CloudFront)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        working-directory: frontend/web
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+          REACT_APP_API_URL: ${{ env.REACT_APP_API_URL }}
+        run: pnpm build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync frontend/web/dist/ "s3://${S3_WEB_BUCKET}/" --delete
+
+      - name: Invalidate CloudFront
+        env:
+          CF_WEB_DISTRIBUTION_ID: ${{ secrets.CF_WEB_DISTRIBUTION_ID }}
+        run: |
+          if [ -z "${CF_WEB_DISTRIBUTION_ID}" ]; then
+            echo "CF_WEB_DISTRIBUTION_ID not set — skipping invalidation"
+            exit 0
+          fi
+          aws cloudfront create-invalidation \
+            --distribution-id "${CF_WEB_DISTRIBUTION_ID}" \
+            --paths "/*"
+
+  deploy-admin:
+    name: Deploy Admin (S3 + CloudFront)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build admin
+        working-directory: frontend/admin
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+          REACT_APP_API_URL: ${{ env.REACT_APP_API_URL }}
+        run: pnpm build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync frontend/admin/dist/ "s3://${S3_ADMIN_BUCKET}/" --delete
+
+      - name: Invalidate CloudFront
+        env:
+          CF_ADMIN_DISTRIBUTION_ID: ${{ secrets.CF_ADMIN_DISTRIBUTION_ID }}
+        run: |
+          if [ -z "${CF_ADMIN_DISTRIBUTION_ID}" ]; then
+            echo "CF_ADMIN_DISTRIBUTION_ID not set — skipping invalidation"
+            exit 0
+          fi
+          aws cloudfront create-invalidation \
+            --distribution-id "${CF_ADMIN_DISTRIBUTION_ID}" \
+            --paths "/*"

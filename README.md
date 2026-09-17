@@ -278,7 +278,8 @@ pnpm test:watch
 
 ## Deployment
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.  
+**AWS + mymovr.io:** see **[AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md)**.
 
 ## API Documentation
 
