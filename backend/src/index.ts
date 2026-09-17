@@ -76,6 +76,11 @@ const DEFAULT_CORS = [
   'http://127.0.0.1:5173',
   'http://localhost:5180',
   'http://127.0.0.1:5180',
+  'https://mymovr.io',
+  'https://www.mymovr.io',
+  'https://admin.mymovr.io',
+  'https://stake.mymovr.io',
+  'https://api.mymovr.io',
 ];
 
 const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) || DEFAULT_CORS;

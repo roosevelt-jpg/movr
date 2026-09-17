@@ -80,7 +80,9 @@ export class FlutterwaveService implements PaymentProvider {
                 : 'MOVR payment',
             logo: 'https://mymovr.io/logo.png',
           },
-          redirect_url: input.redirectUrl || `${process.env.APP_URL}/payments/callback?tx_ref=${reference}`,
+          redirect_url:
+            input.redirectUrl ||
+            `${(process.env.PUBLIC_WEB_URL || process.env.APP_URL || 'https://mymovr.io').replace(/\/$/, '')}/payments/callback?tx_ref=${reference}`,
           meta: input.metadata || {},
         },
         { headers: this.headers() }
