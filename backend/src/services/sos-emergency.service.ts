@@ -2,8 +2,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import twilio from 'twilio';
 import getLogger from '../utils/logger';
+import { DatabaseService } from './database.service';
 
 const logger = getLogger('sos-emergency');
+const db = new DatabaseService();
 
 class SOSEmergencyService {
   private twilioClient: any;
