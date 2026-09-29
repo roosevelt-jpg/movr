@@ -49,6 +49,10 @@ export default defineConfig({
     },
   ],
   appType: 'spa',
+  build: {
+    // Backend serves uploaded media at /assets — keep the JS/CSS bundle off that path.
+    assetsDir: 'static',
+  },
   resolve: {
     alias: {
       '@movr/format': path.resolve(__dirname, '../../design-system/format.ts'),
