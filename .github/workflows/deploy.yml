@@ -12,6 +12,9 @@
 #   ECR_REPOSITORY          (default: movr-api)
 #   ECS_CLUSTER             (default: movr-prod)
 #   ECS_SERVICE             (default: movr-api)
+#   ECS_SUBNETS             (default: public subnets in the default VPC)
+#   ECS_SECURITY_GROUPS     (default: creates sg movr-api, port 3000)
+#   ECS_EXECUTION_ROLE_ARN  (default: creates ecsTaskExecutionRole)
 #   S3_WEB_BUCKET           (default: mymovr-web-prod)
 #   S3_ADMIN_BUCKET         (default: mymovr-admin-prod)
 #   VITE_API_URL            (default: https://api.mymovr.io/api/v1)
@@ -65,26 +68,27 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, tag, and push image
+        id: build
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}"
-          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" -t "${IMAGE_URI}:latest" ./backend
-          docker push "${IMAGE_URI}:${IMAGE_TAG}"
-          docker push "${IMAGE_URI}:latest"
-          echo "Pushed ${IMAGE_URI}:${IMAGE_TAG}"
+          IMAGE_URI="${REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker build -t "${IMAGE_URI}" -t "${REGISTRY}/${ECR_REPOSITORY}:latest" ./backend
+          docker push "${IMAGE_URI}"
+          docker push "${REGISTRY}/${ECR_REPOSITORY}:latest"
+          echo "image=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "Pushed ${IMAGE_URI}"
 
-      - name: Force new ECS deployment
-        run: |
-          set -euo pipefail
-          aws ecs update-service \
-            --cluster "${ECS_CLUSTER}" \
-            --service "${ECS_SERVICE}" \
-            --force-new-deployment \
-            --no-cli-pager
-          echo "ECS service ${ECS_SERVICE} rolling update started."
+      - name: Ensure ECS cluster, task definition, and service
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image }}
+          ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
+          ECS_SECURITY_GROUPS: ${{ vars.ECS_SECURITY_GROUPS }}
+          ECS_EXECUTION_ROLE_ARN: ${{ vars.ECS_EXECUTION_ROLE_ARN }}
+          ECS_ASSIGN_PUBLIC_IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP || 'ENABLED' }}
+        run: bash .github/scripts/ensure-ecs-service.sh
 
   deploy-web:
     name: Deploy Web (S3 + CloudFront)
@@ -124,7 +128,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync frontend/web/dist/ "s3://${S3_WEB_BUCKET}/" --delete
+        run: |
+          set -euo pipefail
+          if ! aws s3api head-bucket --bucket "${S3_WEB_BUCKET}" >/dev/null 2>&1; then
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "${S3_WEB_BUCKET}"
+            else
+              aws s3api create-bucket --bucket "${S3_WEB_BUCKET}" \
+                --create-bucket-configuration "LocationConstraint=${AWS_REGION}"
+            fi
+          fi
+          aws s3 sync frontend/web/dist/ "s3://${S3_WEB_BUCKET}/" --delete
 
       - name: Invalidate CloudFront
         env:
@@ -175,7 +189,17 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync frontend/admin/dist/ "s3://${S3_ADMIN_BUCKET}/" --delete
+        run: |
+          set -euo pipefail
+          if ! aws s3api head-bucket --bucket "${S3_ADMIN_BUCKET}" >/dev/null 2>&1; then
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "${S3_ADMIN_BUCKET}"
+            else
+              aws s3api create-bucket --bucket "${S3_ADMIN_BUCKET}" \
+                --create-bucket-configuration "LocationConstraint=${AWS_REGION}"
+            fi
+          fi
+          aws s3 sync frontend/admin/dist/ "s3://${S3_ADMIN_BUCKET}/" --delete
 
       - name: Invalidate CloudFront
         env:
