@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Create the ECS cluster, task definition, and service when they do not exist,
 # then roll the service onto the image that was just pushed.
+# Uses only ECS, STS, CloudWatch Logs, and EC2 describe calls so a deploy user
+# does not need iam:CreateRole or ec2:CreateSecurityGroup.
 set -euo pipefail
 
 : "${AWS_REGION:?AWS_REGION is required}"
@@ -16,46 +18,30 @@ ASSIGN_PUBLIC_IP="${ECS_ASSIGN_PUBLIC_IP:-ENABLED}"
 CONTAINER_NAME="${ECS_CONTAINER_NAME:-movr-api}"
 ROLE_NAME="${ECS_EXECUTION_ROLE_NAME:-ecsTaskExecutionRole}"
 
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+if [[ -n "${ECS_EXECUTION_ROLE_ARN:-}" ]]; then
+  EXEC_ROLE_ARN="${ECS_EXECUTION_ROLE_ARN}"
+else
+  EXEC_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
+fi
+echo "Execution role: ${EXEC_ROLE_ARN}"
+
 echo "Ensuring ECS cluster ${ECS_CLUSTER} in ${AWS_REGION}"
 CLUSTER_STATUS="$(aws ecs describe-clusters --clusters "${ECS_CLUSTER}" --query 'clusters[0].status' --output text 2>/dev/null || true)"
 if [[ "${CLUSTER_STATUS}" != "ACTIVE" ]]; then
-  aws ecs create-cluster --cluster-name "${ECS_CLUSTER}" --no-cli-pager >/dev/null
+  # First cluster in an account needs this role. Ignore "already exists".
+  aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com >/dev/null 2>&1 || true
+  if ! aws ecs create-cluster --cluster-name "${ECS_CLUSTER}" --no-cli-pager; then
+    echo "Could not create ECS cluster ${ECS_CLUSTER}."
+    echo "The deploy IAM user needs ecs:CreateCluster. If the error mentions the service-linked role, it also needs iam:CreateServiceLinkedRole (or create AWSServiceRoleForECS once in the IAM console)."
+    exit 254
+  fi
   echo "Created cluster ${ECS_CLUSTER}"
 else
   echo "Cluster ${ECS_CLUSTER} already active"
 fi
 
 aws logs create-log-group --log-group-name "${LOG_GROUP}" >/dev/null 2>&1 || true
-
-if [[ -n "${ECS_EXECUTION_ROLE_ARN:-}" ]]; then
-  EXEC_ROLE_ARN="${ECS_EXECUTION_ROLE_ARN}"
-else
-  EXEC_ROLE_ARN="$(aws iam get-role --role-name "${ROLE_NAME}" --query 'Role.Arn' --output text 2>/dev/null || true)"
-  if [[ -z "${EXEC_ROLE_ARN}" || "${EXEC_ROLE_ARN}" == "None" ]]; then
-    echo "Creating IAM role ${ROLE_NAME}"
-    cat > /tmp/ecs-trust.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": { "Service": "ecs-tasks.amazonaws.com" },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
-    aws iam create-role \
-      --role-name "${ROLE_NAME}" \
-      --assume-role-policy-document file:///tmp/ecs-trust.json \
-      --no-cli-pager >/dev/null
-    aws iam attach-role-policy \
-      --role-name "${ROLE_NAME}" \
-      --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-    EXEC_ROLE_ARN="$(aws iam get-role --role-name "${ROLE_NAME}" --query 'Role.Arn' --output text)"
-  fi
-fi
-echo "Execution role: ${EXEC_ROLE_ARN}"
 
 if [[ -z "${ECS_SUBNETS:-}" ]]; then
   VPC_ID="$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)"
@@ -64,8 +50,8 @@ if [[ -z "${ECS_SUBNETS:-}" ]]; then
     exit 1
   fi
   ECS_SUBNETS="$(aws ec2 describe-subnets \
-    --filters "Name=vpc-id,Values=${VPC_ID}" \
-    --query 'Subnets[?MapPublicIpOnLaunch==`true`].SubnetId' \
+    --filters "Name=vpc-id,Values=${VPC_ID}" "Name=map-public-ip-on-launch,Values=true" \
+    --query 'Subnets[].SubnetId' \
     --output text | tr '\t' ',')"
   if [[ -z "${ECS_SUBNETS}" || "${ECS_SUBNETS}" == "None" ]]; then
     ECS_SUBNETS="$(aws ec2 describe-subnets \
@@ -75,27 +61,23 @@ if [[ -z "${ECS_SUBNETS:-}" ]]; then
   fi
 fi
 ECS_SUBNETS="${ECS_SUBNETS// /}"
+ECS_SUBNETS="${ECS_SUBNETS%%,}"
 echo "Subnets: ${ECS_SUBNETS}"
+if [[ -z "${ECS_SUBNETS}" || "${ECS_SUBNETS}" == "None" ]]; then
+  echo "No subnets found. Set the GitHub variable ECS_SUBNETS."
+  exit 1
+fi
 
 if [[ -z "${ECS_SECURITY_GROUPS:-}" ]]; then
   FIRST_SUBNET="${ECS_SUBNETS%%,*}"
   VPC_ID="$(aws ec2 describe-subnets --subnet-ids "${FIRST_SUBNET}" --query 'Subnets[0].VpcId' --output text)"
-  SG_ID="$(aws ec2 describe-security-groups \
-    --filters "Name=vpc-id,Values=${VPC_ID}" "Name=group-name,Values=movr-api" \
+  ECS_SECURITY_GROUPS="$(aws ec2 describe-security-groups \
+    --filters "Name=vpc-id,Values=${VPC_ID}" "Name=group-name,Values=default" \
     --query 'SecurityGroups[0].GroupId' --output text)"
-  if [[ -z "${SG_ID}" || "${SG_ID}" == "None" ]]; then
-    echo "Creating security group movr-api"
-    SG_ID="$(aws ec2 create-security-group \
-      --group-name movr-api \
-      --description "Movr API Fargate tasks" \
-      --vpc-id "${VPC_ID}" \
-      --query GroupId --output text)"
-    aws ec2 authorize-security-group-ingress \
-      --group-id "${SG_ID}" \
-      --ip-permissions 'IpProtocol=tcp,FromPort=3000,ToPort=3000,IpRanges=[{CidrIp=0.0.0.0/0,Description=movr-api}]' \
-      >/dev/null
-  fi
-  ECS_SECURITY_GROUPS="${SG_ID}"
+  # Best-effort: open the API port. Ignore if the deploy user cannot change security groups.
+  aws ec2 authorize-security-group-ingress \
+    --group-id "${ECS_SECURITY_GROUPS}" \
+    --protocol tcp --port 3000 --cidr 0.0.0.0/0 >/dev/null 2>&1 || true
 fi
 echo "Security groups: ${ECS_SECURITY_GROUPS}"
 
@@ -135,23 +117,20 @@ with open("/tmp/movr-taskdef.json", "w", encoding="utf-8") as fh:
     json.dump(task, fh)
 PY
 
-REVISION=""
-for attempt in 1 2 3 4 5 6; do
-  if REVISION="$(aws ecs register-task-definition \
-      --cli-input-json file:///tmp/movr-taskdef.json \
-      --query 'taskDefinition.revision' \
-      --output text)"; then
-    break
-  fi
-  echo "Registering task definition failed (attempt ${attempt}). Waiting for IAM propagation..."
-  REVISION=""
-  sleep 10
-done
-if [[ -z "${REVISION}" || "${REVISION}" == "None" ]]; then
+set +e
+REGISTER_OUT="$(aws ecs register-task-definition \
+  --cli-input-json file:///tmp/movr-taskdef.json \
+  --query 'taskDefinition.revision' \
+  --output text 2>&1)"
+REGISTER_CODE=$?
+set -e
+if [[ "${REGISTER_CODE}" -ne 0 ]]; then
+  echo "${REGISTER_OUT}"
   echo "Could not register task definition ${FAMILY}."
-  exit 1
+  echo "Confirm role ${EXEC_ROLE_ARN} exists, and that the deploy user has ecs:RegisterTaskDefinition and iam:PassRole on that role."
+  exit 254
 fi
-TASK_DEF="${FAMILY}:${REVISION}"
+TASK_DEF="${FAMILY}:${REGISTER_OUT}"
 echo "Registered task definition ${TASK_DEF}"
 
 ACTIVE_COUNT="$(aws ecs describe-services \
@@ -169,7 +148,7 @@ if [[ "${ACTIVE_COUNT}" == "1" ]]; then
     --task-definition "${TASK_DEF}" \
     --desired-count 1 \
     --force-new-deployment \
-    --no-cli-pager >/dev/null
+    --no-cli-pager
   echo "Updated service ${ECS_SERVICE} to ${TASK_DEF}"
 else
   aws ecs create-service \
@@ -179,6 +158,6 @@ else
     --desired-count 1 \
     --launch-type FARGATE \
     --network-configuration "${NETWORK}" \
-    --no-cli-pager >/dev/null
+    --no-cli-pager
   echo "Created service ${ECS_SERVICE} on ${TASK_DEF}"
 fi

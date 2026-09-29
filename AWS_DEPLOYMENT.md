@@ -192,7 +192,7 @@ docker push ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/movr-api:latest
 
 ### 5.2 ECS cluster + service
 
-The deploy workflow creates these on the first successful API job if they are missing: cluster `movr-prod`, task family `movr-api` (0.5 vCPU / 1 GB, port 3000), execution role `ecsTaskExecutionRole`, security group `movr-api`, and Fargate service `movr-api` in the default VPC. The deploy IAM user needs `ecs:*`, `ec2:Describe*`, `ec2:CreateSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `logs:CreateLogGroup`, and `iam:CreateRole` / `iam:AttachRolePolicy` / `iam:GetRole` for that bootstrap.
+The deploy workflow creates these on the first successful API job if they are missing: cluster `movr-prod`, task family `movr-api` (0.5 vCPU / 1 GB, port 3000), and Fargate service `movr-api` in the default VPC. It expects the execution role `ecsTaskExecutionRole` to already exist (the ECS console creates it the first time you open a task definition). The deploy IAM user needs `ecs:CreateCluster`, `ecs:RegisterTaskDefinition`, `ecs:CreateService`, `ecs:UpdateService`, `ecs:Describe*`, `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeSecurityGroups`, and `iam:PassRole` on that execution role.
 
 After the service exists, add database, Redis, and payment secrets to the task definition (or Secrets Manager) and put the service behind an ALB:
 
