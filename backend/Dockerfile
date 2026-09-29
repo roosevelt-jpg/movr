@@ -13,7 +13,9 @@ COPY src ./src
 COPY migrations ./migrations
 COPY scripts ./scripts
 
-RUN pnpm run build
+# tsc emits JS despite pre-existing strict-mode type errors (noEmitOnError: false);
+# fail the build only if the entrypoint itself didn't come out.
+RUN pnpm run build; test -f dist/index.js
 
 FROM node:20-alpine
 

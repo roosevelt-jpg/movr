@@ -28,14 +28,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_provider_country_active
 
 -- Default: Flutterwave global (existing production path)
 INSERT INTO payment_provider_config (scope, country_code, provider, is_active)
-SELECT 'global', NULL, 'flutterwave', TRUE
+SELECT 'global'::payment_provider_scope, NULL, 'flutterwave'::payment_provider_name, TRUE
 WHERE NOT EXISTS (
   SELECT 1 FROM payment_provider_config WHERE scope = 'global' AND is_active = TRUE
 );
 
 -- Paystack preferred in its live markets when configured
 INSERT INTO payment_provider_config (scope, country_code, provider, is_active)
-SELECT v.scope, v.country_code, v.provider::payment_provider_name, TRUE
+SELECT v.scope::payment_provider_scope, v.country_code, v.provider::payment_provider_name, TRUE
 FROM (VALUES
   ('country', 'GH', 'paystack'),
   ('country', 'NG', 'paystack'),

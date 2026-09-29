@@ -2179,7 +2179,7 @@ app.get('/api/v1/rides/:id', authenticateToken, async (req: AuthRequest, res: Ex
     const userId = req.user?.id;
     const isAdmin =
       req.user?.userType === 'admin' ||
-      req.user?.user_type === 'admin' ||
+      (req.user as any)?.user_type === 'admin' ||
       (Array.isArray((req.user as any)?.roles) && (req.user as any).roles.length > 0);
     if (
       userId &&

@@ -2,7 +2,7 @@
 import { Pool, PoolClient } from 'pg';
 import winston from 'winston';
 
-interface QueryResult<T> {
+export interface QueryResult<T> {
   rows: T[];
   rowCount: number;
 }
