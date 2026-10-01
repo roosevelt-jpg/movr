@@ -162,6 +162,14 @@ ACTIVE_COUNT="$(aws ecs describe-services \
 
 NETWORK="awsvpcConfiguration={subnets=[${ECS_SUBNETS}],securityGroups=[${ECS_SECURITY_GROUPS}],assignPublicIp=${ASSIGN_PUBLIC_IP}}"
 
+LB_ARGS=()
+if [[ -n "${ECS_TARGET_GROUP_ARN:-}" ]]; then
+  LB_ARGS=(
+    --load-balancers "targetGroupArn=${ECS_TARGET_GROUP_ARN},containerName=${CONTAINER_NAME},containerPort=3000"
+    --health-check-grace-period-seconds 120
+  )
+fi
+
 if [[ "${ACTIVE_COUNT}" == "1" ]]; then
   aws ecs update-service \
     --cluster "${ECS_CLUSTER}" \
@@ -172,13 +180,13 @@ if [[ "${ACTIVE_COUNT}" == "1" ]]; then
     --no-cli-pager >/dev/null
   echo "Updated service ${ECS_SERVICE} to ${TASK_DEF}"
 else
-  aws ecs create-service \
+    aws ecs create-service \
     --cluster "${ECS_CLUSTER}" \
     --service-name "${ECS_SERVICE}" \
     --task-definition "${TASK_DEF}" \
     --desired-count 1 \
     --launch-type FARGATE \
     --network-configuration "${NETWORK}" \
+    --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true}" \
+    "${LB_ARGS[@]}" \
     --no-cli-pager >/dev/null
-  echo "Created service ${ECS_SERVICE} on ${TASK_DEF}"
-fi
