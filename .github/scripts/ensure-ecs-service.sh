@@ -159,16 +159,15 @@ if [[ "${ACTIVE_COUNT}" == "1" ]]; then
     --no-cli-pager
   echo "Updated service ${ECS_SERVICE} to ${TASK_DEF}"
 else
-    aws ecs create-service \
+      aws ecs create-service \
     --cluster "${ECS_CLUSTER}" \
     --service-name "${ECS_SERVICE}" \
     --task-definition "${TASK_DEF}" \
     --desired-count 1 \
     --launch-type FARGATE \
     --network-configuration "${NETWORK}" \
-    --no-cli-pager
-  echo "Created service ${ECS_SERVICE} on ${TASK_DEF}"
-fi
     --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true}" \
     "${LB_ARGS[@]}" \
     --no-cli-pager >/dev/null
+  echo "Created service ${ECS_SERVICE} on ${TASK_DEF}"
+  fi
