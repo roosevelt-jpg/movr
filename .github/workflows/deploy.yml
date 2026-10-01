@@ -41,6 +41,7 @@ env:
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'movr-api' }}
   ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'movr-prod' }}
   ECS_SERVICE: ${{ vars.ECS_SERVICE || 'movr-api' }}
+  ECS_TARGET_GROUP_ARN: ${{ vars.ECS_TARGET_GROUP_ARN }}
   S3_WEB_BUCKET: ${{ vars.S3_WEB_BUCKET || 'mymovr-web-prod' }}
   S3_ADMIN_BUCKET: ${{ vars.S3_ADMIN_BUCKET || 'mymovr-admin-prod' }}
   VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.mymovr.io/api/v1' }}
